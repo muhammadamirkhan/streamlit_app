@@ -781,6 +781,62 @@ with tab3:
             st.session_state.fm_params = {**st.session_state.fm_params, "area": new_area}
             st.rerun()
 
+    with st.expander("📈  Bulk Escalation (add AED/sqft to a typology across a floor range)", expanded=False):
+        st.caption("Pick a typology and a floor range (or All floors), enter an amount, and it is "
+                   "**added flat** to the Price/sqft of every **Available** unit of that typology in range. "
+                   "Sold units are never changed.")
+        u_all = st.session_state.units
+        u_all_fn = pd.to_numeric(u_all["Floor"].str.replace(r"[^0-9]", "", regex=True), errors="coerce")
+
+        be1, be2 = st.columns([2, 2])
+        be_type = be1.selectbox("Typology", UNIT_TYPES, key="be_type")
+        be_all  = be2.checkbox("All floors", value=True, key="be_all")
+
+        # floors that actually have an Available unit of this typology
+        elig = u_all[(u_all["Type"] == be_type) & (u_all["Status"] == "Available")].copy()
+        elig_fn = sorted(set(pd.to_numeric(
+            elig["Floor"].str.replace(r"[^0-9]", "", regex=True), errors="coerce").dropna().astype(int)))
+
+        if not elig_fn:
+            st.info(f"No Available {be_type} units to escalate.")
+        else:
+            if be_all:
+                f_from, f_to = elig_fn[0], elig_fn[-1]
+                st.caption(f"Range: **{ordinal(f_from)} → {ordinal(f_to)}** (all {len(elig_fn)} eligible floor(s)).")
+            else:
+                fc1, fc2 = st.columns(2)
+                f_from = fc1.selectbox("From floor", elig_fn, index=0,
+                                       format_func=ordinal, key="be_from")
+                to_opts = [f for f in elig_fn if f >= f_from]
+                f_to = fc2.selectbox("To floor", to_opts, index=len(to_opts) - 1,
+                                     format_func=ordinal, key="be_to")
+
+            amount = st.number_input("Escalation to add (AED/sqft)", value=100.0, step=10.0,
+                                     key="be_amount")
+
+            mask = ((u_all["Type"] == be_type) & (u_all["Status"] == "Available") &
+                    (u_all_fn >= f_from) & (u_all_fn <= f_to))
+            n_hit = int(mask.sum())
+            st.caption(f"Will adjust **{n_hit}** Available {be_type} unit(s) "
+                       f"on floors {ordinal(f_from)}–{ordinal(f_to)} by **{amount:+,.0f} AED/sqft**.")
+
+            if st.button("Apply Escalation", type="primary", disabled=(n_hit == 0), key="be_apply"):
+                st.session_state.units.loc[mask, "Price_sqft"] = \
+                    st.session_state.units.loc[mask, "Price_sqft"] + amount
+                # keep the floor objects' unit rates in sync for the floor table / export
+                for fl in st.session_state.floors:
+                    if f_from <= fl["floor"] <= f_to:
+                        for un in fl["units"]:
+                            uid = un.get("uid")
+                            if uid is not None:
+                                r = st.session_state.units[st.session_state.units["uid"] == uid]
+                                if not r.empty and r.iloc[0]["Type"] == be_type and r.iloc[0]["Status"] == "Available":
+                                    un["rate"] = float(r.iloc[0]["Price_sqft"])
+                st.session_state["flash"] = ("success",
+                    f"✅ Added {amount:+,.0f} AED/sqft to {n_hit} Available {be_type} unit(s) "
+                    f"on floors {ordinal(f_from)}–{ordinal(f_to)}.")
+                st.rerun()
+
     # Floors table + totals
     smap_all = uid_status_map()
     rows, grand = [], 0
