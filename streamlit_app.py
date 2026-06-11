@@ -567,7 +567,7 @@ with tab2:
         num_rows.append({
             "Typology": t,
             "Number of Units": n,
-            "Price/Sq.ft": total_sales / tot_counted if tot_counted else 0.0,
+            "Price/Sq.ft": total_sales / tot_sellable if tot_sellable else 0.0,
             "Area (sqft)": area_sqft,
             "Area (sqm)": area_sqft / SQFT_PER_SQM,
             "Internal (sqft/unit)": internal_u,
@@ -586,10 +586,11 @@ with tab2:
 
     # Total row (sum additive; Price/Sq.ft value-weighted; per-unit cells blank like Excel)
     tot_counted_all = nm["Total Sellable Counted"].sum()
+    tot_sellable_all = nm["Total Sellable"].sum()
     total = {
         "Typology": "Total",
         "Number of Units": int(nm["Number of Units"].sum()),
-        "Price/Sq.ft": (nm["Total Sales"].sum() / tot_counted_all) if tot_counted_all else 0.0,
+        "Price/Sq.ft": (nm["Total Sales"].sum() / tot_sellable_all) if tot_sellable_all else 0.0,
         "Area (sqft)": None, "Area (sqm)": None,
         "Internal (sqft/unit)": None, "Terrace (sqft/unit)": None,
         "Total Internal (sqft)": nm["Total Internal (sqft)"].sum(),
