@@ -96,6 +96,25 @@ def area_fmt(x, sqm=False):
     return f"{v:,.0f}"
 
 
+def column_picker(all_cols, key, locked=None, hidden_default=None):
+    """Dropdown (popover) with a multi-select to show / hide table columns.
+
+    `locked` columns are always shown and cannot be unticked.
+    `hidden_default` columns start unticked (hidden) but can be shown.
+    Returns the ordered list of column names to display.
+    """
+    all_cols = list(all_cols)
+    locked = locked or []
+    hidden_default = hidden_default or []
+    selectable = [c for c in all_cols if c not in locked]
+    default = [c for c in selectable if c not in hidden_default]
+    with st.popover("🔧 Columns", use_container_width=False):
+        st.caption("Tick to show, untick to hide. Key columns are always shown.")
+        chosen = st.multiselect("Columns", selectable, default=default,
+                                key=key, label_visibility="collapsed")
+    return [c for c in all_cols if c in locked or c in chosen]
+
+
 # ── Data loading ───────────────────────────────────────────────────────────────
 
 def load_unit_data() -> pd.DataFrame:
@@ -456,8 +475,6 @@ with tab1:
 
     # Derived per-unit columns
     view["PSF_total"]  = view["Price"] / view["Total_sqft"]
-    view["PSF_int"]    = view["Price"] / view["Internal_sqft"]
-    view["PSF_terr"]   = view["Price"] / view["External_sqft"].replace(0, pd.NA)
     view["Int_Value"]  = view["Price_sqft"] * view["Internal_sqft"]
     view["Terr_Value"] = view["Price_sqft"] * view["Terrace_Rate"] * view["External_sqft"]
     view["Esc_row"]    = view["uid"].map(esc_map)
@@ -473,12 +490,12 @@ with tab1:
 
     cols = ["Type","Status","Unit","Floor","Parking",
             "Internal_sqft","External_sqft","Total_sqft","Sellable_sqft","Terrace_Rate",
-            "Price_sqft","PSF_total","PSF_int","PSF_terr",
+            "Price_sqft","PSF_total",
             "Int_Value","Terr_Value","Price","Esc_row","Var_row"]
     disp = view[cols].copy()
     disp.columns = ["Type","Status","Unit","Floor","Parking",
                     "Internal (sqft)","External (sqft)","Total Area (sqft)","Sellable (sqft)","Terrace Rate",
-                    "Price/Sellable sqft","Price/Total sqft","Price/Internal sqft","Price/Terrace sqft",
+                    "Price/Sellable sqft","Price/Total sqft",
                     "Internal Value (AED)","Terrace Value (AED)","Total Price (AED)",
                     "Escalation vs below (/sqft)","Price Variance vs below (AED)"]
 
@@ -487,14 +504,18 @@ with tab1:
         "Total Area (sqft)": "{:,.1f}", "Sellable (sqft)": "{:,.1f}",
         "Terrace Rate": "{:.0%}",
         "Price/Sellable sqft": "AED {:,.0f}", "Price/Total sqft": "AED {:,.0f}",
-        "Price/Internal sqft": "AED {:,.0f}", "Price/Terrace sqft": "AED {:,.0f}",
         "Internal Value (AED)": "AED {:,.0f}", "Terrace Value (AED)": "AED {:,.0f}",
         "Total Price (AED)": "AED {:,.0f}",
         "Escalation vs below (/sqft)": "AED {:,.0f}", "Price Variance vs below (AED)": "AED {:,.0f}",
     }
 
+    # Sold highlight uses the row index (survives column hiding), so Status can be hidden too
+    sold_by_idx = disp["Status"] == "Sold"
+    show_cols = column_picker(list(disp.columns), key="reg_cols", locked=["Type", "Unit"])
+    disp = disp[show_cols]
+
     def _hl_sold(row):
-        sold = row["Status"] == "Sold"
+        sold = bool(sold_by_idx.loc[row.name])
         return ["background-color:#FAD4D4" if sold else "" for _ in row]
 
     styler = disp.style.apply(_hl_sold, axis=1).format(fmt, na_rep="–")
@@ -536,7 +557,8 @@ with tab2:
     gd.columns = ["Type","Total Units","Sold","Available",
                   f"Total Internal ({u})", f"Total External ({u})", f"Total Area ({u})",
                   f"Total Sellable ({u})", f"Avg Price/{u}", "Total Value (AED)"]
-    excel_table(gd)
+    sum_show = column_picker(list(gd.columns), key=f"sum_cols_{u}", locked=["Type"])
+    excel_table(gd[sum_show])
 
     tot_area = df["Total_sqft"].sum() / div
     st.markdown(f"**Grand Total — {len(df)} units &nbsp;|&nbsp; "
@@ -553,20 +575,20 @@ with tab2:
 # ── Tab 5: Topology View (min/max/avg stats) ───────────────────────────────────
 
 with tab5:
-    st.subheader("Topology Summary Statistics — Available units only")
-    st.caption("Based on **Available** units only (Sold units excluded). "
+    st.subheader("Topology Summary Statistics — all units except Sold")
+    st.caption("Based on **all units except Sold** (Available + Bank Locked). "
                "Price/sqft = unit Price ÷ Total Area (Internal + External). "
-               "Min / Median / Max span the lowest-to-highest available floors; "
+               "Min / Median / Max span the lowest-to-highest floors; "
                "Avg is value-weighted = Total Value ÷ Total Area.")
     all_types = sorted(df["Type"].unique().tolist())
     pick = st.multiselect("Filter topologies", all_types, default=all_types, key="topo_filter")
-    tvdf = df[df["Status"] == "Available"].copy()
+    tvdf = df[df["Status"] != "Sold"].copy()
     if pick:
         tvdf = tvdf[tvdf["Type"].isin(pick)]
     tvdf["PSF_total"] = tvdf["Price"] / tvdf["Total_sqft"]
 
     if tvdf.empty:
-        st.info("No available units for the selected topologies.")
+        st.info("No units (excluding Sold) for the selected topologies.")
     else:
         tv = tvdf.groupby("Type").agg(
             Avail_Units=("Unit","count"),
@@ -585,18 +607,19 @@ with tab5:
             tvd[c] = tvd[c].apply(lambda x: f"AED {x:,.0f}")
         tvd["Avg_Price"]   = tvd["Avg_Price"].apply(lambda x: aed(x))
         tvd["Total_Value"] = tvd["Total_Value"].apply(lambda x: aed(x))
-        tvd.columns = ["Type","Available Units",
+        tvd.columns = ["Type","Units (excl. Sold)",
                        "Min /sqft (lowest)","Median /sqft (mid)","Avg /sqft (wtd)","Max /sqft (highest)",
-                       "Avg Unit Price","Total Value (avail)"]
-        excel_table(tvd)
+                       "Avg Unit Price","Total Value (excl. Sold)"]
+        topo_show = column_picker(list(tvd.columns), key="topo_cols", locked=["Type"])
+        excel_table(tvd[topo_show])
 
         st.divider()
         c1, c2 = st.columns(2)
         with c1:
-            st.caption("Avg price per total sqft by topology (available)")
+            st.caption("Avg price per total sqft by topology (excl. Sold)")
             st.bar_chart(tv.set_index("Type")["Avg_PSF"])
         with c2:
-            st.caption("Available value by topology (AED M)")
+            st.caption("Value by topology, excl. Sold (AED M)")
             chart2 = tv.set_index("Type")[["Total_Value"]].copy()
             chart2["AED M"] = chart2["Total_Value"] / 1e6
             st.bar_chart(chart2["AED M"])
@@ -678,7 +701,9 @@ with tab3:
     col_t, col_k = st.columns([3, 1])
     with col_t:
         st.subheader("Floors")
-        excel_table(pd.DataFrame(rows))
+        floors_tbl = pd.DataFrame(rows)
+        fcols_show = column_picker(list(floors_tbl.columns), key="floor_cols", locked=["Floor"])
+        excel_table(floors_tbl[fcols_show])
     with col_k:
         st.subheader("Totals")
         st.metric("Floors", len(floors))
