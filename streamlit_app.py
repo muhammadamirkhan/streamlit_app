@@ -660,41 +660,54 @@ with tab2:
 # ── Tab 5: Topology View (min/max/avg stats) ───────────────────────────────────
 
 with tab5:
-    st.subheader("Topology Summary Statistics — all units except Sold")
-    st.caption("Based on **all units except Sold** (Available + Bank Locked). "
-               "Price/sqft = unit Price ÷ Total Area (Internal + External). "
-               "Min / Median / Max span the lowest-to-highest floors; "
-               "Avg is value-weighted = Total Value ÷ Total Area.")
+    st.subheader("Topology Summary Statistics")
+    st.caption("**Total Units** and **Total Value** include all units (Sold + Available). "
+               "All other columns (Min / Median / Avg / Max /sqft and Avg Unit Price) are "
+               "based on **Available units only** (Sold excluded). "
+               "Price/sqft = unit Price ÷ Total Area (Internal + External); "
+               "Avg /sqft is value-weighted = Total Value ÷ Total Area.")
     all_types = sorted(df["Type"].unique().tolist())
     pick = st.multiselect("Filter topologies", all_types, default=all_types, key="topo_filter")
+
+    # all-status aggregate (Sold + Available) → drives Total Units & Total Value
+    alldf = df.copy()
+    if pick:
+        alldf = alldf[alldf["Type"].isin(pick)]
+    allagg = alldf.groupby("Type").agg(
+        Total_Units=("Unit", "count"),
+        Total_Value_All=("Price", "sum"),
+    ).reset_index()
+
+    # available-only aggregate → drives every pricing stat
     tvdf = df[df["Status"] != "Sold"].copy()
     if pick:
         tvdf = tvdf[tvdf["Type"].isin(pick)]
     tvdf["PSF_total"] = tvdf["Price"] / tvdf["Total_sqft"]
 
     if tvdf.empty:
-        st.info("No units (excluding Sold) for the selected topologies.")
+        st.info("No available units for the selected topologies.")
     else:
         tv = tvdf.groupby("Type").agg(
-            Avail_Units=("Unit","count"),
             Min_PSF=("PSF_total","min"),
             Median_PSF=("PSF_total","median"),
             Max_PSF=("PSF_total","max"),
             Avg_Price=("Price","mean"),
             Total_Area=("Total_sqft","sum"),
-            Total_Value=("Price","sum"),
+            Avail_Value=("Price","sum"),
         ).reset_index()
-        tv["Avg_PSF"] = tv["Total_Value"] / tv["Total_Area"]   # value-weighted
+        tv["Avg_PSF"] = tv["Avail_Value"] / tv["Total_Area"]   # value-weighted (available)
+        tv = tv.merge(allagg, on="Type", how="left")           # bring in all-status Units & Value
 
-        tvd = tv[["Type","Avail_Units","Min_PSF","Median_PSF","Avg_PSF","Max_PSF",
-                  "Avg_Price","Total_Value"]].copy()
+        tvd = tv[["Type","Total_Units","Min_PSF","Median_PSF","Avg_PSF","Max_PSF",
+                  "Avg_Price","Total_Value_All"]].copy()
         for c in ["Min_PSF","Median_PSF","Avg_PSF","Max_PSF"]:
             tvd[c] = tvd[c].apply(lambda x: f"AED {x:,.0f}")
-        tvd["Avg_Price"]   = tvd["Avg_Price"].apply(lambda x: aed(x))
-        tvd["Total_Value"] = tvd["Total_Value"].apply(lambda x: aed(x))
-        tvd.columns = ["Type","Units (excl. Sold)",
+        tvd["Avg_Price"]       = tvd["Avg_Price"].apply(lambda x: aed(x))
+        tvd["Total_Value_All"] = tvd["Total_Value_All"].apply(lambda x: aed(x))
+        tvd["Total_Units"]     = tvd["Total_Units"].astype(int)
+        tvd.columns = ["Type","Total Units (incl. Sold)",
                        "Min /sqft (lowest)","Median /sqft (mid)","Avg /sqft (wtd)","Max /sqft (highest)",
-                       "Avg Unit Price","Total Value (excl. Sold)"]
+                       "Avg Unit Price (avail)","Total Value (incl. Sold)"]
         topo_show = column_picker(list(tvd.columns), key="topo_cols", locked=["Type"])
         excel_table(tvd[topo_show])
 
@@ -704,9 +717,9 @@ with tab5:
             st.caption("Avg price per total sqft by topology (excl. Sold)")
             st.bar_chart(tv.set_index("Type")["Avg_PSF"])
         with c2:
-            st.caption("Value by topology, excl. Sold (AED M)")
-            chart2 = tv.set_index("Type")[["Total_Value"]].copy()
-            chart2["AED M"] = chart2["Total_Value"] / 1e6
+            st.caption("Total value by topology, incl. Sold (AED M)")
+            chart2 = tv.set_index("Type")[["Total_Value_All"]].copy()
+            chart2["AED M"] = chart2["Total_Value_All"] / 1e6
             st.bar_chart(chart2["AED M"])
 
 
