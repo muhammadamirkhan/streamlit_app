@@ -34,7 +34,7 @@ UNIT_TYPES = [
     "2 Bedroom", "3 Bedroom", "3 Bedroom Pool", "4 Bedroom Pool",
     "4 Bedroom Simplex", "3 Bedroom Duplex", "4 Bedroom Duplex", "5 Bedroom Duplex",
 ]
-STATUS_OPTIONS = ["Available", "Sold", "Bank Locked"]
+STATUS_OPTIONS = ["Available", "Sold"]
 
 TYPE_DEFAULTS = {
     "2 Bedroom":         {"internal": 2218.764851, "external": 1619.322681, "parking": 2, "terrace_rate": 0.30, "levels": 1},
@@ -69,8 +69,10 @@ BLUE_DARK = "#1F4E78"
 BLUE_MED  = "#2E75B6"
 BLUE_LITE = "#DDEBF7"
 
+SQFT_PER_SQM = 10.7639   # 1 m² = 10.7639 ft²  →  sqm = sqft / 10.7639
 
-# ── Excel-style table renderer ─────────────────────────────────────────────────
+
+# ── Excel-style table renderer (first column left, numeric columns centered) ───
 
 def excel_table(df: pd.DataFrame):
     sty = (df.style.hide(axis="index").set_table_styles([
@@ -78,7 +80,9 @@ def excel_table(df: pd.DataFrame):
                                    "font-family:Calibri,Arial,sans-serif;"},
         {"selector": "thead th", "props": f"background-color:{BLUE_DARK};color:#FFFFFF;font-weight:bold;"
                                            "text-align:center;border:1px solid #9DC3E6;padding:6px 10px;"},
-        {"selector": "tbody td", "props": "border:1px solid #BDD7EE;padding:5px 10px;text-align:right;"},
+        {"selector": "tbody td", "props": "border:1px solid #BDD7EE;padding:5px 10px;text-align:center;"},
+        {"selector": "tbody td:first-child", "props": "text-align:left;font-weight:600;"},
+        {"selector": "thead th:first-child", "props": "text-align:left;"},
         {"selector": "tbody tr:nth-child(even)", "props": f"background-color:{BLUE_LITE};"},
         {"selector": "tbody tr:nth-child(odd)",  "props": "background-color:#FFFFFF;"},
     ]))
@@ -86,6 +90,10 @@ def excel_table(df: pd.DataFrame):
 
 
 def aed(x):  return f"AED {x:,.0f}"
+
+def area_fmt(x, sqm=False):
+    v = x / SQFT_PER_SQM if sqm else x
+    return f"{v:,.0f}"
 
 
 # ── Data loading ───────────────────────────────────────────────────────────────
@@ -105,6 +113,7 @@ def load_unit_data() -> pd.DataFrame:
         "Price_sqft":    pd.to_numeric(data[10], errors="coerce"),
     })
     df = df[df["Type"].notna() & (df["Type"] != "Total")].reset_index(drop=True)
+    df["Status"] = df["Status"].replace("Bank Locked", "Available")   # Bank Locked reclassified as Available
     df["uid"] = [f"u{i}" for i in range(len(df))]   # stable unique row id (unit numbers are NOT unique)
     return df
 
@@ -186,7 +195,9 @@ def load_params() -> dict:
         duplex_premium = float(dp) if pd.notna(dp) else 0.0
     except Exception:
         pass
-    return {"escalation": esc, "terrace": terrace, "duplex_premium": duplex_premium}
+    area = {t: {"internal": TYPE_DEFAULTS[t]["internal"], "external": TYPE_DEFAULTS[t]["external"]}
+            for t in UNIT_TYPES}
+    return {"escalation": esc, "terrace": terrace, "duplex_premium": duplex_premium, "area": area}
 
 
 def load_blocked_floors() -> dict:
@@ -237,10 +248,17 @@ def new_unit_rate(t, units_df, params):
         rate += params.get("duplex_premium", 0.0)
     return rate
 
+def area_for(t, params):
+    a = params.get("area", {}).get(t)
+    if a:
+        return a["internal"], a["external"]
+    return TYPE_DEFAULTS[t]["internal"], TYPE_DEFAULTS[t]["external"]
+
 def unit_val(t, rate, params):
-    d = TYPE_DEFAULTS[t]; tr = terrace_for(t, params)
-    return {"internal": d["internal"]*rate, "terrace": d["external"]*tr*rate,
-            "total": (d["internal"] + tr*d["external"])*rate}
+    internal, external = area_for(t, params)
+    tr = terrace_for(t, params)
+    return {"internal": internal*rate, "terrace": external*tr*rate,
+            "total": (internal + tr*external)*rate}
 
 def floor_total(fl, params):
     return sum(unit_val(u["type"], u["rate"], params)["total"] for u in fl["units"])
@@ -248,7 +266,11 @@ def floor_total(fl, params):
 def recalc(df, params):
     df = df.copy()
     for t in df["Type"].unique():
-        df.loc[df["Type"] == t, "Terrace_Rate"] = terrace_for(t, params)
+        internal, external = area_for(t, params)
+        m = df["Type"] == t
+        df.loc[m, "Internal_sqft"] = internal
+        df.loc[m, "External_sqft"] = external
+        df.loc[m, "Terrace_Rate"]  = terrace_for(t, params)
     df["Sellable_sqft"] = df["Internal_sqft"] + df["Terrace_Rate"]*df["External_sqft"]
     df["Total_sqft"]    = df["Internal_sqft"] + df["External_sqft"]
     df["Price"]         = df["Price_sqft"] * df["Sellable_sqft"]
@@ -297,9 +319,10 @@ def add_units_to_register(unit_list, floor_num, params):
         uid = next_uid()
         u["uid"] = uid
         d = TYPE_DEFAULTS[u["type"]]
+        internal, external = area_for(u["type"], params)
         st.session_state.units = pd.concat([st.session_state.units, pd.DataFrame([{
             "Type": u["type"], "Status": "Available", "Unit": u["unit_no"], "Floor": str(floor_num),
-            "Parking": d["parking"], "Internal_sqft": d["internal"], "External_sqft": d["external"],
+            "Parking": d["parking"], "Internal_sqft": internal, "External_sqft": external,
             "Terrace_Rate": terrace_for(u["type"], params), "Price_sqft": u["rate"], "uid": uid,
         }])], ignore_index=True)
 
@@ -412,49 +435,106 @@ tab1, tab2, tab5, tab3, tab4 = st.tabs(
 # ── Tab 1: Unit Register ───────────────────────────────────────────────────────
 
 with tab1:
+    # Row-level escalation & price variance vs the unit one floor BELOW in the same typology
+    order = df.copy()
+    order["fnum"] = pd.to_numeric(order["Floor"].str.replace(r"[^0-9]", "", regex=True), errors="coerce")
+    order = order.sort_values(["Type", "fnum"])
+    esc_map = dict(zip(order["uid"], order.groupby("Type")["Price_sqft"].diff()))
+    var_map = dict(zip(order["uid"], order.groupby("Type")["Price"].diff()))
+
     fc1, fc2 = st.columns(2)
     f_types  = fc1.multiselect("Type",   sorted(df["Type"].unique().tolist()), default=sorted(df["Type"].unique().tolist()))
     f_status = fc2.multiselect("Status", STATUS_OPTIONS, default=STATUS_OPTIONS)
     view = df[df["Type"].isin(f_types) & df["Status"].isin(f_status)].copy()
 
-    disp = view[["Type","Status","Unit","Floor","Parking","Internal_sqft","External_sqft",
-                 "Sellable_sqft","Terrace_Rate","Price_sqft","Price"]].copy()
-    disp.columns = ["Type","Status","Unit","Floor","Parking","Internal (sqft)","External (sqft)",
-                    "Sellable (sqft)","Terrace Rate","Price/sqft (AED)","Price (AED)"]
-    disp["Terrace Rate"]     = disp["Terrace Rate"].apply(lambda x: f"{x:.0%}")
-    disp["Internal (sqft)"]  = disp["Internal (sqft)"].apply(lambda x: f"{x:,.1f}")
-    disp["External (sqft)"]  = disp["External (sqft)"].apply(lambda x: f"{x:,.1f}")
-    disp["Sellable (sqft)"]  = disp["Sellable (sqft)"].apply(lambda x: f"{x:,.1f}")
-    disp["Price/sqft (AED)"] = disp["Price/sqft (AED)"].apply(lambda x: f"{x:,.0f}")
-    disp["Price (AED)"]      = disp["Price (AED)"].apply(lambda x: aed(x))
-    st.dataframe(disp, use_container_width=True, hide_index=True, height=460)
-    st.caption(f"Showing {len(view)} of {len(df)} units")
+    # Derived per-unit columns
+    view["PSF_total"]  = view["Price"] / view["Total_sqft"]
+    view["PSF_int"]    = view["Price"] / view["Internal_sqft"]
+    view["PSF_terr"]   = view["Price"] / view["External_sqft"].replace(0, pd.NA)
+    view["Int_Value"]  = view["Price_sqft"] * view["Internal_sqft"]
+    view["Terr_Value"] = view["Price_sqft"] * view["Terrace_Rate"] * view["External_sqft"]
+    view["Esc_row"]    = view["uid"].map(esc_map)
+    view["Var_row"]    = view["uid"].map(var_map)
+
+    # Scorecards
+    tot_area = view["Total_sqft"].sum()
+    s1, s2, s3, s4 = st.columns(4)
+    s1.metric("Units shown", len(view))
+    s2.metric("Total Area (sqft)", f"{tot_area:,.0f}")
+    s3.metric("Total Price/sqft", aed(view["Price"].sum()/tot_area) if tot_area else "—")
+    s4.metric("Portfolio Value", aed(view["Price"].sum()))
+
+    cols = ["Type","Status","Unit","Floor","Parking",
+            "Internal_sqft","External_sqft","Total_sqft","Sellable_sqft","Terrace_Rate",
+            "Price_sqft","PSF_total","PSF_int","PSF_terr",
+            "Int_Value","Terr_Value","Price","Esc_row","Var_row"]
+    disp = view[cols].copy()
+    disp.columns = ["Type","Status","Unit","Floor","Parking",
+                    "Internal (sqft)","External (sqft)","Total Area (sqft)","Sellable (sqft)","Terrace Rate",
+                    "Price/Sellable sqft","Price/Total sqft","Price/Internal sqft","Price/Terrace sqft",
+                    "Internal Value (AED)","Terrace Value (AED)","Total Price (AED)",
+                    "Escalation vs below (/sqft)","Price Variance vs below (AED)"]
+
+    fmt = {
+        "Internal (sqft)": "{:,.1f}", "External (sqft)": "{:,.1f}",
+        "Total Area (sqft)": "{:,.1f}", "Sellable (sqft)": "{:,.1f}",
+        "Terrace Rate": "{:.0%}",
+        "Price/Sellable sqft": "AED {:,.0f}", "Price/Total sqft": "AED {:,.0f}",
+        "Price/Internal sqft": "AED {:,.0f}", "Price/Terrace sqft": "AED {:,.0f}",
+        "Internal Value (AED)": "AED {:,.0f}", "Terrace Value (AED)": "AED {:,.0f}",
+        "Total Price (AED)": "AED {:,.0f}",
+        "Escalation vs below (/sqft)": "AED {:,.0f}", "Price Variance vs below (AED)": "AED {:,.0f}",
+    }
+
+    def _hl_sold(row):
+        sold = row["Status"] == "Sold"
+        return ["background-color:#FAD4D4" if sold else "" for _ in row]
+
+    styler = disp.style.apply(_hl_sold, axis=1).format(fmt, na_rep="–")
+    st.dataframe(styler, use_container_width=True, hide_index=True, height=460)
+    st.caption(f"Showing {len(view)} of {len(df)} units · Sold units highlighted in red · "
+               f"“vs below” compares each unit to the one a floor lower in the same typology")
 
 
 # ── Tab 2: Summary by Type (no Bank Locked column, full values) ────────────────
 
 with tab2:
+    unit_choice = st.radio("Area unit", ["sqft", "sqm"], horizontal=True, key="sum_area_unit")
+    sqm = unit_choice == "sqm"
+    u = unit_choice
+    div = SQFT_PER_SQM if sqm else 1.0   # sqft → sqm divisor
+
     grp = df.groupby("Type").agg(
         Units=("Unit","count"),
         Sold=("Status", lambda x: (x=="Sold").sum()),
         Available=("Status", lambda x: (x=="Available").sum()),
-        Avg_Price_sqft=("Price_sqft","mean"),
         Total_Internal=("Internal_sqft","sum"),
+        Total_External=("External_sqft","sum"),
+        Total_Area=("Total_sqft","sum"),
         Total_Sellable=("Sellable_sqft","sum"),
         Total_Value=("Price","sum"),
     ).reset_index()
+    # Avg price per (total) area, in the chosen unit  =  Total Value / Total Area
+    grp["Avg_PSF"] = grp["Total_Value"] / grp["Total_Area"] * div
 
     gd = grp.copy()
-    gd["Avg_Price_sqft"] = gd["Avg_Price_sqft"].apply(lambda x: f"AED {x:,.0f}")
-    gd["Total_Internal"] = gd["Total_Internal"].apply(lambda x: f"{x:,.0f}")
-    gd["Total_Sellable"] = gd["Total_Sellable"].apply(lambda x: f"{x:,.0f}")
+    gd["Avg_PSF"]        = gd["Avg_PSF"].apply(lambda x: f"AED {x:,.0f}")
+    gd["Total_Internal"] = gd["Total_Internal"].apply(lambda x: area_fmt(x, sqm))
+    gd["Total_External"] = gd["Total_External"].apply(lambda x: area_fmt(x, sqm))
+    gd["Total_Area"]     = gd["Total_Area"].apply(lambda x: area_fmt(x, sqm))
+    gd["Total_Sellable"] = gd["Total_Sellable"].apply(lambda x: area_fmt(x, sqm))
     gd["Total_Value"]    = gd["Total_Value"].apply(lambda x: aed(x))
-    gd.columns = ["Type","Total Units","Sold","Available","Avg Price/sqft",
-                  "Total Internal (sqft)","Total Sellable (sqft)","Total Value (AED)"]
+    gd.columns = ["Type","Total Units","Sold","Available",
+                  f"Total Internal ({u})", f"Total External ({u})", f"Total Area ({u})",
+                  f"Total Sellable ({u})", f"Avg Price/{u}", "Total Value (AED)"]
     excel_table(gd)
+
+    tot_area = df["Total_sqft"].sum() / div
     st.markdown(f"**Grand Total — {len(df)} units &nbsp;|&nbsp; "
-                f"Sellable: {df['Sellable_sqft'].sum():,.0f} sqft &nbsp;|&nbsp; "
+                f"Total Area: {tot_area:,.0f} {u} &nbsp;|&nbsp; "
+                f"Sellable: {df['Sellable_sqft'].sum()/div:,.0f} {u} &nbsp;|&nbsp; "
                 f"Portfolio: {aed(df['Price'].sum())}**")
+    st.caption(f"Conversion: 1 m² = {SQFT_PER_SQM} ft²  →  sqm = sqft ÷ {SQFT_PER_SQM}")
     st.divider()
     chart = grp[["Type","Total_Value"]].set_index("Type")
     chart["AED M"] = chart["Total_Value"] / 1e6
@@ -465,34 +545,42 @@ with tab2:
 
 with tab5:
     st.subheader("Topology Summary Statistics")
+    st.caption("Price/sqft here = unit Price ÷ Total Area (Internal + External). "
+               "Min / Median / Max span the lowest-to-highest floors of each topology; "
+               "Avg is value-weighted = Total Value ÷ Total Area.")
     all_types = sorted(df["Type"].unique().tolist())
     pick = st.multiselect("Filter topologies", all_types, default=all_types, key="topo_filter")
-    tvdf = df[df["Type"].isin(pick)] if pick else df
+    tvdf = df[df["Type"].isin(pick)].copy() if pick else df.copy()
+    tvdf["PSF_total"] = tvdf["Price"] / tvdf["Total_sqft"]
+
     tv = tvdf.groupby("Type").agg(
         Units=("Unit","count"),
         Available=("Status", lambda x: (x=="Available").sum()),
         Sold=("Status", lambda x: (x=="Sold").sum()),
-        Min_PSF=("Price_sqft","min"),
-        Avg_PSF=("Price_sqft","mean"),
-        Max_PSF=("Price_sqft","max"),
-        Min_Price=("Price","min"),
-        Max_Price=("Price","max"),
+        Min_PSF=("PSF_total","min"),
+        Median_PSF=("PSF_total","median"),
+        Max_PSF=("PSF_total","max"),
+        Avg_Price=("Price","mean"),
+        Total_Area=("Total_sqft","sum"),
         Total_Value=("Price","sum"),
     ).reset_index()
+    tv["Avg_PSF"] = tv["Total_Value"] / tv["Total_Area"]   # value-weighted
 
-    tvd = tv.copy()
-    for c in ["Min_PSF","Avg_PSF","Max_PSF"]:
+    tvd = tv[["Type","Units","Available","Sold",
+              "Min_PSF","Median_PSF","Avg_PSF","Max_PSF","Avg_Price","Total_Value"]].copy()
+    for c in ["Min_PSF","Median_PSF","Avg_PSF","Max_PSF"]:
         tvd[c] = tvd[c].apply(lambda x: f"AED {x:,.0f}")
-    for c in ["Min_Price","Max_Price","Total_Value"]:
-        tvd[c] = tvd[c].apply(lambda x: aed(x))
-    tvd.columns = ["Type","Units","Available","Sold","Min Price/sqft","Avg Price/sqft",
-                   "Max Price/sqft","Min Unit Price","Max Unit Price","Total Value"]
+    tvd["Avg_Price"]   = tvd["Avg_Price"].apply(lambda x: aed(x))
+    tvd["Total_Value"] = tvd["Total_Value"].apply(lambda x: aed(x))
+    tvd.columns = ["Type","Units","Available","Sold",
+                   "Min /sqft (lowest)","Median /sqft (mid)","Avg /sqft (wtd)","Max /sqft (highest)",
+                   "Avg Unit Price","Total Value"]
     excel_table(tvd)
 
     st.divider()
     c1, c2 = st.columns(2)
     with c1:
-        st.caption("Average price per sqft by topology")
+        st.caption("Avg price per total sqft by topology")
         st.bar_chart(tv.set_index("Type")["Avg_PSF"])
     with c2:
         st.caption("Total value by topology (AED M)")
@@ -534,23 +622,46 @@ with tab3:
         st.markdown("**Other**")
         dpx = st.number_input("Duplex Premium (AED/sqft, added to duplex unit rates)", min_value=0.0, step=50.0,
                               value=float(params.get("duplex_premium", 0.0)), key="dpx_prem")
-        np_ = {"escalation": new_esc, "terrace": new_tr, "duplex_premium": dpx}
+        np_ = {"escalation": new_esc, "terrace": new_tr, "duplex_premium": dpx,
+               "area": dict(params.get("area", {}))}
         if np_ != st.session_state.fm_params:
             st.session_state.fm_params = np_
+            st.rerun()
+
+    with st.expander("📐  Area Settings (Internal & External sqft per topology — cascades to all units of that type)", expanded=False):
+        st.caption("Change a topology's area and every unit of that type updates — sellable area, price and all stats recompute.")
+        cur_area = params.get("area", {})
+        new_area = {}
+        ah1, ah2, ah3 = st.columns([2, 1.5, 1.5])
+        ah1.markdown("**Topology**"); ah2.markdown("**Internal (sqft)**"); ah3.markdown("**External (sqft)**")
+        for t in UNIT_TYPES:
+            a = cur_area.get(t, {"internal": TYPE_DEFAULTS[t]["internal"], "external": TYPE_DEFAULTS[t]["external"]})
+            r1, r2, r3 = st.columns([2, 1.5, 1.5])
+            r1.markdown(f"<div style='padding-top:6px'>{t}</div>", unsafe_allow_html=True)
+            ni = r2.number_input("int", min_value=0.0, step=10.0, value=float(a["internal"]),
+                                 key=f"area_int_{t}", label_visibility="collapsed")
+            ne = r3.number_input("ext", min_value=0.0, step=10.0, value=float(a["external"]),
+                                 key=f"area_ext_{t}", label_visibility="collapsed")
+            new_area[t] = {"internal": ni, "external": ne}
+        if new_area != params.get("area", {}):
+            st.session_state.fm_params = {**st.session_state.fm_params, "area": new_area}
             st.rerun()
 
     # Floors table + totals
     smap_all = uid_status_map()
     rows, grand = [], 0
+    TYPE_ABBR = {"2 Bedroom":"2BR","3 Bedroom":"3BR","3 Bedroom Pool":"3BR Pool","4 Bedroom Pool":"4BR Pool",
+                 "4 Bedroom Simplex":"4BR XL","3 Bedroom Duplex":"3BR DX","4 Bedroom Duplex":"4BR DX","5 Bedroom Duplex":"5BR DX"}
     for fl in floors:
         ft = floor_total(fl, params); grand += ft
         mix = ", ".join(f"{sum(1 for u in fl['units'] if u['type']==t)}x {t}"
                         for t in dict.fromkeys(u["type"] for u in fl["units"]))
+        unit_list = ", ".join(f"{u['unit_no']} ({TYPE_ABBR.get(u['type'], u['type'])})" for u in fl["units"])
         n_avail = sum(1 for u in fl["units"] if unit_status(u, smap_all) == "Available")
         editable = "🔒 Locked" if n_avail == 0 else f"{n_avail} avail"
         rows.append({"Floor": fl["floor"], "Kind": fl["kind"], "Levels": fl["levels"],
-                     "Unit Mix": mix, "Units": len(fl["units"]), "Editable": editable,
-                     "Floor Total (AED)": aed(ft)})
+                     "Unit Mix": mix, "Unit Numbers": unit_list, "Units": len(fl["units"]),
+                     "Editable": editable, "Floor Total (AED)": aed(ft)})
     col_t, col_k = st.columns([3, 1])
     with col_t:
         st.subheader("Floors")
@@ -628,7 +739,7 @@ with tab3:
     else:
         st.subheader("Edit a Floor")
         st.caption("Pick a floor, then change the **Available** units — add, remove or swap types. "
-                   "Sold / Bank Locked units are protected and cannot be changed.")
+                   "Sold units are protected and cannot be changed.")
         sel = st.selectbox("Select floor", ["— select —"] + [fl["floor"] for fl in floors],
                            format_func=lambda x: f"Floor {x}" if x != "— select —" else x, key="edit_floor_sel")
 
@@ -648,11 +759,11 @@ with tab3:
 
             # Block fully-sold / fully-locked floors
             if not avail_units:
-                st.error(f"🔒 Floor {sel} has no Available units — every unit is Sold or Bank Locked. "
+                st.error(f"🔒 Floor {sel} has no Available units — every unit is Sold. "
                          f"This floor cannot be edited.")
             else:
                 if locked_units:
-                    st.info(f"{len(locked_units)} unit(s) on this floor are Sold / Bank Locked and will be kept "
+                    st.info(f"{len(locked_units)} unit(s) on this floor are Sold and will be kept "
                             f"unchanged. You are editing the **{len(avail_units)} Available** unit(s) only.")
 
                 # editable composition = available units only
@@ -728,7 +839,7 @@ with tab3:
                 # Remove entire floor only allowed when nothing is locked
                 if locked_units:
                     b2.button("Remove Entire Floor", key="btn_edit_remove", disabled=True,
-                              help="Cannot remove a floor that has Sold / Bank Locked units.")
+                              help="Cannot remove a floor that has Sold units.")
                 elif b2.button("Remove Entire Floor", key="btn_edit_remove"):
                     remove_units_from_register([u["uid"] for u in fl["units"]])
                     st.session_state.floors = [f2 for f2 in st.session_state.floors if f2["floor"] != sel]
