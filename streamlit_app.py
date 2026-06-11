@@ -517,7 +517,9 @@ with tab2:
     # Avg price per (total) area, in the chosen unit  =  Total Value / Total Area
     grp["Avg_PSF"] = grp["Total_Value"] / grp["Total_Area"] * div
 
-    gd = grp.copy()
+    # explicit column order so labels line up with the data
+    gd = grp[["Type","Units","Sold","Available","Total_Internal","Total_External",
+              "Total_Area","Total_Sellable","Avg_PSF","Total_Value"]].copy()
     gd["Avg_PSF"]        = gd["Avg_PSF"].apply(lambda x: f"AED {x:,.0f}")
     gd["Total_Internal"] = gd["Total_Internal"].apply(lambda x: area_fmt(x, sqm))
     gd["Total_External"] = gd["Total_External"].apply(lambda x: area_fmt(x, sqm))
