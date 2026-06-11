@@ -532,10 +532,11 @@ with tab2:
     u = unit_choice
     div = SQFT_PER_SQM if sqm else 1.0   # sqft → sqm divisor
 
-    grp = df.groupby("Type").agg(
+    sdf = df[df["Status"] != "Sold"].copy()   # all units except Sold (Available + Bank Locked)
+    st.caption("Based on **all units except Sold** (Available + Bank Locked) — consistent with the Topology View.")
+
+    grp = sdf.groupby("Type").agg(
         Units=("Unit","count"),
-        Sold=("Status", lambda x: (x=="Sold").sum()),
-        Available=("Status", lambda x: (x=="Available").sum()),
         Total_Internal=("Internal_sqft","sum"),
         Total_External=("External_sqft","sum"),
         Total_Area=("Total_sqft","sum"),
@@ -546,7 +547,7 @@ with tab2:
     grp["Avg_PSF"] = grp["Total_Value"] / grp["Total_Area"] * div
 
     # explicit column order so labels line up with the data
-    gd = grp[["Type","Units","Sold","Available","Total_Internal","Total_External",
+    gd = grp[["Type","Units","Total_Internal","Total_External",
               "Total_Area","Total_Sellable","Avg_PSF","Total_Value"]].copy()
     gd["Avg_PSF"]        = gd["Avg_PSF"].apply(lambda x: f"AED {x:,.0f}")
     gd["Total_Internal"] = gd["Total_Internal"].apply(lambda x: area_fmt(x, sqm))
@@ -554,17 +555,17 @@ with tab2:
     gd["Total_Area"]     = gd["Total_Area"].apply(lambda x: area_fmt(x, sqm))
     gd["Total_Sellable"] = gd["Total_Sellable"].apply(lambda x: area_fmt(x, sqm))
     gd["Total_Value"]    = gd["Total_Value"].apply(lambda x: aed(x))
-    gd.columns = ["Type","Total Units","Sold","Available",
+    gd.columns = ["Type","Units (excl. Sold)",
                   f"Total Internal ({u})", f"Total External ({u})", f"Total Area ({u})",
                   f"Total Sellable ({u})", f"Avg Price/{u}", "Total Value (AED)"]
     sum_show = column_picker(list(gd.columns), key=f"sum_cols_{u}", locked=["Type"])
     excel_table(gd[sum_show])
 
-    tot_area = df["Total_sqft"].sum() / div
-    st.markdown(f"**Grand Total — {len(df)} units &nbsp;|&nbsp; "
+    tot_area = sdf["Total_sqft"].sum() / div
+    st.markdown(f"**Grand Total (excl. Sold) — {len(sdf)} units &nbsp;|&nbsp; "
                 f"Total Area: {tot_area:,.0f} {u} &nbsp;|&nbsp; "
-                f"Sellable: {df['Sellable_sqft'].sum()/div:,.0f} {u} &nbsp;|&nbsp; "
-                f"Portfolio: {aed(df['Price'].sum())}**")
+                f"Sellable: {sdf['Sellable_sqft'].sum()/div:,.0f} {u} &nbsp;|&nbsp; "
+                f"Value: {aed(sdf['Price'].sum())}**")
     st.caption(f"Conversion: 1 m² = {SQFT_PER_SQM} ft²  →  sqm = sqft ÷ {SQFT_PER_SQM}")
     st.divider()
     chart = grp[["Type","Total_Value"]].set_index("Type")
