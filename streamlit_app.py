@@ -537,69 +537,123 @@ with tab1:
 # ── Tab 2: Summary by Type (no Bank Locked column, full values) ────────────────
 
 with tab2:
-    unit_choice = st.radio("Area unit", ["sqft", "sqm"], horizontal=True, key="sum_area_unit")
-    sqm = unit_choice == "sqm"
-    u = unit_choice
-    div = SQFT_PER_SQM if sqm else 1.0   # sqft → sqm divisor
+    st.caption("Mirrors the Excel **Muraba Veil Sale Summary** tab (same columns & structure). "
+               "Based on **all units** (Sold included) and computed live from the unit register "
+               "using the app's sellable-area pricing.")
 
-    st.caption("Based on **all units** (Sold included).")
+    # Column order exactly as in the Excel Sale Summary tab
+    SUM_COLS = ["Typology", "Number of Units", "Price/Sq.ft", "Area (sqft)", "Area (sqm)",
+                "Internal (sqft/unit)", "Terrace (sqft/unit)", "Total Internal (sqft)",
+                "Total Terrace (sqft)", "Total Sellable", "Counted Terraces",
+                "Total Sellable Counted", "Price (per unit)", "Total Sales",
+                "Parking", "Total Parking"]
 
-    grp = df.groupby("Type").agg(
-        Units=("Unit","count"),
-        Sold=("Status", lambda x: (x=="Sold").sum()),
-        Available=("Status", lambda x: (x=="Available").sum()),
-        Total_Internal=("Internal_sqft","sum"),
-        Total_External=("External_sqft","sum"),
-        Total_Area=("Total_sqft","sum"),
-        Total_Sellable=("Sellable_sqft","sum"),
-        Total_Value=("Price","sum"),
-    ).reset_index()
-    # Avg price per (total) area, in the chosen unit  =  Total Value / Total Area
-    grp["Avg_PSF"] = grp["Total_Value"] / grp["Total_Area"] * div
+    # build one numeric row per typology, ordered like the master type list
+    present = [t for t in UNIT_TYPES if t in set(df["Type"])]
+    present += [t for t in sorted(df["Type"].unique()) if t not in present]
+    num_rows = []
+    for t in present:
+        g = df[df["Type"] == t]
+        n = len(g)
+        internal_u = g["Internal_sqft"].mean()                 # constant per type after recalc
+        terrace_u  = g["External_sqft"].mean()
+        area_sqft  = internal_u + terrace_u                     # full footprint per unit
+        tot_internal = g["Internal_sqft"].sum()
+        tot_terrace  = g["External_sqft"].sum()                 # 100% terrace footprint
+        tot_sellable = g["Total_sqft"].sum()                   # Internal + full Terrace
+        tot_counted  = g["Sellable_sqft"].sum()                # rate-adjusted (app) sellable
+        counted_terr = tot_counted - tot_internal              # terrace portion actually counted
+        total_sales  = g["Price"].sum()
+        num_rows.append({
+            "Typology": t,
+            "Number of Units": n,
+            "Price/Sq.ft": total_sales / tot_counted if tot_counted else 0.0,
+            "Area (sqft)": area_sqft,
+            "Area (sqm)": area_sqft / SQFT_PER_SQM,
+            "Internal (sqft/unit)": internal_u,
+            "Terrace (sqft/unit)": terrace_u,
+            "Total Internal (sqft)": tot_internal,
+            "Total Terrace (sqft)": tot_terrace,
+            "Total Sellable": tot_sellable,
+            "Counted Terraces": counted_terr,
+            "Total Sellable Counted": tot_counted,
+            "Price (per unit)": total_sales / n if n else 0.0,
+            "Total Sales": total_sales,
+            "Parking": int(g["Parking"].mode().iloc[0]) if not g["Parking"].mode().empty else 0,
+            "Total Parking": int(g["Parking"].sum()),
+        })
+    nm = pd.DataFrame(num_rows)
 
-    # explicit column order so labels line up with the data
-    gd = grp[["Type","Units","Sold","Available","Total_Internal","Total_External",
-              "Total_Area","Total_Sellable","Avg_PSF","Total_Value"]].copy()
-    gd["Avg_PSF"]        = gd["Avg_PSF"].apply(lambda x: f"AED {x:,.0f}")
-    gd["Total_Internal"] = gd["Total_Internal"].apply(lambda x: area_fmt(x, sqm))
-    gd["Total_External"] = gd["Total_External"].apply(lambda x: area_fmt(x, sqm))
-    gd["Total_Area"]     = gd["Total_Area"].apply(lambda x: area_fmt(x, sqm))
-    gd["Total_Sellable"] = gd["Total_Sellable"].apply(lambda x: area_fmt(x, sqm))
-    gd["Total_Value"]    = gd["Total_Value"].apply(lambda x: aed(x))
-    gd.columns = ["Type","Total Units","Sold","Available",
-                  f"Total Internal ({u})", f"Total External ({u})", f"Total Area ({u})",
-                  f"Total Sellable ({u})", f"Avg Price/{u}", "Total Value (AED)"]
-
-    # ── TOTAL row: sum the additive columns; Avg Price/u is value-weighted ──
-    tot_val  = grp["Total_Value"].sum()
-    tot_area_all = grp["Total_Area"].sum()
-    total_row = {
-        "Type": "TOTAL",
-        "Total Units": int(grp["Units"].sum()),
-        "Sold": int(grp["Sold"].sum()),
-        "Available": int(grp["Available"].sum()),
-        f"Total Internal ({u})": area_fmt(grp["Total_Internal"].sum(), sqm),
-        f"Total External ({u})": area_fmt(grp["Total_External"].sum(), sqm),
-        f"Total Area ({u})":     area_fmt(tot_area_all, sqm),
-        f"Total Sellable ({u})": area_fmt(grp["Total_Sellable"].sum(), sqm),
-        f"Avg Price/{u}":        f"AED {tot_val / tot_area_all * div:,.0f}" if tot_area_all else "—",
-        "Total Value (AED)":     aed(tot_val),
+    # Total row (sum additive; Price/Sq.ft value-weighted; per-unit cells blank like Excel)
+    tot_counted_all = nm["Total Sellable Counted"].sum()
+    total = {
+        "Typology": "Total",
+        "Number of Units": int(nm["Number of Units"].sum()),
+        "Price/Sq.ft": (nm["Total Sales"].sum() / tot_counted_all) if tot_counted_all else 0.0,
+        "Area (sqft)": None, "Area (sqm)": None,
+        "Internal (sqft/unit)": None, "Terrace (sqft/unit)": None,
+        "Total Internal (sqft)": nm["Total Internal (sqft)"].sum(),
+        "Total Terrace (sqft)": nm["Total Terrace (sqft)"].sum(),
+        "Total Sellable": nm["Total Sellable"].sum(),
+        "Counted Terraces": nm["Counted Terraces"].sum(),
+        "Total Sellable Counted": tot_counted_all,
+        "Price (per unit)": None,
+        "Total Sales": nm["Total Sales"].sum(),
+        "Parking": None,
+        "Total Parking": int(nm["Total Parking"].sum()),
     }
-    gd = pd.concat([gd, pd.DataFrame([total_row])], ignore_index=True)
+    nm = pd.concat([nm, pd.DataFrame([total])], ignore_index=True)
 
-    sum_show = column_picker(list(gd.columns), key=f"sum_cols_{u}", locked=["Type"])
-    excel_table(gd[sum_show])
+    # formatting per column
+    def _f(v, kind):
+        if v is None or (isinstance(v, float) and pd.isna(v)):
+            return ""
+        if kind == "int":   return f"{int(v):,}"
+        if kind == "area":  return f"{v:,.2f}"
+        if kind == "areak": return f"{v:,.0f}"
+        if kind == "aed0":  return f"AED {v:,.0f}"
+        return str(v)
 
-    tot_area = df["Total_sqft"].sum() / div
-    st.markdown(f"**Grand Total — {len(df)} units &nbsp;|&nbsp; "
-                f"Total Area: {tot_area:,.0f} {u} &nbsp;|&nbsp; "
-                f"Sellable: {df['Sellable_sqft'].sum()/div:,.0f} {u} &nbsp;|&nbsp; "
-                f"Portfolio: {aed(df['Price'].sum())}**")
-    st.caption(f"Conversion: 1 m² = {SQFT_PER_SQM} ft²  →  sqm = sqft ÷ {SQFT_PER_SQM}")
+    disp = pd.DataFrame({
+        "Typology": nm["Typology"],
+        "Number of Units": nm["Number of Units"].apply(lambda v: _f(v, "int")),
+        "Price/Sq.ft": nm["Price/Sq.ft"].apply(lambda v: _f(v, "aed0")),
+        "Area (sqft)": nm["Area (sqft)"].apply(lambda v: _f(v, "area")),
+        "Area (sqm)": nm["Area (sqm)"].apply(lambda v: _f(v, "area")),
+        "Internal (sqft/unit)": nm["Internal (sqft/unit)"].apply(lambda v: _f(v, "area")),
+        "Terrace (sqft/unit)": nm["Terrace (sqft/unit)"].apply(lambda v: _f(v, "area")),
+        "Total Internal (sqft)": nm["Total Internal (sqft)"].apply(lambda v: _f(v, "areak")),
+        "Total Terrace (sqft)": nm["Total Terrace (sqft)"].apply(lambda v: _f(v, "areak")),
+        "Total Sellable": nm["Total Sellable"].apply(lambda v: _f(v, "areak")),
+        "Counted Terraces": nm["Counted Terraces"].apply(lambda v: _f(v, "areak")),
+        "Total Sellable Counted": nm["Total Sellable Counted"].apply(lambda v: _f(v, "areak")),
+        "Price (per unit)": nm["Price (per unit)"].apply(lambda v: _f(v, "aed0")),
+        "Total Sales": nm["Total Sales"].apply(lambda v: _f(v, "aed0")),
+        "Parking": nm["Parking"].apply(lambda v: _f(v, "int")),
+        "Total Parking": nm["Total Parking"].apply(lambda v: _f(v, "int")),
+    })[SUM_COLS]
+
+    sum_show = column_picker(list(disp.columns), key="sum_cols", locked=["Typology"])
+    excel_table(disp[sum_show])
+    st.caption(f"Conversion: 1 m² = {SQFT_PER_SQM} ft²  ·  "
+               "Total Sellable = Internal + full Terrace  ·  "
+               "Counted Terraces = rate-adjusted terrace  ·  "
+               "Total Sellable Counted = Internal + Counted Terraces (drives Price per unit).")
+
     st.divider()
-    chart = grp[["Type","Total_Value"]].set_index("Type")
-    chart["AED M"] = chart["Total_Value"] / 1e6
+    chart = nm[nm["Typology"] != "Total"][["Typology", "Total Sales"]].set_index("Typology")
+    chart["AED M"] = chart["Total Sales"] / 1e6
     st.bar_chart(chart["AED M"])
+
+    # ── Furniture Pack (static reference, from Excel Sale Summary) ──────────────
+    with st.expander("🛋️  Muraba Veil Furniture Pack (reference, from Excel)", expanded=False):
+        fp = pd.DataFrame({
+            "Type": ["2 Bedroom", "3 Bedroom", "3 Bedroom Pool", "3 Bedroom XL",
+                     "3 Bedroom Duplex", "4 Bedroom", "4 Bedroom Duplex", "5 Bedroom PH"],
+            "Amount in AED": [475000, 550000, 600000, 800000, 800000, 850000, 850000, 1250000],
+        })
+        fp["Amount in AED"] = fp["Amount in AED"].apply(lambda x: f"AED {x:,.0f}")
+        excel_table(fp)
 
 
 # ── Tab 5: Topology View (min/max/avg stats) ───────────────────────────────────
