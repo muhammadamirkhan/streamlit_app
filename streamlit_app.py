@@ -237,10 +237,17 @@ def escalation_for(t, params):
     return params["escalation"].get(t, 0.0)
 
 def last_available_price(t, units_df):
-    sub = units_df[(units_df["Type"] == t) & (units_df["Status"] == "Available")]
+    """Return the Price_sqft of the highest-floor Available unit for type t (floor-sequence aware)."""
+    sub = units_df[(units_df["Type"] == t) & (units_df["Status"] == "Available")].copy()
     if sub.empty:
-        sub = units_df[units_df["Type"] == t]
-    return float(sub.iloc[-1]["Price_sqft"]) if not sub.empty else 5000.0
+        sub = units_df[units_df["Type"] == t].copy()
+    if sub.empty:
+        return 5000.0
+    # sort by numeric floor so escalation always references the topmost available unit
+    sub["_fnum"] = pd.to_numeric(
+        sub["Floor"].str.replace(r"[^0-9]", "", regex=True), errors="coerce")
+    sub = sub.sort_values("_fnum")
+    return float(sub.iloc[-1]["Price_sqft"])
 
 def new_unit_rate(t, units_df, params):
     rate = last_available_price(t, units_df) + escalation_for(t, params)
@@ -607,7 +614,7 @@ with tab3:
         "4 Bedroom Simplex": "4 SX Ascending (XL)", "3 Bedroom Duplex": "3 DX Ascending",
         "4 Bedroom Duplex": "4 DX Ascending", "5 Bedroom Duplex": "5 DX Ascending",
     }
-    with st.expander("⚙️  Escalation & Terrace Settings (all variable, from launch sheets)", expanded=False):
+    with st.expander("⚙️  Escalation & Terrace Settings (all variable, from launch sheets)", expanded=True):
         st.markdown("**Escalation — price/sqft added per new floor, per topology**")
         esc = dict(params["escalation"])
         cols = st.columns(4)
@@ -746,8 +753,18 @@ with tab3:
         st.subheader("Edit a Floor")
         st.caption("Pick a floor, then change the **Available** units — add, remove or swap types. "
                    "Sold units are protected and cannot be changed.")
-        sel = st.selectbox("Select floor", ["— select —"] + [fl["floor"] for fl in floors],
-                           format_func=lambda x: f"Floor {x}" if x != "— select —" else x, key="edit_floor_sel")
+        _fl_labels = {
+            fl["floor"]: f"Floor {fl['floor']}  —  " + ", ".join(
+                f"{u['unit_no']} ({TYPE_ABBR.get(u['type'], u['type'])})"
+                for u in fl["units"]
+            )
+            for fl in floors
+        }
+        sel = st.selectbox(
+            "Select floor", ["— select —"] + [fl["floor"] for fl in floors],
+            format_func=lambda x: _fl_labels.get(x, f"Floor {x}") if x != "— select —" else x,
+            key="edit_floor_sel",
+        )
 
         if sel != "— select —":
             fl = next(f for f in floors if f["floor"] == sel)
