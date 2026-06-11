@@ -546,49 +546,53 @@ with tab2:
 # ── Tab 5: Topology View (min/max/avg stats) ───────────────────────────────────
 
 with tab5:
-    st.subheader("Topology Summary Statistics")
-    st.caption("Price/sqft here = unit Price ÷ Total Area (Internal + External). "
-               "Min / Median / Max span the lowest-to-highest floors of each topology; "
+    st.subheader("Topology Summary Statistics — Available units only")
+    st.caption("Based on **Available** units only (Sold units excluded). "
+               "Price/sqft = unit Price ÷ Total Area (Internal + External). "
+               "Min / Median / Max span the lowest-to-highest available floors; "
                "Avg is value-weighted = Total Value ÷ Total Area.")
     all_types = sorted(df["Type"].unique().tolist())
     pick = st.multiselect("Filter topologies", all_types, default=all_types, key="topo_filter")
-    tvdf = df[df["Type"].isin(pick)].copy() if pick else df.copy()
+    tvdf = df[df["Status"] == "Available"].copy()
+    if pick:
+        tvdf = tvdf[tvdf["Type"].isin(pick)]
     tvdf["PSF_total"] = tvdf["Price"] / tvdf["Total_sqft"]
 
-    tv = tvdf.groupby("Type").agg(
-        Units=("Unit","count"),
-        Available=("Status", lambda x: (x=="Available").sum()),
-        Sold=("Status", lambda x: (x=="Sold").sum()),
-        Min_PSF=("PSF_total","min"),
-        Median_PSF=("PSF_total","median"),
-        Max_PSF=("PSF_total","max"),
-        Avg_Price=("Price","mean"),
-        Total_Area=("Total_sqft","sum"),
-        Total_Value=("Price","sum"),
-    ).reset_index()
-    tv["Avg_PSF"] = tv["Total_Value"] / tv["Total_Area"]   # value-weighted
+    if tvdf.empty:
+        st.info("No available units for the selected topologies.")
+    else:
+        tv = tvdf.groupby("Type").agg(
+            Avail_Units=("Unit","count"),
+            Min_PSF=("PSF_total","min"),
+            Median_PSF=("PSF_total","median"),
+            Max_PSF=("PSF_total","max"),
+            Avg_Price=("Price","mean"),
+            Total_Area=("Total_sqft","sum"),
+            Total_Value=("Price","sum"),
+        ).reset_index()
+        tv["Avg_PSF"] = tv["Total_Value"] / tv["Total_Area"]   # value-weighted
 
-    tvd = tv[["Type","Units","Available","Sold",
-              "Min_PSF","Median_PSF","Avg_PSF","Max_PSF","Avg_Price","Total_Value"]].copy()
-    for c in ["Min_PSF","Median_PSF","Avg_PSF","Max_PSF"]:
-        tvd[c] = tvd[c].apply(lambda x: f"AED {x:,.0f}")
-    tvd["Avg_Price"]   = tvd["Avg_Price"].apply(lambda x: aed(x))
-    tvd["Total_Value"] = tvd["Total_Value"].apply(lambda x: aed(x))
-    tvd.columns = ["Type","Units","Available","Sold",
-                   "Min /sqft (lowest)","Median /sqft (mid)","Avg /sqft (wtd)","Max /sqft (highest)",
-                   "Avg Unit Price","Total Value"]
-    excel_table(tvd)
+        tvd = tv[["Type","Avail_Units","Min_PSF","Median_PSF","Avg_PSF","Max_PSF",
+                  "Avg_Price","Total_Value"]].copy()
+        for c in ["Min_PSF","Median_PSF","Avg_PSF","Max_PSF"]:
+            tvd[c] = tvd[c].apply(lambda x: f"AED {x:,.0f}")
+        tvd["Avg_Price"]   = tvd["Avg_Price"].apply(lambda x: aed(x))
+        tvd["Total_Value"] = tvd["Total_Value"].apply(lambda x: aed(x))
+        tvd.columns = ["Type","Available Units",
+                       "Min /sqft (lowest)","Median /sqft (mid)","Avg /sqft (wtd)","Max /sqft (highest)",
+                       "Avg Unit Price","Total Value (avail)"]
+        excel_table(tvd)
 
-    st.divider()
-    c1, c2 = st.columns(2)
-    with c1:
-        st.caption("Avg price per total sqft by topology")
-        st.bar_chart(tv.set_index("Type")["Avg_PSF"])
-    with c2:
-        st.caption("Total value by topology (AED M)")
-        chart2 = tv.set_index("Type")[["Total_Value"]].copy()
-        chart2["AED M"] = chart2["Total_Value"] / 1e6
-        st.bar_chart(chart2["AED M"])
+        st.divider()
+        c1, c2 = st.columns(2)
+        with c1:
+            st.caption("Avg price per total sqft by topology (available)")
+            st.bar_chart(tv.set_index("Type")["Avg_PSF"])
+        with c2:
+            st.caption("Available value by topology (AED M)")
+            chart2 = tv.set_index("Type")[["Total_Value"]].copy()
+            chart2["AED M"] = chart2["Total_Value"] / 1e6
+            st.bar_chart(chart2["AED M"])
 
 
 # ── Tab 3: Floor Manager ───────────────────────────────────────────────────────
