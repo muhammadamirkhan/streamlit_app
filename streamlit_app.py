@@ -91,6 +91,15 @@ def excel_table(df: pd.DataFrame):
 
 def aed(x):  return f"AED {x:,.0f}"
 
+def ordinal(n):
+    """13 -> '13th', 21 -> '21st'. Accepts ints or numeric strings; passes through non-numeric."""
+    try:
+        n = int(float(n))
+    except (ValueError, TypeError):
+        return str(n)
+    suf = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suf}"
+
 def area_fmt(x, sqm=False):
     v = x / SQFT_PER_SQM if sqm else x
     return f"{v:,.0f}"
@@ -347,7 +356,7 @@ def add_units_to_register(unit_list, floor_num, params):
         d = TYPE_DEFAULTS[u["type"]]
         internal, external = area_for(u["type"], params)
         st.session_state.units = pd.concat([st.session_state.units, pd.DataFrame([{
-            "Type": u["type"], "Status": "Available", "Unit": u["unit_no"], "Floor": str(floor_num),
+            "Type": u["type"], "Status": "Available", "Unit": u["unit_no"], "Floor": ordinal(floor_num),
             "Parking": d["parking"], "Internal_sqft": internal, "External_sqft": external,
             "Terrace_Rate": terrace_for(u["type"], params), "Price_sqft": u["rate"], "uid": uid,
         }])], ignore_index=True)
@@ -516,11 +525,11 @@ with tab1:
 
     def _hl_sold(row):
         sold = bool(sold_by_idx.loc[row.name])
-        return ["background-color:#FAD4D4" if sold else "" for _ in row]
+        return ["background-color:#9DC3E6" if sold else "" for _ in row]
 
     styler = disp.style.apply(_hl_sold, axis=1).format(fmt, na_rep="–")
     st.dataframe(styler, use_container_width=True, hide_index=True, height=460)
-    st.caption(f"Showing {len(view)} of {len(df)} units · Sold units highlighted in red · "
+    st.caption(f"Showing {len(view)} of {len(df)} units · Sold units highlighted in blue · "
                f"“vs below” compares each unit to the one a floor lower in the same typology")
 
 
@@ -532,11 +541,12 @@ with tab2:
     u = unit_choice
     div = SQFT_PER_SQM if sqm else 1.0   # sqft → sqm divisor
 
-    sdf = df[df["Status"] != "Sold"].copy()   # all units except Sold (Available + Bank Locked)
-    st.caption("Based on **all units except Sold** (Available + Bank Locked) — consistent with the Topology View.")
+    st.caption("Based on **all units** (Sold included).")
 
-    grp = sdf.groupby("Type").agg(
+    grp = df.groupby("Type").agg(
         Units=("Unit","count"),
+        Sold=("Status", lambda x: (x=="Sold").sum()),
+        Available=("Status", lambda x: (x=="Available").sum()),
         Total_Internal=("Internal_sqft","sum"),
         Total_External=("External_sqft","sum"),
         Total_Area=("Total_sqft","sum"),
@@ -547,7 +557,7 @@ with tab2:
     grp["Avg_PSF"] = grp["Total_Value"] / grp["Total_Area"] * div
 
     # explicit column order so labels line up with the data
-    gd = grp[["Type","Units","Total_Internal","Total_External",
+    gd = grp[["Type","Units","Sold","Available","Total_Internal","Total_External",
               "Total_Area","Total_Sellable","Avg_PSF","Total_Value"]].copy()
     gd["Avg_PSF"]        = gd["Avg_PSF"].apply(lambda x: f"AED {x:,.0f}")
     gd["Total_Internal"] = gd["Total_Internal"].apply(lambda x: area_fmt(x, sqm))
@@ -555,17 +565,17 @@ with tab2:
     gd["Total_Area"]     = gd["Total_Area"].apply(lambda x: area_fmt(x, sqm))
     gd["Total_Sellable"] = gd["Total_Sellable"].apply(lambda x: area_fmt(x, sqm))
     gd["Total_Value"]    = gd["Total_Value"].apply(lambda x: aed(x))
-    gd.columns = ["Type","Units (excl. Sold)",
+    gd.columns = ["Type","Total Units","Sold","Available",
                   f"Total Internal ({u})", f"Total External ({u})", f"Total Area ({u})",
                   f"Total Sellable ({u})", f"Avg Price/{u}", "Total Value (AED)"]
     sum_show = column_picker(list(gd.columns), key=f"sum_cols_{u}", locked=["Type"])
     excel_table(gd[sum_show])
 
-    tot_area = sdf["Total_sqft"].sum() / div
-    st.markdown(f"**Grand Total (excl. Sold) — {len(sdf)} units &nbsp;|&nbsp; "
+    tot_area = df["Total_sqft"].sum() / div
+    st.markdown(f"**Grand Total — {len(df)} units &nbsp;|&nbsp; "
                 f"Total Area: {tot_area:,.0f} {u} &nbsp;|&nbsp; "
-                f"Sellable: {sdf['Sellable_sqft'].sum()/div:,.0f} {u} &nbsp;|&nbsp; "
-                f"Value: {aed(sdf['Price'].sum())}**")
+                f"Sellable: {df['Sellable_sqft'].sum()/div:,.0f} {u} &nbsp;|&nbsp; "
+                f"Portfolio: {aed(df['Price'].sum())}**")
     st.caption(f"Conversion: 1 m² = {SQFT_PER_SQM} ft²  →  sqm = sqft ÷ {SQFT_PER_SQM}")
     st.divider()
     chart = grp[["Type","Total_Value"]].set_index("Type")
@@ -696,7 +706,7 @@ with tab3:
         unit_list = ", ".join(f"{u['unit_no']} ({TYPE_ABBR.get(u['type'], u['type'])})" for u in fl["units"])
         n_avail = sum(1 for u in fl["units"] if unit_status(u, smap_all) == "Available")
         editable = "🔒 Locked" if n_avail == 0 else f"{n_avail} avail"
-        rows.append({"Floor": fl["floor"], "Kind": fl["kind"], "Levels": fl["levels"],
+        rows.append({"Floor": ordinal(fl["floor"]), "Kind": fl["kind"], "Levels": fl["levels"],
                      "Unit Mix": mix, "Unit Numbers": unit_list, "Units": len(fl["units"]),
                      "Editable": editable, "Floor Total (AED)": aed(ft)})
     col_t, col_k = st.columns([3, 1])
@@ -727,9 +737,9 @@ with tab3:
         blocked_hit = nf in blocked
         exists_hit  = nf in existing
         if blocked_hit:
-            st.error(f"Floor {nf} is a **{blocked[nf]}** floor (MEP/Majlis) — cannot place residential units here.")
+            st.error(f"Floor {ordinal(nf)} is a **{blocked[nf]}** floor (MEP/Majlis) — cannot place residential units here.")
         elif exists_hit:
-            st.error(f"Floor {nf} already exists. Use **Edit a Floor** to change it.")
+            st.error(f"Floor {ordinal(nf)} already exists. Use **Edit a Floor** to change it.")
 
         st.markdown("**Unit mix** — pick topology and use **− / +** to set quantity:")
         mix = unit_mix_builder("addmix", [{"type": "3 Bedroom", "qty": 1}, {"type": "2 Bedroom", "qty": 2}])
@@ -753,7 +763,7 @@ with tab3:
             m3.metric("New Portfolio", aed(grand + total), delta=f"+{aed(total)}")
 
             disabled = blocked_hit or exists_hit
-            if st.button(f"Add Floor {nf}", type="primary", disabled=disabled, key="btn_addfl"):
+            if st.button(f"Add Floor {ordinal(nf)}", type="primary", disabled=disabled, key="btn_addfl"):
                 try:
                     ordered = []
                     for t, q in mix:
@@ -769,7 +779,7 @@ with tab3:
                                                     "units": new_units})
                     st.session_state.floors.sort(key=lambda x: x["floor"])
                     clear_builder("addmix")
-                    st.session_state["flash"] = ("success", f"✅ Floor {nf} added with {len(new_units)} unit(s).")
+                    st.session_state["flash"] = ("success", f"✅ Floor {ordinal(nf)} added with {len(new_units)} unit(s).")
                 except Exception as e:
                     st.session_state["flash"] = ("error", f"❌ Could not add floor {nf}: {e}")
                 st.rerun()
@@ -780,7 +790,7 @@ with tab3:
         st.caption("Pick a floor, then change the **Available** units — add, remove or swap types. "
                    "Sold units are protected and cannot be changed.")
         _fl_labels = {
-            fl["floor"]: f"Floor {fl['floor']}  —  " + ", ".join(
+            fl["floor"]: f"Floor {ordinal(fl['floor'])}  —  " + ", ".join(
                 f"{u['unit_no']} ({TYPE_ABBR.get(u['type'], u['type'])})"
                 for u in fl["units"]
             )
@@ -788,7 +798,7 @@ with tab3:
         }
         sel = st.selectbox(
             "Select floor", ["— select —"] + [fl["floor"] for fl in floors],
-            format_func=lambda x: _fl_labels.get(x, f"Floor {x}") if x != "— select —" else x,
+            format_func=lambda x: _fl_labels.get(x, f"Floor {ordinal(x)}") if x != "— select —" else x,
             key="edit_floor_sel",
         )
 
@@ -797,7 +807,7 @@ with tab3:
             locked_units, avail_units = split_floor_units(fl)
             smap = uid_status_map()
 
-            st.markdown(f"**Floor {sel}** ({fl['kind']}, {fl['levels']} level"
+            st.markdown(f"**Floor {ordinal(sel)}** ({fl['kind']}, {fl['levels']} level"
                         f"{'s' if fl['levels']>1 else ''}) — current units:")
             cur = [{"Unit": u["unit_no"], "Type": u["type"],
                     "Status": unit_status(u, smap),
@@ -808,7 +818,7 @@ with tab3:
 
             # Block fully-sold / fully-locked floors
             if not avail_units:
-                st.error(f"🔒 Floor {sel} has no Available units — every unit is Sold. "
+                st.error(f"🔒 Floor {ordinal(sel)} has no Available units — every unit is Sold. "
                          f"This floor cannot be edited.")
             else:
                 if locked_units:
@@ -879,7 +889,7 @@ with tab3:
                         n_add, n_rem = len(added_units), len(removed_uids)
                         clear_builder(f"editmix_{sel}")
                         st.session_state["flash"] = ("success",
-                            f"✅ Floor {sel} updated — {n_add} added, {n_rem} removed, "
+                            f"✅ Floor {ordinal(sel)} updated — {n_add} added, {n_rem} removed, "
                             f"{len(locked_units)} protected unit(s) kept.")
                     except Exception as e:
                         st.session_state["flash"] = ("error", f"❌ Could not update floor {sel}: {e}")
@@ -893,7 +903,7 @@ with tab3:
                     remove_units_from_register([u["uid"] for u in fl["units"]])
                     st.session_state.floors = [f2 for f2 in st.session_state.floors if f2["floor"] != sel]
                     clear_builder(f"editmix_{sel}")
-                    st.session_state["flash"] = ("success", f"✅ Floor {sel} removed entirely.")
+                    st.session_state["flash"] = ("success", f"✅ Floor {ordinal(sel)} removed entirely.")
                     st.rerun()
 
 
