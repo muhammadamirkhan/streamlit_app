@@ -141,6 +141,7 @@ def load_unit_data() -> pd.DataFrame:
         "Price_sqft":    pd.to_numeric(data[10], errors="coerce"),
     })
     df = df[df["Type"].notna() & (df["Type"] != "Total")].reset_index(drop=True)
+    df["Floor"]  = df["Floor"].apply(ordinal)                          # normalise 33 / 33.0 / "4th" -> "33rd" / "4th"
     df["Status"] = df["Status"].replace("Bank Locked", "Available")   # Bank Locked reclassified as Available
     df["uid"] = [f"u{i}" for i in range(len(df))]   # stable unique row id (unit numbers are NOT unique)
     return df
@@ -568,6 +569,24 @@ with tab2:
     gd.columns = ["Type","Total Units","Sold","Available",
                   f"Total Internal ({u})", f"Total External ({u})", f"Total Area ({u})",
                   f"Total Sellable ({u})", f"Avg Price/{u}", "Total Value (AED)"]
+
+    # ── TOTAL row: sum the additive columns; Avg Price/u is value-weighted ──
+    tot_val  = grp["Total_Value"].sum()
+    tot_area_all = grp["Total_Area"].sum()
+    total_row = {
+        "Type": "TOTAL",
+        "Total Units": int(grp["Units"].sum()),
+        "Sold": int(grp["Sold"].sum()),
+        "Available": int(grp["Available"].sum()),
+        f"Total Internal ({u})": area_fmt(grp["Total_Internal"].sum(), sqm),
+        f"Total External ({u})": area_fmt(grp["Total_External"].sum(), sqm),
+        f"Total Area ({u})":     area_fmt(tot_area_all, sqm),
+        f"Total Sellable ({u})": area_fmt(grp["Total_Sellable"].sum(), sqm),
+        f"Avg Price/{u}":        f"AED {tot_val / tot_area_all * div:,.0f}" if tot_area_all else "—",
+        "Total Value (AED)":     aed(tot_val),
+    }
+    gd = pd.concat([gd, pd.DataFrame([total_row])], ignore_index=True)
+
     sum_show = column_picker(list(gd.columns), key=f"sum_cols_{u}", locked=["Type"])
     excel_table(gd[sum_show])
 
