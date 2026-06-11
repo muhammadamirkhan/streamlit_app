@@ -1,0 +1,21 @@
+# Secrets — never commit
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Local test / scratch files
+_test_*.xlsx
+mv_test*.xlsx
+~$*.xlsx
+
+# OS
+.DS_Store
+Thumbs.db
+MV-Pricing.pbix
+MV-Pricing.pbix.zip
+muraba_app.py
+Launch Muraba App.bat
