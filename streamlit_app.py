@@ -761,7 +761,8 @@ with tab1:
         st.dataframe(vis.style.apply(_hl_sold, axis=1), use_container_width=True,
                      hide_index=True, height=460)
         st.caption(f"Showing {len(view)} of {len(df)} units · Sold units highlighted in blue")
-        with st.expander("✏️  Edit comments (inline)", expanded=False):
+        show_editor = st.toggle("Show inline comment editor", value=False, key="show_cmt_editor")
+        if show_editor:
             cdf = disp[["Unit", "Type", "Floor", "Status", "Comment", "uid"]].copy()
             ed = st.data_editor(
                 cdf, hide_index=True, use_container_width=True, key="cmt_editor",
