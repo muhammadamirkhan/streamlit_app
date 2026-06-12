@@ -4,12 +4,6 @@ import os
 import json
 from io import BytesIO
 
-try:
-    from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, JsCode
-    HAS_AGGRID = True
-except Exception:
-    HAS_AGGRID = False
-
 st.set_page_config(page_title="Muraba Veil – Unit Manager", layout="wide", page_icon="🏙️")
 
 # ── Password gate ──────────────────────────────────────────────────────────────
@@ -716,67 +710,34 @@ with tab1:
     display_cols = [c for c in disp.columns if c != "uid"]
     show_cols = column_picker(display_cols, key="reg_cols", locked=["Type", "Unit", "Comment"])
 
-    if HAS_AGGRID:
-        # One table that is BOTH inline-editable (Comment) AND highlights Sold rows blue.
-        gb = GridOptionsBuilder.from_dataframe(disp)
-        gb.configure_default_column(editable=False, resizable=True, sortable=True, filter=True)
-        for c in disp.columns:
-            if c == "uid":
-                gb.configure_column(c, hide=True)
-            elif c not in show_cols:
-                gb.configure_column(c, hide=True)
-        gb.configure_column("Comment", editable=True, minWidth=320, flex=1,
-                            tooltipField="Comment")
-        gb.configure_grid_options(getRowStyle=JsCode(
-            "function(p){ if(p.data && p.data.Status=='Sold'){ return {'background-color':'#9DC3E6'} } }"
-        ))
-        grid = AgGrid(
-            disp, gridOptions=gb.build(), height=460, theme="balham",
-            update_mode=GridUpdateMode.VALUE_CHANGED, allow_unsafe_jscode=True,
-            fit_columns_on_grid_load=False, key="reg_aggrid",
-        )
-        st.caption(f"Showing {len(view)} of {len(df)} units · Sold units highlighted in blue · "
-                   f"**Comment** is editable inline (saved to file, reloads every launch) · "
-                   f"“vs below” compares each unit to the one a floor lower in the same typology")
+    # Styled read-only table with the blue Sold highlight (reliable, no extra deps)
+    sold_by_idx = disp.set_index("uid")["Status"] == "Sold"
+    vis = disp[show_cols].copy()
+    vis.index = disp["uid"].values
+    def _hl_sold(row):
+        return ["background-color:#9DC3E6" if bool(sold_by_idx.loc[row.name]) else "" for _ in row]
+    st.dataframe(vis.style.apply(_hl_sold, axis=1), use_container_width=True,
+                 hide_index=True, height=460)
+    st.caption(f"Showing {len(view)} of {len(df)} units · Sold units highlighted in blue · "
+               f"“vs below” compares each unit to the one a floor lower in the same typology")
 
-        out = grid["data"]
-        new_cmt = pd.Series(out["Comment"]).fillna("").astype(str).values
-        old_cmt = disp["Comment"].values
-        if len(new_cmt) == len(old_cmt) and not (new_cmt == old_cmt).all():
-            cmap = dict(zip(pd.Series(out["uid"]).values, new_cmt))
+    # Inline comment editor (toggle to show/hide); edits persist to file and reload on launch
+    show_editor = st.toggle("✏️ Show inline comment editor", value=False, key="show_cmt_editor")
+    if show_editor:
+        cdf = disp[["Unit", "Type", "Floor", "Status", "Comment", "uid"]].copy()
+        ed = st.data_editor(
+            cdf, hide_index=True, use_container_width=True, key="cmt_editor",
+            column_order=["Unit", "Type", "Floor", "Status", "Comment"],
+            disabled=["Unit", "Type", "Floor", "Status"],
+            column_config={"Comment": st.column_config.TextColumn("Comment", width="large")},
+        )
+        new_cmt = ed["Comment"].fillna("").astype(str).values
+        if not (new_cmt == cdf["Comment"].values).all():
+            cmap = dict(zip(ed["uid"].values, new_cmt))
             u = st.session_state.units
             u["Comment"] = u.apply(lambda r: cmap.get(r["uid"], r.get("Comment", "")), axis=1)
             persist_all_comments()
             st.rerun()
-    else:
-        # Fallback (st_aggrid not installed): styled read-only table + inline comment editor below.
-        st.info("For inline editing **and** the blue Sold highlight in one table, install "
-                "`streamlit-aggrid` (`pip install streamlit-aggrid`). Showing the styled table "
-                "with a separate comment editor for now.")
-        sold_by_idx = disp.set_index("uid")["Status"] == "Sold"
-        vis = disp[show_cols].copy()
-        vis.index = disp["uid"].values
-        def _hl_sold(row):
-            return ["background-color:#9DC3E6" if bool(sold_by_idx.loc[row.name]) else "" for _ in row]
-        st.dataframe(vis.style.apply(_hl_sold, axis=1), use_container_width=True,
-                     hide_index=True, height=460)
-        st.caption(f"Showing {len(view)} of {len(df)} units · Sold units highlighted in blue")
-        show_editor = st.toggle("Show inline comment editor", value=False, key="show_cmt_editor")
-        if show_editor:
-            cdf = disp[["Unit", "Type", "Floor", "Status", "Comment", "uid"]].copy()
-            ed = st.data_editor(
-                cdf, hide_index=True, use_container_width=True, key="cmt_editor",
-                column_order=["Unit", "Type", "Floor", "Status", "Comment"],
-                disabled=["Unit", "Type", "Floor", "Status"],
-                column_config={"Comment": st.column_config.TextColumn("Comment", width="large")},
-            )
-            new_cmt = ed["Comment"].fillna("").astype(str).values
-            if not (new_cmt == cdf["Comment"].values).all():
-                cmap = dict(zip(ed["uid"].values, new_cmt))
-                u = st.session_state.units
-                u["Comment"] = u.apply(lambda r: cmap.get(r["uid"], r.get("Comment", "")), axis=1)
-                persist_all_comments()
-                st.rerun()
 
 
 # ── Tab 2: Summary by Type (no Bank Locked column, full values) ────────────────
