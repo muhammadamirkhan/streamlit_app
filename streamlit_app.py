@@ -392,7 +392,7 @@ def load_params() -> dict:
     area = {t: {"internal": TYPE_DEFAULTS[t]["internal"], "external": TYPE_DEFAULTS[t]["external"]}
             for t in UNIT_TYPES}
     return {"escalation": esc, "terrace": terrace, "duplex_premium": duplex_premium, "area": area,
-            "base": {}, "base_floor": {}}
+            "base": {}}
 
 
 def load_blocked_floors() -> dict:
@@ -516,17 +516,30 @@ def new_unit_rate(t, target_floor, units_df, params):
     return max(rate, 0.0)
 
 def get_base(t, params):
-    """Return (base_psf, base_floor) set for type t's price-family, or (None, None)."""
-    b, bf = params.get("base", {}), params.get("base_floor", {})
+    """Return the Base Price/sqft set for type t's price-family, or None."""
+    b = params.get("base", {})
     for ft in family_types(t):
         if b.get(ft) is not None:
-            return float(b[ft]), bf.get(ft)
-    return None, None
+            return float(b[ft])
+    return None
 
-def recompute_from_base(t, base_psf, base_floor, params):
-    """Price every **Available** unit of the family from an explicit base price/sqft at a base
-    floor: rate = base + escalation × (floor-steps from base floor). Sold units stay fixed.
-    Floor steps count distinct family floors, so missing floors don't distort the ladder."""
+def lowest_available_psf(t, units_df):
+    """Current lowest-floor Available price/sqft for type t's family (the natural base).
+    Falls back to lowest-floor of all family units if none are Available."""
+    fam = family_types(t)
+    sub = units_df[units_df["Type"].isin(fam)].copy()
+    if sub.empty:
+        return None
+    sub["_fn"] = _fnum_series(sub)
+    sub = sub.dropna(subset=["_fn"])
+    avail = sub[sub["Status"] == "Available"]
+    pick = avail if not avail.empty else sub
+    return float(pick.sort_values("_fn").iloc[0]["Price_sqft"])
+
+def recompute_from_base(t, base_psf, params):
+    """Price every **Available** unit of the family from a per-type base price/sqft anchored at
+    the family's LOWEST floor: rate = base + escalation × (floor-steps up from the lowest floor).
+    Sold units stay fixed. Steps count distinct family floors, so missing floors don't distort it."""
     fam = family_types(t)
     u = st.session_state.units.copy()
     fn = _fnum_series(u)
@@ -535,17 +548,14 @@ def recompute_from_base(t, base_psf, base_floor, params):
     floors_sorted = sorted(sub["_fn"].unique())
     if not floors_sorted:
         return 0
-    if base_floor is None or float(base_floor) not in floors_sorted:
-        base_floor = floors_sorted[0]
-    pos = {f: i for i, f in enumerate(floors_sorted)}
-    base_pos = pos[float(base_floor)]
+    pos = {f: i for i, f in enumerate(floors_sorted)}   # lowest floor = position 0 = base
     esc = escalation_for(t, params)
     dpx = params.get("duplex_premium", 0.0) if "Duplex" in t else 0.0
     changed = 0
     for idx in sub.index:
         if u.at[idx, "Status"] != "Available":
             continue
-        steps = pos[float(fn.loc[idx])] - base_pos
+        steps = pos[float(fn.loc[idx])]
         rate = max(base_psf + esc * steps + dpx, 0.0)
         if abs(float(u.at[idx, "Price_sqft"]) - rate) > 1e-9:
             u.at[idx, "Price_sqft"] = rate
@@ -559,9 +569,9 @@ def reladder_typology(t, params):
     for the family, the ladder is anchored at that base; otherwise anchors are the existing
     entry-price units. Sold units are never touched. Mutates st.session_state.units.
     Returns the number of units whose price changed."""
-    base_psf, base_floor = get_base(t, params)
-    if base_psf is not None:                    # base-anchored ladder
-        return recompute_from_base(t, base_psf, base_floor, params)
+    base_psf = get_base(t, params)
+    if base_psf is not None:                    # base-anchored ladder (per type, lowest floor)
+        return recompute_from_base(t, base_psf, params)
     fam = family_types(t)
     u = st.session_state.units.copy()
     fn = _fnum_series(u)
@@ -1151,7 +1161,7 @@ with tab3:
             new_tr_map[gkey] = new_t / 100.0
         np_ = {"escalation": new_esc_map, "terrace": new_tr_map,
                "duplex_premium": new_dpx, "area": dict(params.get("area", {})),
-               "base": dict(params.get("base", {})), "base_floor": dict(params.get("base_floor", {}))}
+               "base": dict(params.get("base", {}))}
         if np_ != old:
             st.session_state.fm_params = np_
             n = 0
@@ -1166,49 +1176,36 @@ with tab3:
                     f"✅ Escalation updated — {n} Available unit price(s) re-laddered.")
             st.rerun()
 
-        # ── Base Price (single source of truth) ───────────────────────────────
-        st.markdown("**Base Price** — set the entry price/sqft at a base floor; Available units "
-                    "recompute as *base + escalation × floors up*. Sold units stay fixed.")
+        # ── Base Price (per type; single source of truth) ─────────────────────
+        st.markdown("**Base Price** — the entry price/sqft for this typology (its lowest floor). "
+                    "Available units recompute as *base + escalation × floors up*; Sold stay fixed.")
         base_key = PRICE_FAMILY.get(s_type, s_type)
-        fam = family_types(s_type)
-        fu = st.session_state.units[st.session_state.units["Type"].isin(fam)].copy()
-        if fu.empty:
+        low_psf = lowest_available_psf(s_type, st.session_state.units)
+        if low_psf is None:
             st.info(f"No {s_type} units yet — add some on a floor first, then set a base price.")
         else:
-            fu["_fn"] = pd.to_numeric(fu["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True),
-                                      errors="coerce")
-            fu = fu.dropna(subset=["_fn"]).sort_values("_fn")
-            floor_opts = sorted({int(x) for x in fu["_fn"]})
-            stored_psf, stored_floor = get_base(s_type, params)
-            default_floor = int(stored_floor) if (stored_floor in floor_opts) else floor_opts[0]
-            bp1, bp2, bp3 = st.columns([1.3, 1.3, 1])
-            base_floor_sel = bp1.selectbox("Base floor", floor_opts,
-                                           index=floor_opts.index(default_floor),
-                                           format_func=ordinal, key=f"base_floor_{base_key}")
-            at_floor = fu[fu["_fn"] == base_floor_sel]
-            floor_price = float(at_floor["Price_sqft"].iloc[0]) if not at_floor.empty \
-                else float(fu["Price_sqft"].iloc[0])
-            default_psf = float(stored_psf) if (stored_psf is not None and stored_floor == base_floor_sel) \
-                else floor_price
-            base_psf_in = bp2.number_input("Base Price (AED/sqft)", min_value=0.0, step=10.0,
-                                           value=round(default_psf, 2), key=f"base_psf_{base_key}")
-            if bp3.button("Apply base", key=f"apply_base_{base_key}", use_container_width=True):
+            stored_psf = get_base(s_type, params)
+            default_psf = float(stored_psf) if stored_psf is not None else low_psf
+            bp1, bp2 = st.columns([2, 1])
+            base_psf_in = bp1.number_input(
+                "Base Price (AED/sqft)", min_value=0.0, step=10.0, value=round(default_psf, 2),
+                key=f"base_psf_{base_key}",
+                help=f"Current lowest Available price/sqft for {s_type} is AED {low_psf:,.0f}.")
+            if bp2.button("Apply base", key=f"apply_base_{base_key}", use_container_width=True):
                 p2 = {**st.session_state.fm_params,
-                      "base": {**st.session_state.fm_params.get("base", {}), base_key: base_psf_in},
-                      "base_floor": {**st.session_state.fm_params.get("base_floor", {}), base_key: int(base_floor_sel)}}
+                      "base": {**st.session_state.fm_params.get("base", {}), base_key: base_psf_in}}
                 st.session_state.fm_params = p2
-                nch = recompute_from_base(s_type, base_psf_in, int(base_floor_sel), p2)
+                nch = recompute_from_base(s_type, base_psf_in, p2)
                 sync_floor_rates()
                 st.session_state["flash"] = ("success",
-                    f"✅ Base price set for {s_type} at {ordinal(base_floor_sel)} — {nch} Available unit(s) recomputed.")
+                    f"✅ Base price set for {s_type} — {nch} Available unit(s) recomputed.")
                 st.rerun()
             if stored_psf is not None:
-                st.caption(f"🔗 Active base: **AED {stored_psf:,.0f}/sqft** at {ordinal(stored_floor)} — "
-                           "escalation now re-prices from this base.")
+                st.caption(f"🔗 Active base: **AED {stored_psf:,.0f}/sqft** — escalation now "
+                           "re-prices from this base.")
                 if st.button("Clear base price (back to ladder anchor)", key=f"clear_base_{base_key}"):
                     p2 = {**st.session_state.fm_params}
                     p2["base"] = {k: v for k, v in p2.get("base", {}).items() if k != base_key}
-                    p2["base_floor"] = {k: v for k, v in p2.get("base_floor", {}).items() if k != base_key}
                     st.session_state.fm_params = p2
                     st.session_state["flash"] = ("success", f"Base price cleared for {s_type}.")
                     st.rerun()
@@ -1221,12 +1218,12 @@ with tab3:
         for t in UNIT_TYPES:
             gk = terrace_group_key(t)
             trv = params["terrace"][gk] * 100 if gk else 100.0
-            bpsf, bfl = get_base(t, params)
-            base_txt = f"AED {bpsf:,.0f} @ {ordinal(bfl)}" if bpsf is not None else "—"
+            bpsf = get_base(t, params)
+            base_txt = f"AED {bpsf:,.0f}" if bpsf is not None else "—"
             ref_rows.append({"Typology": t,
                              "Escalation (AED/sqft)": f"{params['escalation'].get(t, 0):,.0f}",
                              "Terrace %": f"{trv:.0f}%",
-                             "Base Price": base_txt})
+                             "Base /sqft": base_txt})
         excel_table(pd.DataFrame(ref_rows))
 
     with st.expander("📐  Area Settings (Internal & External sqft per topology — cascades to all units of that type)", expanded=False):
