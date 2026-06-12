@@ -524,8 +524,7 @@ def get_base(t, params):
     return None
 
 def lowest_available_psf(t, units_df):
-    """Current lowest-floor Available price/sqft for type t's family (the natural base).
-    Falls back to lowest-floor of all family units if none are Available."""
+    """Current lowest-floor Available price/sqft for type t's family."""
     fam = family_types(t)
     sub = units_df[units_df["Type"].isin(fam)].copy()
     if sub.empty:
@@ -535,6 +534,49 @@ def lowest_available_psf(t, units_df):
     avail = sub[sub["Status"] == "Available"]
     pick = avail if not avail.empty else sub
     return float(pick.sort_values("_fn").iloc[0]["Price_sqft"])
+
+def representative_base_psf(t, units_df, params):
+    """The base price/sqft the bulk of the Available ladder is built on: the most common value of
+    (price − escalation × floor-position) over Available family units, anchored at the lowest floor.
+    Applying this base reproduces the main clean ladder and only normalises the few off-ladder units."""
+    fam = family_types(t)
+    sub = units_df[units_df["Type"].isin(fam)].copy()
+    if sub.empty:
+        return None
+    sub["_fn"] = _fnum_series(sub)
+    sub = sub.dropna(subset=["_fn"])
+    floors_sorted = sorted(sub["_fn"].unique())
+    pos = {f: i for i, f in enumerate(floors_sorted)}
+    esc = escalation_for(t, params)
+    av = sub[sub["Status"] == "Available"]
+    if av.empty:
+        return float(sub.sort_values("_fn").iloc[0]["Price_sqft"])
+    implied = (av["Price_sqft"] - esc * av["_fn"].map(pos)).round(2)
+    return float(implied.mode().iloc[0])
+
+def base_preview(t, base_psf, params):
+    """Without applying: how many Available family units would change and the portfolio Δ (AED)."""
+    fam = family_types(t)
+    u = st.session_state.units
+    fn = _fnum_series(u)
+    mask = u["Type"].isin(fam)
+    sub = u[mask].assign(_fn=fn[mask]).dropna(subset=["_fn"])
+    floors_sorted = sorted(sub["_fn"].unique())
+    pos = {f: i for i, f in enumerate(floors_sorted)}
+    esc = escalation_for(t, params)
+    dpx = params.get("duplex_premium", 0.0) if "Duplex" in t else 0.0
+    n_change, delta = 0, 0.0
+    for idx in sub.index:
+        if u.at[idx, "Status"] != "Available":
+            continue
+        new = max(base_psf + esc * pos[float(fn.loc[idx])] + dpx, 0.0)
+        old = float(u.at[idx, "Price_sqft"])
+        if abs(new - old) > 1e-9:
+            n_change += 1
+            tt = u.at[idx, "Type"]
+            internal, external = area_for(tt, params)
+            delta += (new - old) * (internal + terrace_for(tt, params) * external)
+    return n_change, delta
 
 def recompute_from_base(t, base_psf, params):
     """Price every **Available** unit of the family from a per-type base price/sqft anchored at
@@ -1177,20 +1219,26 @@ with tab3:
             st.rerun()
 
         # ── Base Price (per type; single source of truth) ─────────────────────
-        st.markdown("**Base Price** — the entry price/sqft for this typology (its lowest floor). "
-                    "Available units recompute as *base + escalation × floors up*; Sold stay fixed.")
+        st.markdown("**Base Price** — the entry price/sqft this typology's ladder is built on. "
+                    "Available units recompute as *base + escalation × floors up*; Sold stay fixed. "
+                    "The default reproduces the current ladder (only off-ladder legacy units change).")
         base_key = PRICE_FAMILY.get(s_type, s_type)
-        low_psf = lowest_available_psf(s_type, st.session_state.units)
-        if low_psf is None:
+        rep_psf = representative_base_psf(s_type, st.session_state.units, params)
+        if rep_psf is None:
             st.info(f"No {s_type} units yet — add some on a floor first, then set a base price.")
         else:
             stored_psf = get_base(s_type, params)
-            default_psf = float(stored_psf) if stored_psf is not None else low_psf
+            default_psf = float(stored_psf) if stored_psf is not None else rep_psf
             bp1, bp2 = st.columns([2, 1])
             base_psf_in = bp1.number_input(
                 "Base Price (AED/sqft)", min_value=0.0, step=10.0, value=round(default_psf, 2),
                 key=f"base_psf_{base_key}",
-                help=f"Current lowest Available price/sqft for {s_type} is AED {low_psf:,.0f}.")
+                help=f"Representative ladder base for {s_type} is AED {rep_psf:,.0f}/sqft "
+                     "(the value the bulk of the available ladder is built on).")
+            n_chg, delta = base_preview(s_type, base_psf_in, params)
+            sign = "+" if delta >= 0 else "−"
+            bp1.caption(f"Applying will change **{n_chg}** Available unit(s) · "
+                        f"portfolio Δ **{sign}{abs(delta):,.0f} AED**.")
             if bp2.button("Apply base", key=f"apply_base_{base_key}", use_container_width=True):
                 p2 = {**st.session_state.fm_params,
                       "base": {**st.session_state.fm_params.get("base", {}), base_key: base_psf_in}}
