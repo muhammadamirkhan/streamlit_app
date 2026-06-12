@@ -1183,30 +1183,11 @@ with tab3:
                     f"{ordinal(f_from)}–{ordinal(f_to)}: {action_txt.replace('**','')}.")
                 st.rerun()
 
-    # Floors table + totals
-    smap_all = uid_status_map()
-    rows, grand = [], 0
-    for fl in floors:
-        ft = floor_total(fl, params); grand += ft
-        mix = ", ".join(f"{sum(1 for u in fl['units'] if u['type']==t)}x {t}"
-                        for t in dict.fromkeys(u["type"] for u in fl["units"]))
-        unit_list = ", ".join(f"{u['unit_no']} ({TYPE_ABBR.get(u['type'], u['type'])})" for u in fl["units"])
-        n_avail = sum(1 for u in fl["units"] if unit_status(u, smap_all) == "Available")
-        editable = "🔒 Locked" if n_avail == 0 else f"{n_avail} avail"
-        rows.append({"Floor": ordinal(fl["floor"]), "Kind": fl["kind"], "Levels": fl["levels"],
-                     "Unit Mix": mix, "Unit Numbers": unit_list, "Units": len(fl["units"]),
-                     "Editable": editable, "Floor Total (AED)": aed(ft)})
-    col_t, col_k = st.columns([3, 1])
-    with col_t:
-        st.subheader("Floors")
-        floors_tbl = pd.DataFrame(rows)
-        fcols_show = column_picker(list(floors_tbl.columns), key="floor_cols", locked=["Floor"])
-        excel_table(floors_tbl[fcols_show])
-    with col_k:
-        st.subheader("Totals")
-        st.metric("Floors", len(floors))
-        st.metric("Units",  sum(len(fl["units"]) for fl in floors))
-        # Portfolio value is shown in the global header on every page (no duplication here)
+    # Floor totals (the Floors table was removed; grand is still needed for previews below)
+    grand = sum(floor_total(fl, params) for fl in floors)
+    mc1, mc2 = st.columns(2)
+    mc1.metric("Floors", len(floors))
+    mc2.metric("Units",  sum(len(fl["units"]) for fl in floors))
 
     st.divider()
     action = st.radio("Action", ["Add a New Floor", "Edit a Floor"], horizontal=True, key="fm_action")
