@@ -287,44 +287,67 @@ def _fnum_series(units_df):
 def escalation_reference(t, target_floor, units_df):
     """Pick the escalation reference for a new/edited unit of type t on target_floor.
 
-    Rule (per client spec):
-      • Among type-t units on floors BELOW target, let A = the highest-floor *Available* unit.
-      • Candidate references = A + every unit on floors strictly between A and target
-        (those in-between are the Sold ones we skip past).
-      • Reference R = the candidate with the HIGHEST price/sqft.
-      • steps = (# distinct floors carrying a type-t unit strictly between R and target) + 1.
-    Returns {ref_unit, ref_floor, ref_psf, steps} or None when nothing sits below target.
+    Floor-direction aware (prices always rise with height):
+
+    • If type-t units exist BELOW target → price UP from below:
+        A = highest-floor Available unit below; candidates = A + units between A and target;
+        reference R = the HIGHEST-priced candidate; steps = distinct floors with a type-t
+        unit strictly between R and target, + 1.  rate = R.psf + esc × steps.
+
+    • Else if type-t units exist ABOVE target → price DOWN from above:
+        A = lowest-floor Available unit above; candidates = A + units between target and A;
+        reference R = the LOWEST-priced candidate; steps = distinct floors with a type-t
+        unit strictly between target and R, + 1.  rate = R.psf − esc × steps.
+
+    Returns ({ref_unit, ref_floor, ref_psf, steps}, direction) where direction is +1 / −1,
+    or (None, 0) when no comparable type-t unit exists anywhere.
     """
     sub = units_df[units_df["Type"] == t].copy()
     if sub.empty:
-        return None
+        return None, 0
     sub["fn"] = _fnum_series(sub)
-    below = sub.dropna(subset=["fn"])
-    below = below[below["fn"] < target_floor]
-    if below.empty:
-        return None
-    avail = below[below["Status"] == "Available"]
-    if not avail.empty:
-        a_floor = avail["fn"].max()
-        cand = below[below["fn"] >= a_floor]      # A plus everything between A and target
-    else:
-        cand = below                               # no Available below → all below are candidates
-    R = cand.loc[cand["Price_sqft"].astype(float).idxmax()]
-    r_floor = float(R["fn"])
-    steps = int(sub[(sub["fn"] > r_floor) & (sub["fn"] < target_floor)]["fn"].nunique()) + 1
-    return {"ref_unit": str(R["Unit"]), "ref_floor": int(r_floor),
-            "ref_psf": float(R["Price_sqft"]), "steps": steps}
+    sub = sub.dropna(subset=["fn"])
+    below = sub[sub["fn"] < target_floor]
+    above = sub[sub["fn"] > target_floor]
+
+    if not below.empty:                                    # ── price UP from below ──
+        avail = below[below["Status"] == "Available"]
+        if not avail.empty:
+            a_floor = avail["fn"].max()
+            cand = below[below["fn"] >= a_floor]
+        else:
+            cand = below
+        R = cand.loc[cand["Price_sqft"].astype(float).idxmax()]
+        r_floor = float(R["fn"])
+        steps = int(sub[(sub["fn"] > r_floor) & (sub["fn"] < target_floor)]["fn"].nunique()) + 1
+        return {"ref_unit": str(R["Unit"]), "ref_floor": int(r_floor),
+                "ref_psf": float(R["Price_sqft"]), "steps": steps}, +1
+
+    if not above.empty:                                    # ── price DOWN from above ──
+        avail = above[above["Status"] == "Available"]
+        if not avail.empty:
+            a_floor = avail["fn"].min()
+            cand = above[above["fn"] <= a_floor]
+        else:
+            cand = above
+        R = cand.loc[cand["Price_sqft"].astype(float).idxmin()]
+        r_floor = float(R["fn"])
+        steps = int(sub[(sub["fn"] < r_floor) & (sub["fn"] > target_floor)]["fn"].nunique()) + 1
+        return {"ref_unit": str(R["Unit"]), "ref_floor": int(r_floor),
+                "ref_psf": float(R["Price_sqft"]), "steps": steps}, -1
+
+    return None, 0
 
 def new_unit_rate(t, target_floor, units_df, params):
     esc = escalation_for(t, params)
-    ref = escalation_reference(t, target_floor, units_df)
+    ref, direction = escalation_reference(t, target_floor, units_df)
     if ref is None:
         rate = last_available_price(t, units_df) + esc
     else:
-        rate = ref["ref_psf"] + esc * ref["steps"]
+        rate = ref["ref_psf"] + direction * esc * ref["steps"]
     if "Duplex" in t:
         rate += params.get("duplex_premium", 0.0)
-    return rate
+    return max(rate, 0.0)
 
 def area_for(t, params):
     a = params.get("area", {}).get(t)
@@ -776,38 +799,63 @@ with tab3:
     floors = st.session_state.floors
 
     # Parameters
-    ESC_LABELS = {
-        "2 Bedroom": "2 Bedroom Ascending", "3 Bedroom": "3 Bedroom Ascending",
-        "3 Bedroom Pool": "3 BR Pool Ascending", "4 Bedroom Pool": "4 BR Pool Ascending",
-        "4 Bedroom XL": "4 SX Ascending (XL)", "3 Bedroom Duplex": "3 DX Ascending",
-        "4 Bedroom Duplex": "4 DX Ascending", "5 Bedroom Duplex": "5 DX Ascending",
-    }
-    with st.expander("⚙️  Escalation & Terrace Settings (all variable, from launch sheets)", expanded=True):
-        st.markdown("**Escalation — price/sqft added per new floor, per topology**")
-        esc = dict(params["escalation"])
-        cols = st.columns(4)
-        new_esc = {}
-        for i, t in enumerate(UNIT_TYPES):
-            new_esc[t] = cols[i % 4].number_input(ESC_LABELS[t], min_value=0.0, step=1.0,
-                                                  value=float(esc.get(t, 0.0)), key=f"esc_{t}")
-        st.markdown("**Terrace Rate (% of internal)**")
-        tr = dict(params["terrace"])
-        tc = st.columns(5)
-        new_tr = {
-            "standard":        tc[0].number_input("Standard (2BR/3BR)", 0.0, 100.0, float(tr["standard"]*100),        1.0, key="tr_std")  / 100,
-            "3 Bedroom Pool":  tc[1].number_input("3 Pool Terrace",     0.0, 100.0, float(tr["3 Bedroom Pool"]*100),  1.0, key="tr_3p")   / 100,
-            "4 Bedroom Pool":  tc[2].number_input("4 Pool Terrace",     0.0, 100.0, float(tr["4 Bedroom Pool"]*100),  1.0, key="tr_4p")   / 100,
-            "duplex":          tc[3].number_input("DX Terrace (Duplex)",0.0, 100.0, float(tr["duplex"]*100),          1.0, key="tr_dx")   / 100,
-            "simplex":         tc[4].number_input("SX Terrace (XL)",    0.0, 100.0, float(tr["simplex"]*100),         1.0, key="tr_sx")   / 100,
-        }
-        st.markdown("**Other**")
-        dpx = st.number_input("Duplex Premium (AED/sqft, added to duplex unit rates)", min_value=0.0, step=50.0,
-                              value=float(params.get("duplex_premium", 0.0)), key="dpx_prem")
-        np_ = {"escalation": new_esc, "terrace": new_tr, "duplex_premium": dpx,
-               "area": dict(params.get("area", {}))}
+    def terrace_group_key(t):
+        if t in ("2 Bedroom", "3 Bedroom"):               return "standard"
+        if t == "3 Bedroom Pool":                          return "3 Bedroom Pool"
+        if t == "4 Bedroom Pool":                          return "4 Bedroom Pool"
+        if t == "4 Bedroom XL":                            return "simplex"
+        if t in ("3 Bedroom Duplex", "4 Bedroom Duplex"):  return "duplex"
+        return None   # 5 Bedroom Duplex → fixed 100%
+
+    with st.expander("⚙️  Escalation & Terrace Settings (per typology, from launch sheets)", expanded=True):
+        st.caption("Pick a typology, then set its **escalation** (price/sqft added per floor as you go up) "
+                   "and **terrace %**. These are the building-wide defaults used when pricing new or "
+                   "edited floors. The table below shows the current settings for every typology.")
+        s_type = st.selectbox("Typology", UNIT_TYPES, key="set_type")
+
+        sc1, sc2, sc3 = st.columns(3)
+        cur_esc = float(params["escalation"].get(s_type, 0.0))
+        new_e = sc1.number_input("Escalation (AED/sqft per floor)", min_value=0.0, step=1.0,
+                                 value=cur_esc, key=f"set_esc_{s_type}")
+
+        gkey = terrace_group_key(s_type)
+        if gkey is not None:
+            cur_tr = float(params["terrace"][gkey]) * 100
+            new_t = sc2.number_input("Terrace %", min_value=0.0, max_value=100.0, step=1.0,
+                                     value=cur_tr, key=f"set_tr_{s_type}")
+        else:
+            sc2.number_input("Terrace %", min_value=0.0, max_value=100.0, step=1.0, value=100.0,
+                             key=f"set_tr_{s_type}", disabled=True,
+                             help="5 Bedroom Duplex (penthouse) terrace is fixed at 100%.")
+            new_t = None
+
+        cur_dpx = float(params.get("duplex_premium", 0.0))
+        if "Duplex" in s_type:
+            new_dpx = sc3.number_input("Duplex Premium (AED/sqft)", min_value=0.0, step=50.0,
+                                       value=cur_dpx, key="set_dpx")
+        else:
+            sc3.number_input("Duplex Premium (AED/sqft)", min_value=0.0, step=50.0, value=cur_dpx,
+                             key="set_dpx_off", disabled=True, help="Applies to Duplex typologies only.")
+            new_dpx = cur_dpx
+
+        new_esc_map = dict(params["escalation"]); new_esc_map[s_type] = new_e
+        new_tr_map  = dict(params["terrace"])
+        if gkey is not None and new_t is not None:
+            new_tr_map[gkey] = new_t / 100.0
+        np_ = {"escalation": new_esc_map, "terrace": new_tr_map,
+               "duplex_premium": new_dpx, "area": dict(params.get("area", {}))}
         if np_ != st.session_state.fm_params:
             st.session_state.fm_params = np_
             st.rerun()
+
+        ref_rows = []
+        for t in UNIT_TYPES:
+            gk = terrace_group_key(t)
+            trv = params["terrace"][gk] * 100 if gk else 100.0
+            ref_rows.append({"Typology": t,
+                             "Escalation (AED/sqft)": f"{params['escalation'].get(t, 0):,.0f}",
+                             "Terrace %": f"{trv:.0f}%"})
+        excel_table(pd.DataFrame(ref_rows))
 
     with st.expander("📐  Area Settings (Internal & External sqft per topology — cascades to all units of that type)", expanded=False):
         st.caption("Change a topology's area and every unit of that type updates — sellable area, price and all stats recompute.")
@@ -836,9 +884,9 @@ with tab3:
         u_all_fn = pd.to_numeric(u_all["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True),
                                  errors="coerce")
 
-        bt1, bt2 = st.columns([2, 1])
-        be_type = bt1.selectbox("Typology", UNIT_TYPES, key="be_type")
-        be_all  = bt2.checkbox("All floors", value=True, key="be_all")
+        bt1, bt2 = st.columns([2, 1.4])
+        be_type  = bt1.selectbox("Typology", UNIT_TYPES, key="be_type")
+        be_scope = bt2.selectbox("Floors", ["All floors", "Floor range", "Single floor"], key="be_scope")
 
         # floors that actually have an Available unit of this typology
         elig = u_all[(u_all["Type"] == be_type) & (u_all["Status"] == "Available")].copy()
@@ -849,10 +897,13 @@ with tab3:
         if not elig_fn:
             st.info(f"No Available {be_type} units to update.")
         else:
-            if be_all:
+            if be_scope == "All floors":
                 f_from, f_to = elig_fn[0], elig_fn[-1]
                 st.caption(f"Range: **{ordinal(f_from)} → {ordinal(f_to)}** (all {len(elig_fn)} eligible floor(s)).")
-            else:
+            elif be_scope == "Single floor":
+                f_one = st.selectbox("Floor", elig_fn, format_func=ordinal, key="be_one")
+                f_from = f_to = f_one
+            else:  # Floor range
                 fc1, fc2 = st.columns(2)
                 f_from = fc1.selectbox("From floor", elig_fn, index=0,
                                        format_func=ordinal, key="be_from")
@@ -959,19 +1010,20 @@ with tab3:
             preview, total = [], 0
             for t, q in mix:
                 rate = new_unit_rate(t, nf, st.session_state.units, params)
-                ref  = escalation_reference(t, nf, st.session_state.units)
+                ref, direction = escalation_reference(t, nf, st.session_state.units)
                 uv   = unit_val(t, rate, params)["total"]
                 total += uv*q
                 if ref:
                     ref_txt = f"Unit {ref['ref_unit']} (Flr {ordinal(ref['ref_floor'])})"
                     base_psf = f"AED {ref['ref_psf']:,.0f}"
-                    step_txt = f"{escalation_for(t, params):,.0f} × {ref['steps']}"
+                    sign = "+" if direction >= 0 else "−"
+                    step_txt = f"{sign}{escalation_for(t, params):,.0f} × {ref['steps']}"
                 else:
-                    ref_txt, base_psf, step_txt = "—", "—", f"{escalation_for(t, params):,.0f} × 1"
+                    ref_txt, base_psf, step_txt = "—", "—", f"+{escalation_for(t, params):,.0f} × 1"
                 preview.append({"Type": t, "Qty": q,
                                 "Reference": ref_txt,
                                 "Ref Rate/sqft": base_psf,
-                                "+ Escalation (esc × steps)": step_txt,
+                                "Escalation (esc × steps)": step_txt,
                                 "Rate/sqft": f"AED {rate:,.0f}",
                                 "Value each": aed(uv), "Subtotal": aed(uv*q)})
             excel_table(pd.DataFrame(preview))
