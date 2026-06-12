@@ -708,7 +708,7 @@ with tab1:
         "uid": view["uid"].values,
     })
     display_cols = [c for c in disp.columns if c != "uid"]
-    show_cols = column_picker(display_cols, key="reg_cols", locked=["Type", "Unit", "Comment"])
+    show_cols = column_picker(display_cols, key="reg_cols", locked=["Type", "Unit"])
 
     # Styled read-only table with the blue Sold highlight (reliable, no extra deps)
     sold_by_idx = disp.set_index("uid")["Status"] == "Sold"
