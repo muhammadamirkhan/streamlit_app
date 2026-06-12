@@ -686,6 +686,10 @@ with tab1:
     f_status = fc2.multiselect("Status", STATUS_OPTIONS, default=STATUS_OPTIONS)
     view = df[df["Type"].isin(f_types) & df["Status"].isin(f_status)].copy()
 
+    # Default sort: by floor (ascending), then unit
+    view["_fnum"] = pd.to_numeric(view["Floor"].str.replace(r"[^0-9]", "", regex=True), errors="coerce")
+    view = view.sort_values(["_fnum", "Unit"]).drop(columns="_fnum")
+
     # Derived per-unit columns
     view["PSF_total"]  = view["Price"] / view["Total_sqft"]
     view["Int_Value"]  = view["Price_sqft"] * view["Internal_sqft"]
