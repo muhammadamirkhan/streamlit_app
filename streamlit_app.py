@@ -123,8 +123,8 @@ def excel_table(df: pd.DataFrame):
         {"selector": "thead th", "props": f"background-color:{BLUE_DARK};color:#FFFFFF;font-weight:bold;"
                                            "text-align:center;border:1px solid #9DC3E6;padding:6px 10px;"},
         {"selector": "tbody td", "props": "border:1px solid #BDD7EE;padding:5px 10px;text-align:center;"},
-        {"selector": "tbody td:first-child", "props": "text-align:left;font-weight:600;"},
-        {"selector": "thead th:first-child", "props": "text-align:left;"},
+        {"selector": "tbody td:first-child", "props": "text-align:left;font-weight:600;white-space:nowrap;"},
+        {"selector": "thead th:first-child", "props": "text-align:left;white-space:nowrap;"},
         {"selector": "tbody tr:nth-child(even)", "props": f"background-color:{BLUE_LITE};"},
         {"selector": "tbody tr:nth-child(odd)",  "props": "background-color:#FFFFFF;"},
     ]))
@@ -686,9 +686,11 @@ with tab1:
     f_status = fc2.multiselect("Status", STATUS_OPTIONS, default=STATUS_OPTIONS)
     view = df[df["Type"].isin(f_types) & df["Status"].isin(f_status)].copy()
 
-    # Default sort: by floor (ascending), then unit
-    view["_fnum"] = pd.to_numeric(view["Floor"].str.replace(r"[^0-9]", "", regex=True), errors="coerce")
-    view = view.sort_values(["_fnum", "Unit"]).drop(columns="_fnum")
+    # Default sort: by typology (topology order), then by unit number (…02 before …03, etc.)
+    _trank = {t: i for i, t in enumerate(UNIT_TYPES)}
+    view["_tr"]   = view["Type"].map(_trank).fillna(999)
+    view["_unum"] = pd.to_numeric(view["Unit"].str.replace(r"[^0-9]", "", regex=True), errors="coerce")
+    view = view.sort_values(["_tr", "_unum", "Unit"]).drop(columns=["_tr", "_unum"])
 
     # Derived per-unit columns
     view["PSF_total"]  = view["Price"] / view["Total_sqft"]
