@@ -683,59 +683,71 @@ with tab1:
 
     if "Comment" not in view.columns:
         view["Comment"] = ""
+    cols = ["Type","Status","Unit","Floor","Parking",
+            "Internal_sqft","External_sqft","Total_sqft","Sellable_sqft","Terrace_Rate",
+            "Price_sqft","PSF_total",
+            "Int_Value","Terr_Value","Price","Esc_row","Var_row","Comment"]
+    disp = view[cols].copy()
+    disp.columns = ["Type","Status","Unit","Floor","Parking",
+                    "Internal (sqft)","External (sqft)","Total Area (sqft)","Sellable (sqft)","Terrace Rate",
+                    "Price/Sellable sqft","Price/Total sqft",
+                    "Internal Value (AED)","Terrace Value (AED)","Total Price (AED)",
+                    "Escalation vs below (/sqft)","Floor Wise Variance (AED)","Comment"]
+    disp["Comment"] = disp["Comment"].fillna("").astype(str)
+    # Pre-format variance so Sold / first-in-typology rows render fully empty (no placeholder)
+    disp["Floor Wise Variance (AED)"] = disp["Floor Wise Variance (AED)"].apply(
+        lambda v: "" if pd.isna(v) else f"AED {v:,.0f}")
 
-    def _money(v):  return "" if pd.isna(v) else f"AED {v:,.0f}"
-    def _num1(v):   return "" if pd.isna(v) else f"{v:,.1f}"
+    fmt = {
+        "Internal (sqft)": "{:,.1f}", "External (sqft)": "{:,.1f}",
+        "Total Area (sqft)": "{:,.1f}", "Sellable (sqft)": "{:,.1f}",
+        "Terrace Rate": "{:.0%}",
+        "Price/Sellable sqft": "AED {:,.0f}", "Price/Total sqft": "AED {:,.0f}",
+        "Internal Value (AED)": "AED {:,.0f}", "Terrace Value (AED)": "AED {:,.0f}",
+        "Total Price (AED)": "AED {:,.0f}",
+        "Escalation vs below (/sqft)": "AED {:,.0f}",
+    }
 
-    # Pre-format every value to a string so the editable grid keeps the same look,
-    # while only the Comment column stays editable.
-    disp = pd.DataFrame({
-        "Type": view["Type"].values, "Status": view["Status"].values,
-        "Unit": view["Unit"].values, "Floor": view["Floor"].values,
-        "Parking": view["Parking"].astype(int).astype(str).values,
-        "Internal (sqft)": view["Internal_sqft"].map(_num1).values,
-        "External (sqft)": view["External_sqft"].map(_num1).values,
-        "Total Area (sqft)": view["Total_sqft"].map(_num1).values,
-        "Sellable (sqft)": view["Sellable_sqft"].map(_num1).values,
-        "Terrace Rate": view["Terrace_Rate"].map(lambda v: "" if pd.isna(v) else f"{v:.0%}").values,
-        "Price/Sellable sqft": view["Price_sqft"].map(_money).values,
-        "Price/Total sqft": view["PSF_total"].map(_money).values,
-        "Internal Value (AED)": view["Int_Value"].map(_money).values,
-        "Terrace Value (AED)": view["Terr_Value"].map(_money).values,
-        "Total Price (AED)": view["Price"].map(_money).values,
-        "Escalation vs below (/sqft)": view["Esc_row"].map(_money).values,
-        "Floor Wise Variance (AED)": view["Var_row"].map(_money).values,
-        "Comment": view["Comment"].fillna("").astype(str).values,
-        "uid": view["uid"].values,
-    })
+    # Sold highlight uses the row index (survives column hiding), so Status can be hidden too
+    sold_by_idx = disp["Status"] == "Sold"
+    show_cols = column_picker(list(disp.columns), key="reg_cols", locked=["Type", "Unit", "Comment"])
+    disp = disp[show_cols]
 
-    display_cols = [c for c in disp.columns if c != "uid"]
-    show_cols = column_picker(display_cols, key="reg_cols", locked=["Type", "Unit", "Comment"])
+    def _hl_sold(row):
+        sold = bool(sold_by_idx.loc[row.name])
+        return ["background-color:#9DC3E6" if sold else "" for _ in row]
 
-    edited = st.data_editor(
-        disp, hide_index=True, height=460, use_container_width=True, key="reg_editor",
-        column_order=show_cols,
-        disabled=[c for c in disp.columns if c != "Comment"],
-        column_config={
-            "Comment": st.column_config.TextColumn(
-                "Comment", width="large",
-                help="Type a note for this unit. Saved automatically and reloaded next time."),
-        },
-    )
-    st.caption(f"Showing {len(view)} of {len(df)} units · the **Comment** column is editable — "
-               f"edits save to file and reload automatically · "
+    styler = disp.style.apply(_hl_sold, axis=1).format(fmt, na_rep="–")
+    st.dataframe(styler, use_container_width=True, hide_index=True, height=460)
+    st.caption(f"Showing {len(view)} of {len(df)} units · Sold units highlighted in blue · "
                f"“vs below” compares each unit to the one a floor lower in the same typology")
 
-    # Persist any comment edits back to the register + JSON file
-    new_cmt = edited["Comment"].fillna("").astype(str).values
-    old_cmt = disp["Comment"].values
-    if not (new_cmt == old_cmt).all():
-        cmap = dict(zip(edited["uid"].values, new_cmt))
-        u = st.session_state.units
-        u["Comment"] = u.apply(
-            lambda r: cmap.get(r["uid"], r.get("Comment", "")), axis=1)
-        persist_all_comments()
-        st.rerun()
+    # ── Inline comment editing (kept separate so the table above keeps its Sold highlight) ──
+    with st.expander("✏️  Edit comments (inline) — saved to file, reloads every launch", expanded=False):
+        cdf = pd.DataFrame({
+            "Unit": view["Unit"].values, "Type": view["Type"].values,
+            "Floor": view["Floor"].values, "Status": view["Status"].values,
+            "Comment": view["Comment"].fillna("").astype(str).values,
+            "uid": view["uid"].values,
+        })
+        ed = st.data_editor(
+            cdf, hide_index=True, use_container_width=True, key="cmt_editor",
+            column_order=["Unit", "Type", "Floor", "Status", "Comment"],
+            disabled=["Unit", "Type", "Floor", "Status"],
+            column_config={
+                "Comment": st.column_config.TextColumn(
+                    "Comment", width="large",
+                    help="Type a note. Saved automatically and reloaded next time."),
+            },
+        )
+        new_cmt = ed["Comment"].fillna("").astype(str).values
+        old_cmt = cdf["Comment"].values
+        if not (new_cmt == old_cmt).all():
+            cmap = dict(zip(ed["uid"].values, new_cmt))
+            u = st.session_state.units
+            u["Comment"] = u.apply(lambda r: cmap.get(r["uid"], r.get("Comment", "")), axis=1)
+            persist_all_comments()
+            st.rerun()
 
 
 # ── Tab 2: Summary by Type (no Bank Locked column, full values) ────────────────
