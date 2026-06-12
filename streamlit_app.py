@@ -147,6 +147,19 @@ def area_fmt(x, sqm=False):
     return f"{v:,.0f}"
 
 
+def ensure_new_options(key, options):
+    """Keep a 'show-all' multiselect honest: when a brand-new option appears in the data
+    (e.g. a freshly added topology), add it to the current selection so it shows by default —
+    without resurrecting options the user deliberately unticked."""
+    seen_key = f"_seen__{key}"
+    seen = st.session_state.setdefault(seen_key, set(options))
+    new = [o for o in options if o not in seen]
+    seen.update(options)
+    if new and key in st.session_state:
+        cur = [x for x in st.session_state[key] if x in options]
+        st.session_state[key] = cur + [o for o in new if o not in cur]
+
+
 def column_picker(all_cols, key, locked=None, hidden_default=None):
     """Dropdown (popover) with a multi-select to show / hide table columns.
 
@@ -681,9 +694,12 @@ with tab1:
     esc_map = dict(zip(order["uid"], order.groupby("Type")["Price_sqft"].diff()))
     var_map = dict(zip(order["uid"], order.groupby("Type")["Price"].diff()))
 
+    type_opts = [t for t in UNIT_TYPES if t in set(df["Type"])] + \
+                [t for t in sorted(df["Type"].unique()) if t not in UNIT_TYPES]
+    ensure_new_options("reg_type_filter", type_opts)
     fc1, fc2 = st.columns(2)
-    f_types  = fc1.multiselect("Type",   sorted(df["Type"].unique().tolist()), default=sorted(df["Type"].unique().tolist()))
-    f_status = fc2.multiselect("Status", STATUS_OPTIONS, default=STATUS_OPTIONS)
+    f_types  = fc1.multiselect("Type", type_opts, default=type_opts, key="reg_type_filter")
+    f_status = fc2.multiselect("Status", STATUS_OPTIONS, default=STATUS_OPTIONS, key="reg_status_filter")
     view = df[df["Type"].isin(f_types) & df["Status"].isin(f_status)].copy()
 
     # Default sort: by typology (topology order), then by unit number (…02 before …03, etc.)
@@ -891,7 +907,9 @@ with tab5:
                "based on **Available units only** (Sold excluded). "
                "Price/sqft = unit Price ÷ Total Area (Internal + External); "
                "Avg /sqft is value-weighted = Total Value ÷ Total Area.")
-    all_types = sorted(df["Type"].unique().tolist())
+    all_types = [t for t in UNIT_TYPES if t in set(df["Type"])] + \
+                [t for t in sorted(df["Type"].unique()) if t not in UNIT_TYPES]
+    ensure_new_options("topo_filter", all_types)
     pick = st.multiselect("Filter topologies", all_types, default=all_types, key="topo_filter")
 
     # all-status aggregate (Sold + Available) → drives Total Units & Total Value
