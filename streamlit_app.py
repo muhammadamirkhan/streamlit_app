@@ -535,41 +535,27 @@ def lowest_available_psf(t, units_df):
     pick = avail if not avail.empty else sub
     return float(pick.sort_values("_fn").iloc[0]["Price_sqft"])
 
-def representative_base_psf(t, units_df, params):
-    """The base price/sqft the bulk of the Available ladder is built on: the most common value of
-    (price − escalation × floor-position) over Available family units, anchored at the lowest floor.
-    Applying this base reproduces the main clean ladder and only normalises the few off-ladder units."""
-    fam = family_types(t)
-    sub = units_df[units_df["Type"].isin(fam)].copy()
-    if sub.empty:
-        return None
-    sub["_fn"] = _fnum_series(sub)
-    sub = sub.dropna(subset=["_fn"])
-    floors_sorted = sorted(sub["_fn"].unique())
-    pos = {f: i for i, f in enumerate(floors_sorted)}
-    esc = escalation_for(t, params)
-    av = sub[sub["Status"] == "Available"]
-    if av.empty:
-        return float(sub.sort_values("_fn").iloc[0]["Price_sqft"])
-    implied = (av["Price_sqft"] - esc * av["_fn"].map(pos)).round(2)
-    return float(implied.mode().iloc[0])
-
 def base_preview(t, base_psf, params):
-    """Without applying: how many Available family units would change and the portfolio Δ (AED)."""
+    """Without applying: how many Available family units would change and the portfolio delta (AED).
+    Uses the same anchor as recompute_from_base (lowest Available floor = base)."""
     fam = family_types(t)
     u = st.session_state.units
     fn = _fnum_series(u)
     mask = u["Type"].isin(fam)
     sub = u[mask].assign(_fn=fn[mask]).dropna(subset=["_fn"])
     floors_sorted = sorted(sub["_fn"].unique())
+    avail = sub[sub["Status"] == "Available"]
+    if avail.empty or not floors_sorted:
+        return 0, 0.0
     pos = {f: i for i, f in enumerate(floors_sorted)}
+    anchor_pos = pos[avail["_fn"].min()]
     esc = escalation_for(t, params)
     dpx = params.get("duplex_premium", 0.0) if "Duplex" in t else 0.0
     n_change, delta = 0, 0.0
     for idx in sub.index:
         if u.at[idx, "Status"] != "Available":
             continue
-        new = max(base_psf + esc * pos[float(fn.loc[idx])] + dpx, 0.0)
+        new = max(base_psf + esc * (pos[float(fn.loc[idx])] - anchor_pos) + dpx, 0.0)
         old = float(u.at[idx, "Price_sqft"])
         if abs(new - old) > 1e-9:
             n_change += 1
@@ -579,25 +565,28 @@ def base_preview(t, base_psf, params):
     return n_change, delta
 
 def recompute_from_base(t, base_psf, params):
-    """Price every **Available** unit of the family from a per-type base price/sqft anchored at
-    the family's LOWEST floor: rate = base + escalation × (floor-steps up from the lowest floor).
-    Sold units stay fixed. Steps count distinct family floors, so missing floors don't distort it."""
+    """The **lowest Available** unit of the family takes base_psf; every Available unit above it
+    follows escalation: rate = base + escalation × (typology floors above the lowest Available
+    floor). Sold units stay fixed. Floor steps count existing typology floors, so missing/MEP
+    floors don't distort the ladder."""
     fam = family_types(t)
     u = st.session_state.units.copy()
     fn = _fnum_series(u)
     mask = u["Type"].isin(fam)
     sub = u[mask].assign(_fn=fn[mask]).dropna(subset=["_fn"])
     floors_sorted = sorted(sub["_fn"].unique())
-    if not floors_sorted:
+    avail = sub[sub["Status"] == "Available"]
+    if avail.empty or not floors_sorted:
         return 0
-    pos = {f: i for i, f in enumerate(floors_sorted)}   # lowest floor = position 0 = base
+    pos = {f: i for i, f in enumerate(floors_sorted)}
+    anchor_pos = pos[avail["_fn"].min()]              # lowest Available floor = base
     esc = escalation_for(t, params)
     dpx = params.get("duplex_premium", 0.0) if "Duplex" in t else 0.0
     changed = 0
     for idx in sub.index:
         if u.at[idx, "Status"] != "Available":
             continue
-        steps = pos[float(fn.loc[idx])]
+        steps = pos[float(fn.loc[idx])] - anchor_pos
         rate = max(base_psf + esc * steps + dpx, 0.0)
         if abs(float(u.at[idx, "Price_sqft"]) - rate) > 1e-9:
             u.at[idx, "Price_sqft"] = rate
@@ -1219,22 +1208,21 @@ with tab3:
             st.rerun()
 
         # ── Base Price (per type; single source of truth) ─────────────────────
-        st.markdown("**Base Price** — the entry price/sqft this typology's ladder is built on. "
-                    "Available units recompute as *base + escalation × floors up*; Sold stay fixed. "
-                    "The default reproduces the current ladder (only off-ladder legacy units change).")
+        st.markdown("**Base Price** — the **lowest Available** unit of this typology takes this "
+                    "price/sqft; every Available unit above it follows *base + escalation × floors up*. "
+                    "Sold units stay fixed.")
         base_key = PRICE_FAMILY.get(s_type, s_type)
-        rep_psf = representative_base_psf(s_type, st.session_state.units, params)
-        if rep_psf is None:
+        low_psf = lowest_available_psf(s_type, st.session_state.units)
+        if low_psf is None:
             st.info(f"No {s_type} units yet — add some on a floor first, then set a base price.")
         else:
             stored_psf = get_base(s_type, params)
-            default_psf = float(stored_psf) if stored_psf is not None else rep_psf
+            default_psf = float(stored_psf) if stored_psf is not None else low_psf
             bp1, bp2 = st.columns([2, 1])
             base_psf_in = bp1.number_input(
                 "Base Price (AED/sqft)", min_value=0.0, step=10.0, value=round(default_psf, 2),
                 key=f"base_psf_{base_key}",
-                help=f"Representative ladder base for {s_type} is AED {rep_psf:,.0f}/sqft "
-                     "(the value the bulk of the available ladder is built on).")
+                help=f"Current lowest Available {s_type} price/sqft is AED {low_psf:,.0f}.")
             n_chg, delta = base_preview(s_type, base_psf_in, params)
             sign = "+" if delta >= 0 else "−"
             bp1.caption(f"Applying will change **{n_chg}** Available unit(s) · "
