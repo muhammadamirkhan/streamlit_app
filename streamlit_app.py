@@ -61,13 +61,25 @@ def persist_all_comments():
     save_comments_file(mapping)
 
 UNIT_TYPES = [
-    "2 Bedroom", "3 Bedroom", "3 Bedroom Pool", "4 Bedroom Pool",
+    "2 Bedroom", "3 Bedroom - New", "3 Bedroom", "3 Bedroom Pool", "4 Bedroom Pool",
     "4 Bedroom XL", "3 Bedroom Duplex", "4 Bedroom Duplex", "5 Bedroom Duplex",
 ]
 STATUS_OPTIONS = ["Available", "Sold"]
 
+# "3 Bedroom - New" is a 2-Bedroom-sized unit under a new name; it shares the
+# 2 Bedroom price ladder, area, terrace and escalation (same stats).
+PRICE_FAMILY = {"3 Bedroom - New": "2 Bedroom"}
+
+def family_types(t):
+    """All types that share a price ladder with t (e.g. 3 Bedroom - New ↔ 2 Bedroom)."""
+    base = PRICE_FAMILY.get(t, t)
+    fam = {t, base}
+    fam.update(k for k, v in PRICE_FAMILY.items() if v == base)
+    return fam
+
 TYPE_DEFAULTS = {
     "2 Bedroom":         {"internal": 2218.764851, "external": 1619.322681, "parking": 2, "terrace_rate": 0.30, "levels": 1},
+    "3 Bedroom - New":   {"internal": 2218.764851, "external": 1619.322681, "parking": 2, "terrace_rate": 0.30, "levels": 1},
     "3 Bedroom":         {"internal": 2880.530062, "external": 2058.920781, "parking": 2, "terrace_rate": 0.30, "levels": 1},
     "3 Bedroom Pool":    {"internal": 2880.530062, "external": 2059.243699, "parking": 2, "terrace_rate": 0.65, "levels": 2},
     "4 Bedroom Pool":    {"internal": 4643.550947, "external": 5258.816065, "parking": 3, "terrace_rate": 0.55, "levels": 2},
@@ -81,7 +93,7 @@ LEVEL_CAPACITY = {"2 Bedroom": 2, "3 Bedroom": 1}   # standard residential floor
 
 # Fallback escalation defaults (overridden by what we read from the sheets)
 ESC_DEFAULTS = {
-    "2 Bedroom": 150.0, "3 Bedroom": 150.0,
+    "2 Bedroom": 150.0, "3 Bedroom - New": 150.0, "3 Bedroom": 150.0,
     "3 Bedroom Pool": 104.0, "4 Bedroom Pool": 104.0,
     "4 Bedroom XL": 497.0, "3 Bedroom Duplex": 308.0,
     "4 Bedroom Duplex": 305.0, "5 Bedroom Duplex": 0.0,
@@ -293,6 +305,7 @@ def load_params() -> dict:
         duplex_premium = float(dp) if pd.notna(dp) else 0.0
     except Exception:
         pass
+    esc["3 Bedroom - New"] = esc["2 Bedroom"]   # new type mirrors 2 Bedroom escalation
     area = {t: {"internal": TYPE_DEFAULTS[t]["internal"], "external": TYPE_DEFAULTS[t]["external"]}
             for t in UNIT_TYPES}
     return {"escalation": esc, "terrace": terrace, "duplex_premium": duplex_premium, "area": area}
@@ -323,7 +336,7 @@ def load_blocked_floors() -> dict:
 
 def terrace_for(t, params):
     tr = params["terrace"]
-    if t in ("2 Bedroom", "3 Bedroom"):                 return tr["standard"]
+    if t in ("2 Bedroom", "3 Bedroom - New", "3 Bedroom"): return tr["standard"]
     if t == "3 Bedroom Pool":                           return tr["3 Bedroom Pool"]
     if t == "4 Bedroom Pool":                           return tr["4 Bedroom Pool"]
     if t == "4 Bedroom XL":                        return tr["simplex"]
@@ -335,10 +348,12 @@ def escalation_for(t, params):
     return params["escalation"].get(t, 0.0)
 
 def last_available_price(t, units_df):
-    """Return the Price_sqft of the highest-floor Available unit for type t (floor-sequence aware)."""
-    sub = units_df[(units_df["Type"] == t) & (units_df["Status"] == "Available")].copy()
+    """Return the Price_sqft of the highest-floor Available unit for type t (floor-sequence aware).
+    Pools price-family types together (3 Bedroom - New rides the 2 Bedroom ladder)."""
+    fam = family_types(t)
+    sub = units_df[(units_df["Type"].isin(fam)) & (units_df["Status"] == "Available")].copy()
     if sub.empty:
-        sub = units_df[units_df["Type"] == t].copy()
+        sub = units_df[units_df["Type"].isin(fam)].copy()
     if sub.empty:
         return 5000.0
     # sort by numeric floor so escalation always references the topmost available unit
@@ -369,7 +384,7 @@ def escalation_reference(t, target_floor, units_df):
     Returns ({ref_unit, ref_floor, ref_psf, steps}, direction) where direction is +1 / −1,
     or (None, 0) when no comparable type-t unit exists anywhere.
     """
-    sub = units_df[units_df["Type"] == t].copy()
+    sub = units_df[units_df["Type"].isin(family_types(t))].copy()   # pool 3BR-New with 2BR ladder
     if sub.empty:
         return None, 0
     sub["fn"] = _fnum_series(sub)
@@ -417,24 +432,28 @@ def new_unit_rate(t, target_floor, units_df, params):
     return max(rate, 0.0)
 
 def reladder_typology(t, params):
-    """Re-price every **Available** unit of type t up the ladder using the current
-    escalation. Anchors — units with no comparable unit below them (the entry price) —
-    keep their price. Sold units are never touched and act as fixed reference points.
-    Mutates st.session_state.units. Returns the number of units whose price changed."""
+    """Re-price every **Available** unit of the price-family up the ladder using the current
+    escalation (3 Bedroom - New is re-laddered together with 2 Bedroom). Anchors — units with
+    no comparable unit below them (the entry price) — keep their price. Sold units are never
+    touched and act as fixed reference points. Mutates st.session_state.units.
+    Returns the number of units whose price changed."""
+    fam = family_types(t)
     u = st.session_state.units.copy()
     fn = _fnum_series(u)
-    order = (u[u["Type"] == t].assign(_fn=fn[u["Type"] == t])
+    famask = u["Type"].isin(fam)
+    order = (u[famask].assign(_fn=fn[famask])
              .dropna(subset=["_fn"]).sort_values("_fn").index)
     changed = 0
     for idx in order:                       # bottom-up so each unit sees updated floors below it
         if u.at[idx, "Status"] != "Available":
             continue
+        tt = u.at[idx, "Type"]
         tf = float(fn.loc[idx])
-        ref, direction = escalation_reference(t, tf, u)
+        ref, direction = escalation_reference(tt, tf, u)
         if ref is None or direction < 0:    # nothing below → this is the anchor, keep its price
             continue
-        rate = ref["ref_psf"] + escalation_for(t, params) * ref["steps"]
-        if "Duplex" in t:
+        rate = ref["ref_psf"] + escalation_for(tt, params) * ref["steps"]
+        if "Duplex" in tt:
             rate += params.get("duplex_premium", 0.0)
         rate = max(rate, 0.0)
         if abs(float(u.at[idx, "Price_sqft"]) - rate) > 1e-9:
@@ -930,7 +949,7 @@ with tab3:
 
     # Parameters
     def terrace_group_key(t):
-        if t in ("2 Bedroom", "3 Bedroom"):               return "standard"
+        if t in ("2 Bedroom", "3 Bedroom - New", "3 Bedroom"): return "standard"
         if t == "3 Bedroom Pool":                          return "3 Bedroom Pool"
         if t == "4 Bedroom Pool":                          return "4 Bedroom Pool"
         if t == "4 Bedroom XL":                            return "simplex"
@@ -1106,7 +1125,7 @@ with tab3:
     # Floors table + totals
     smap_all = uid_status_map()
     rows, grand = [], 0
-    TYPE_ABBR = {"2 Bedroom":"2BR","3 Bedroom":"3BR","3 Bedroom Pool":"3BR Pool","4 Bedroom Pool":"4BR Pool",
+    TYPE_ABBR = {"2 Bedroom":"2BR","3 Bedroom - New":"3BR New","3 Bedroom":"3BR","3 Bedroom Pool":"3BR Pool","4 Bedroom Pool":"4BR Pool",
                  "4 Bedroom XL":"4BR XL","3 Bedroom Duplex":"3BR DX","4 Bedroom Duplex":"4BR DX","5 Bedroom Duplex":"5BR DX"}
     for fl in floors:
         ft = floor_total(fl, params); grand += ft
