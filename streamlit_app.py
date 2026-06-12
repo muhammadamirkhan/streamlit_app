@@ -633,6 +633,7 @@ with tab1:
     view["Terr_Value"] = view["Price_sqft"] * view["Terrace_Rate"] * view["External_sqft"]
     view["Esc_row"]    = view["uid"].map(esc_map)
     view["Var_row"]    = view["uid"].map(var_map)
+    view.loc[view["Status"] == "Sold", "Var_row"] = pd.NA   # Floor Wise Variance blank for Sold units
 
     # Scorecards
     ALLOWABLE_SELLABLE = 818186.683338944   # fixed design cap; shown rounded as 818,187
@@ -656,7 +657,7 @@ with tab1:
                     "Internal (sqft)","External (sqft)","Total Area (sqft)","Sellable (sqft)","Terrace Rate",
                     "Price/Sellable sqft","Price/Total sqft",
                     "Internal Value (AED)","Terrace Value (AED)","Total Price (AED)",
-                    "Escalation vs below (/sqft)","Price Variance vs below (AED)"]
+                    "Escalation vs below (/sqft)","Floor Wise Variance (AED)"]
 
     fmt = {
         "Internal (sqft)": "{:,.1f}", "External (sqft)": "{:,.1f}",
@@ -665,7 +666,7 @@ with tab1:
         "Price/Sellable sqft": "AED {:,.0f}", "Price/Total sqft": "AED {:,.0f}",
         "Internal Value (AED)": "AED {:,.0f}", "Terrace Value (AED)": "AED {:,.0f}",
         "Total Price (AED)": "AED {:,.0f}",
-        "Escalation vs below (/sqft)": "AED {:,.0f}", "Price Variance vs below (AED)": "AED {:,.0f}",
+        "Escalation vs below (/sqft)": "AED {:,.0f}", "Floor Wise Variance (AED)": "AED {:,.0f}",
     }
 
     # Sold highlight uses the row index (survives column hiding), so Status can be hidden too
