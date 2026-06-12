@@ -659,6 +659,10 @@ with tab1:
                     "Internal Value (AED)","Terrace Value (AED)","Total Price (AED)",
                     "Escalation vs below (/sqft)","Floor Wise Variance (AED)"]
 
+    # Pre-format variance as a string so Sold / first-in-typology rows render fully empty (no placeholder)
+    disp["Floor Wise Variance (AED)"] = disp["Floor Wise Variance (AED)"].apply(
+        lambda v: "" if pd.isna(v) else f"AED {v:,.0f}")
+
     fmt = {
         "Internal (sqft)": "{:,.1f}", "External (sqft)": "{:,.1f}",
         "Total Area (sqft)": "{:,.1f}", "Sellable (sqft)": "{:,.1f}",
@@ -666,7 +670,7 @@ with tab1:
         "Price/Sellable sqft": "AED {:,.0f}", "Price/Total sqft": "AED {:,.0f}",
         "Internal Value (AED)": "AED {:,.0f}", "Terrace Value (AED)": "AED {:,.0f}",
         "Total Price (AED)": "AED {:,.0f}",
-        "Escalation vs below (/sqft)": "AED {:,.0f}", "Floor Wise Variance (AED)": "AED {:,.0f}",
+        "Escalation vs below (/sqft)": "AED {:,.0f}",
     }
 
     # Sold highlight uses the row index (survives column hiding), so Status can be hidden too
