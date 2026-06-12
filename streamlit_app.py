@@ -160,6 +160,8 @@ def avail_adjusted_median_psf(sub):
     s = s.sort_values(["_fn", "Unit"]).reset_index(drop=True)
     n = len(s)
     mid = (n + 1) // 2 - 1                         # 0-based index of the median row
+    if not (s["Status"] == "Available").any():     # fully-sold typology → use the median row as-is
+        return float(s.loc[mid, "PSF_total"])
     i = mid
     while i >= 0 and s.loc[i, "Status"] != "Available":
         i -= 1                                      # step up to an Available row
@@ -928,8 +930,9 @@ with tab5:
     st.caption("**Total Units**, **Total Value** and **Avg Unit Price** (= Total Value ÷ Total Units) "
                "include all units (Sold + Available). **Median /sqft** takes the median row position "
                "across all rows (incl. Sold) but reports the nearest **Available** unit's value "
-               "(stepping up if the median row is Sold). **Min / Max / Avg /sqft** are Available-only. "
-               "Price/sqft = unit Price ÷ Total Area (Internal + External).")
+               "(stepping up if the median row is Sold). **Min / Max / Avg /sqft** are Available-only — "
+               "except a typology with **no Available units**, which falls back to its Sold units so it "
+               "still appears. Price/sqft = unit Price ÷ Total Area (Internal + External).")
     all_types = [t for t in UNIT_TYPES if t in set(df["Type"])] + \
                 [t for t in sorted(df["Type"].unique()) if t not in UNIT_TYPES]
     ensure_new_options("topo_filter", all_types)
@@ -940,31 +943,33 @@ with tab5:
     if pick:
         alldf = alldf[alldf["Type"].isin(pick)]
     alldf["PSF_total"] = alldf["Price"] / alldf["Total_sqft"]
-    allagg = alldf.groupby("Type").agg(
-        Total_Units=("Unit", "count"),
-        Total_Value_All=("Price", "sum"),
-    ).reset_index()
     median_psf = {t: avail_adjusted_median_psf(g) for t, g in alldf.groupby("Type")}
 
-    # available-only aggregate → drives every pricing stat
-    tvdf = df[df["Status"] != "Sold"].copy()
-    if pick:
-        tvdf = tvdf[tvdf["Type"].isin(pick)]
-    tvdf["PSF_total"] = tvdf["Price"] / tvdf["Total_sqft"]
-
-    if tvdf.empty:
-        st.info("No available units for the selected topologies.")
+    if alldf.empty:
+        st.info("No units for the selected topologies.")
     else:
-        tv = tvdf.groupby("Type").agg(
-            Min_PSF=("PSF_total","min"),
-            Max_PSF=("PSF_total","max"),
-            Total_Area=("Total_sqft","sum"),
-            Avail_Value=("Price","sum"),
-        ).reset_index()
-        tv["Avg_PSF"] = tv["Avail_Value"] / tv["Total_Area"]   # value-weighted (available)
-        tv = tv.merge(allagg, on="Type", how="left")           # all-status Units & Value
-        tv["Median_PSF"] = tv["Type"].map(median_psf)          # all-rows position, Available value
-        tv["Avg_Price"]  = tv["Total_Value_All"] / tv["Total_Units"]   # all rows: value ÷ units
+        # Per-type stats. Min/Max/Avg-per-sqft use Available units; a FULLY-SOLD typology
+        # falls back to its Sold units so it still shows (other typologies are unchanged).
+        stat_rows = []
+        for t, g_all in alldf.groupby("Type"):
+            avail = g_all[g_all["Status"] == "Available"]
+            base = avail if not avail.empty else g_all      # fully-sold → use sold units
+            base_area = base["Total_sqft"].sum()
+            n_all = len(g_all)
+            stat_rows.append({
+                "Type": t,
+                "Total_Units": n_all,
+                "Min_PSF": base["PSF_total"].min(),
+                "Max_PSF": base["PSF_total"].max(),
+                "Avg_PSF": (base["Price"].sum() / base_area) if base_area else float("nan"),
+                "Median_PSF": median_psf.get(t, float("nan")),
+                "Total_Value_All": g_all["Price"].sum(),
+                "Avg_Price": (g_all["Price"].sum() / n_all) if n_all else float("nan"),
+            })
+        tv = pd.DataFrame(stat_rows)
+        # preserve topology order
+        _o = {t: i for i, t in enumerate(all_types)}
+        tv = tv.sort_values("Type", key=lambda s: s.map(_o)).reset_index(drop=True)
 
         tvd = tv[["Type","Total_Units","Min_PSF","Median_PSF","Avg_PSF","Max_PSF",
                   "Avg_Price","Total_Value_All"]].copy()
