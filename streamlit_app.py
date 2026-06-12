@@ -144,6 +144,16 @@ def load_unit_data() -> pd.DataFrame:
     df["Type"]   = df["Type"].replace("4 Bedroom Simplex", "4 Bedroom XL")  # renamed typology
     df["Floor"]  = df["Floor"].apply(ordinal)                          # normalise 33 / 33.0 / "4th" -> "33rd" / "4th"
     df["Status"] = df["Status"].replace("Bank Locked", "Available")   # Bank Locked reclassified as Available
+
+    # Fill any missing Price/sqft from the nearest same-type floor (source-data gaps, e.g. unit 6802).
+    if df["Price_sqft"].isna().any():
+        fn = pd.to_numeric(df["Floor"].str.replace(r"[^0-9]", "", regex=True), errors="coerce")
+        for t, idx in df.groupby("Type").groups.items():
+            order = fn.loc[idx].sort_values().index            # same-type rows in floor order
+            filled = df.loc[order, "Price_sqft"].ffill().bfill()
+            df.loc[order, "Price_sqft"] = filled
+        df["Price_sqft"] = df["Price_sqft"].fillna(0.0)        # last-resort guard
+
     df["Terrace_Override"] = pd.NA                                     # per-unit terrace-rate override (set by bulk tool)
     df["uid"] = [f"u{i}" for i in range(len(df))]   # stable unique row id (unit numbers are NOT unique)
     return df
@@ -362,7 +372,11 @@ def unit_val(t, rate, params):
             "total": (internal + tr*external)*rate}
 
 def floor_total(fl, params):
-    return sum(unit_val(u["type"], u["rate"], params)["total"] for u in fl["units"])
+    tot = 0.0
+    for u in fl["units"]:
+        v = unit_val(u["type"], u["rate"], params)["total"]
+        tot += 0.0 if pd.isna(v) else v
+    return tot
 
 def recalc(df, params):
     df = df.copy()
