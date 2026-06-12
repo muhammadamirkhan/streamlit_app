@@ -633,11 +633,18 @@ _flash = st.session_state.pop("flash", None)
 if _flash:
     getattr(st, _flash[0])(_flash[1])
 
-k1, k2, k3, k4 = st.columns(4)
-k1.metric("Total Units",     len(df))
-k2.metric("Sold",            int((df["Status"] == "Sold").sum()))
-k3.metric("Available",       int((df["Status"] == "Available").sum()))
-k4.metric("Portfolio Value", aed(df["Price"].sum()))
+# Global scorecards (full building) — shown on top of every page, no per-tab duplication
+ALLOWABLE_SELLABLE = 818186.683338944          # fixed design cap; shown rounded as 818,187
+_tot_area = df["Total_sqft"].sum()
+_variance = _tot_area - ALLOWABLE_SELLABLE
+g1, g2, g3, g4, g5, g6 = st.columns(6)
+g1.metric("Units shown", len(df))
+g2.metric("Total Area (sqft)", f"{_tot_area:,.0f}")
+g3.metric("Total Allowable Sellable (sqft)", f"{ALLOWABLE_SELLABLE:,.0f}")
+g4.metric("Variance: Total − Allowable (sqft)", f"{_variance:,.0f}",
+          delta=f"{_variance:,.0f}", delta_color="inverse")
+g5.metric("Total Price/sqft", aed(df["Price"].sum()/_tot_area) if _tot_area else "—")
+g6.metric("Portfolio Value", aed(df["Price"].sum()))
 
 st.divider()
 
@@ -667,19 +674,6 @@ with tab1:
     view["Esc_row"]    = view["uid"].map(esc_map)
     view["Var_row"]    = view["uid"].map(var_map)
     view.loc[view["Status"] == "Sold", "Var_row"] = pd.NA   # Floor Wise Variance blank for Sold units
-
-    # Scorecards
-    ALLOWABLE_SELLABLE = 818186.683338944   # fixed design cap; shown rounded as 818,187
-    tot_area = view["Total_sqft"].sum()
-    variance = tot_area - ALLOWABLE_SELLABLE
-    s1, s2, s3, s4, s5, s6 = st.columns(6)
-    s1.metric("Units shown", len(view))
-    s2.metric("Total Area (sqft)", f"{tot_area:,.0f}")
-    s3.metric("Total Allowable Sellable (sqft)", f"{ALLOWABLE_SELLABLE:,.0f}")
-    s4.metric("Variance: Total − Allowable (sqft)", f"{variance:,.0f}",
-              delta=f"{variance:,.0f}", delta_color="inverse")
-    s5.metric("Total Price/sqft", aed(view["Price"].sum()/tot_area) if tot_area else "—")
-    s6.metric("Portfolio Value", aed(view["Price"].sum()))
 
     if "Comment" not in view.columns:
         view["Comment"] = ""
@@ -1134,7 +1128,7 @@ with tab3:
         st.subheader("Totals")
         st.metric("Floors", len(floors))
         st.metric("Units",  sum(len(fl["units"]) for fl in floors))
-        st.metric("Value",  aed(grand))
+        # Portfolio value is shown in the global header on every page (no duplication here)
 
     st.divider()
     action = st.radio("Action", ["Add a New Floor", "Edit a Floor"], horizontal=True, key="fm_action")
