@@ -963,6 +963,8 @@ with tab5:
                 "Max_PSF": base["PSF_total"].max(),
                 "Avg_PSF": (base["Price"].sum() / base_area) if base_area else float("nan"),
                 "Median_PSF": median_psf.get(t, float("nan")),
+                "Min_Price": base["Price"].min(),
+                "Max_Price": base["Price"].max(),
                 "Total_Value_All": g_all["Price"].sum(),
                 "Avg_Price": (g_all["Price"].sum() / n_all) if n_all else float("nan"),
             })
@@ -971,16 +973,16 @@ with tab5:
         _o = {t: i for i, t in enumerate(all_types)}
         tv = tv.sort_values("Type", key=lambda s: s.map(_o)).reset_index(drop=True)
 
-        tvd = tv[["Type","Total_Units","Min_PSF","Median_PSF","Avg_PSF","Max_PSF",
-                  "Avg_Price","Total_Value_All"]].copy()
-        for c in ["Min_PSF","Median_PSF","Avg_PSF","Max_PSF"]:
+        tvd = tv[["Type","Total_Units","Min_PSF","Median_PSF","Max_PSF",
+                  "Min_Price","Max_Price","Avg_Price","Total_Value_All"]].copy()
+        for c in ["Min_PSF","Median_PSF","Max_PSF"]:
             tvd[c] = tvd[c].apply(lambda x: f"AED {x:,.0f}")
-        tvd["Avg_Price"]       = tvd["Avg_Price"].apply(lambda x: aed(x))
-        tvd["Total_Value_All"] = tvd["Total_Value_All"].apply(lambda x: aed(x))
+        for c in ["Min_Price","Max_Price","Avg_Price","Total_Value_All"]:
+            tvd[c] = tvd[c].apply(lambda x: aed(x))
         tvd["Total_Units"]     = tvd["Total_Units"].astype(int)
         tvd.columns = ["Type","Total Units (incl. Sold)",
-                       "Min /sqft (lowest)","Median /sqft (mid)","Avg /sqft (wtd)","Max /sqft (highest)",
-                       "Avg Unit Price","Total Value (incl. Sold)"]
+                       "Min /sqft (lowest)","Median /sqft (mid)","Max /sqft (highest)",
+                       "Min Price","Max Price","Avg Unit Price","Total Value (incl. Sold)"]
         topo_show = column_picker(list(tvd.columns), key="topo_cols", locked=["Type"])
         excel_table(tvd[topo_show])
 
