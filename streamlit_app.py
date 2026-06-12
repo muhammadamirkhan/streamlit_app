@@ -1495,6 +1495,49 @@ with tab4:
 
 st.divider()
 
+def _style_export_sheet(ws):
+    """Apply clean, professional formatting to a worksheet: bold blue header, frozen
+    header row, AED / area / % number formats, borders, banded rows, auto widths."""
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    thin   = Side(style="thin", color="BDD7EE")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    head_fill = PatternFill("solid", fgColor="1F4E78")
+    head_font = Font(bold=True, color="FFFFFF", name="Calibri", size=11)
+    band_fill = PatternFill("solid", fgColor="DDEBF7")
+    center = Alignment(horizontal="center", vertical="center")
+    left   = Alignment(horizontal="left", vertical="center")
+
+    headers = [c.value for c in ws[1]]
+    for c in ws[1]:
+        c.fill, c.font, c.alignment, c.border = head_fill, head_font, center, border
+    ws.freeze_panes = "A2"
+    ws.row_dimensions[1].height = 22
+
+    def fmt_for(h):
+        h = str(h)
+        if "AED" in h:                         return '"AED" #,##0'
+        if "Terrace Rate" in h:                return "0%"
+        if "sqft" in h:                        return "#,##0.0"
+        return None
+
+    for ci, h in enumerate(headers, start=1):
+        fmt = fmt_for(h)
+        maxlen = len(str(h))
+        for r in range(2, ws.max_row + 1):
+            cell = ws.cell(row=r, column=ci)
+            cell.border = border
+            cell.alignment = left if ci == 1 else center
+            if fmt:
+                cell.number_format = fmt
+            if r % 2 == 0:
+                cell.fill = band_fill
+            if cell.value is not None:
+                maxlen = max(maxlen, len(str(cell.value)))
+        ws.column_dimensions[get_column_letter(ci)].width = min(max(maxlen + 3, 12), 42)
+
+
 def build_export():
     d = recalc(st.session_state.units, st.session_state.fm_params)
     out = BytesIO()
@@ -1504,13 +1547,17 @@ def build_export():
         eu.columns = ["Type","Status","Unit","Floor","Parking","Internal (sqft)","External (sqft)",
                       "Total (sqft)","Sellable (sqft)","Terrace Rate","Price/sqft (AED)","Price (AED)"]
         eu.to_excel(writer, index=False, sheet_name="Unit Register")
+
         grp = d.groupby("Type").agg(
             Units=("Unit","count"), Sold=("Status", lambda x: (x=="Sold").sum()),
             Available=("Status", lambda x: (x=="Available").sum()),
             Avg_Price_sqft=("Price_sqft","mean"), Min_Price_sqft=("Price_sqft","min"),
             Max_Price_sqft=("Price_sqft","max"), Total_Sellable=("Sellable_sqft","sum"),
             Total_Value=("Price","sum")).reset_index()
+        grp.columns = ["Type","Units","Sold","Available","Avg Price/sqft (AED)","Min Price/sqft (AED)",
+                       "Max Price/sqft (AED)","Total Sellable (sqft)","Total Value (AED)"]
         grp.to_excel(writer, index=False, sheet_name="Topology Summary")
+
         fe = []
         for fl in st.session_state.floors:
             ft = floor_total(fl, st.session_state.fm_params)
@@ -1521,6 +1568,9 @@ def build_export():
                            "Unit Total (AED)": round(v["total"],0), "Floor Total (AED)": round(ft,0)})
         if fe:
             pd.DataFrame(fe).to_excel(writer, index=False, sheet_name="Floor Manager")
+
+        for ws in writer.book.worksheets:        # apply professional styling to every sheet
+            _style_export_sheet(ws)
     return out.getvalue()
 
 st.download_button("Download Updated Excel", data=build_export(),
