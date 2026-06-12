@@ -383,6 +383,42 @@ def new_unit_rate(t, target_floor, units_df, params):
         rate += params.get("duplex_premium", 0.0)
     return max(rate, 0.0)
 
+def reladder_typology(t, params):
+    """Re-price every **Available** unit of type t up the ladder using the current
+    escalation. Anchors — units with no comparable unit below them (the entry price) —
+    keep their price. Sold units are never touched and act as fixed reference points.
+    Mutates st.session_state.units. Returns the number of units whose price changed."""
+    u = st.session_state.units.copy()
+    fn = _fnum_series(u)
+    order = (u[u["Type"] == t].assign(_fn=fn[u["Type"] == t])
+             .dropna(subset=["_fn"]).sort_values("_fn").index)
+    changed = 0
+    for idx in order:                       # bottom-up so each unit sees updated floors below it
+        if u.at[idx, "Status"] != "Available":
+            continue
+        tf = float(fn.loc[idx])
+        ref, direction = escalation_reference(t, tf, u)
+        if ref is None or direction < 0:    # nothing below → this is the anchor, keep its price
+            continue
+        rate = ref["ref_psf"] + escalation_for(t, params) * ref["steps"]
+        if "Duplex" in t:
+            rate += params.get("duplex_premium", 0.0)
+        rate = max(rate, 0.0)
+        if abs(float(u.at[idx, "Price_sqft"]) - rate) > 1e-9:
+            u.at[idx, "Price_sqft"] = rate
+            changed += 1
+    st.session_state.units = u
+    return changed
+
+def sync_floor_rates():
+    """Push current register prices back onto the floor-objects so the Floors table,
+    totals and export stay consistent after a reprice."""
+    pmap = dict(zip(st.session_state.units["uid"], st.session_state.units["Price_sqft"]))
+    for fl in st.session_state.floors:
+        for un in fl["units"]:
+            if un.get("uid") in pmap:
+                un["rate"] = float(pmap[un["uid"]])
+
 def area_for(t, params):
     a = params.get("area", {}).get(t)
     if a:
@@ -876,16 +912,34 @@ with tab3:
                              key="set_dpx_off", disabled=True, help="Applies to Duplex typologies only.")
             new_dpx = cur_dpx
 
+        old = st.session_state.fm_params
+        esc_changed = abs(float(old["escalation"].get(s_type, 0.0)) - new_e) > 1e-9
+        dpx_changed = abs(float(old.get("duplex_premium", 0.0)) - new_dpx) > 1e-9
+
         new_esc_map = dict(params["escalation"]); new_esc_map[s_type] = new_e
         new_tr_map  = dict(params["terrace"])
         if gkey is not None and new_t is not None:
             new_tr_map[gkey] = new_t / 100.0
         np_ = {"escalation": new_esc_map, "terrace": new_tr_map,
                "duplex_premium": new_dpx, "area": dict(params.get("area", {}))}
-        if np_ != st.session_state.fm_params:
+        if np_ != old:
             st.session_state.fm_params = np_
+            n = 0
+            if esc_changed:
+                n += reladder_typology(s_type, np_)                 # re-ladder this typology live
+            if dpx_changed:
+                for dt in ("3 Bedroom Duplex", "4 Bedroom Duplex", "5 Bedroom Duplex"):
+                    n += reladder_typology(dt, np_)
+            if esc_changed or dpx_changed:
+                sync_floor_rates()
+                st.session_state["flash"] = ("success",
+                    f"✅ Escalation updated — {n} Available unit price(s) re-laddered.")
             st.rerun()
 
+        st.caption("Changing **Escalation** re-prices the Available units of that typology up the "
+                   "ladder immediately (Sold units stay fixed; the entry/anchor floor holds). "
+                   "**Terrace %** and **Area** reprice every unit of the type. The table shows the "
+                   "current settings for all typologies.")
         ref_rows = []
         for t in UNIT_TYPES:
             gk = terrace_group_key(t)
