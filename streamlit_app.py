@@ -155,6 +155,7 @@ def load_unit_data() -> pd.DataFrame:
         df["Price_sqft"] = df["Price_sqft"].fillna(0.0)        # last-resort guard
 
     df["Terrace_Override"] = pd.NA                                     # per-unit terrace-rate override (set by bulk tool)
+    df["Comment"] = ""                                                # free-text note per unit
     df["uid"] = [f"u{i}" for i in range(len(df))]   # stable unique row id (unit numbers are NOT unique)
     return df
 
@@ -503,7 +504,7 @@ def add_units_to_register(unit_list, floor_num, params):
             "Type": u["type"], "Status": "Available", "Unit": u["unit_no"], "Floor": ordinal(floor_num),
             "Parking": d["parking"], "Internal_sqft": internal, "External_sqft": external,
             "Terrace_Rate": terrace_for(u["type"], params), "Price_sqft": u["rate"],
-            "Terrace_Override": pd.NA, "uid": uid,
+            "Terrace_Override": pd.NA, "Comment": "", "uid": uid,
         }])], ignore_index=True)
 
 def remove_units_from_register(uids):
@@ -648,16 +649,19 @@ with tab1:
     s5.metric("Total Price/sqft", aed(view["Price"].sum()/tot_area) if tot_area else "—")
     s6.metric("Portfolio Value", aed(view["Price"].sum()))
 
+    if "Comment" not in view.columns:
+        view["Comment"] = ""
     cols = ["Type","Status","Unit","Floor","Parking",
             "Internal_sqft","External_sqft","Total_sqft","Sellable_sqft","Terrace_Rate",
             "Price_sqft","PSF_total",
-            "Int_Value","Terr_Value","Price","Esc_row","Var_row"]
+            "Int_Value","Terr_Value","Price","Esc_row","Var_row","Comment"]
     disp = view[cols].copy()
     disp.columns = ["Type","Status","Unit","Floor","Parking",
                     "Internal (sqft)","External (sqft)","Total Area (sqft)","Sellable (sqft)","Terrace Rate",
                     "Price/Sellable sqft","Price/Total sqft",
                     "Internal Value (AED)","Terrace Value (AED)","Total Price (AED)",
-                    "Escalation vs below (/sqft)","Floor Wise Variance (AED)"]
+                    "Escalation vs below (/sqft)","Floor Wise Variance (AED)","Comment"]
+    disp["Comment"] = disp["Comment"].fillna("").astype(str)
 
     # Pre-format variance as a string so Sold / first-in-typology rows render fully empty (no placeholder)
     disp["Floor Wise Variance (AED)"] = disp["Floor Wise Variance (AED)"].apply(
@@ -686,6 +690,23 @@ with tab1:
     st.dataframe(styler, use_container_width=True, hide_index=True, height=460)
     st.caption(f"Showing {len(view)} of {len(df)} units · Sold units highlighted in blue · "
                f"“vs below” compares each unit to the one a floor lower in the same typology")
+
+    with st.expander("💬  Add / edit a comment"):
+        def _cmt_label(uid):
+            r = view[view["uid"] == uid]
+            if r.empty:
+                return uid
+            r = r.iloc[0]
+            return f"Unit {r['Unit']} · {r['Type']} · Floor {r['Floor']} · {r['Status']}"
+        c_uid = st.selectbox("Unit", view["uid"].tolist(), format_func=_cmt_label, key="cmt_uid")
+        cur = st.session_state.units.loc[st.session_state.units["uid"] == c_uid, "Comment"]
+        cur_val = str(cur.iloc[0]) if not cur.empty and pd.notna(cur.iloc[0]) else ""
+        new_cmt = st.text_input("Comment", value=cur_val, key=f"cmt_txt_{c_uid}",
+                                placeholder="e.g. held for VIP client, repriced after review…")
+        if st.button("Save comment", key="cmt_save"):
+            st.session_state.units.loc[st.session_state.units["uid"] == c_uid, "Comment"] = new_cmt
+            st.session_state["flash"] = ("success", "✅ Comment saved.")
+            st.rerun()
 
 
 # ── Tab 2: Summary by Type (no Bank Locked column, full values) ────────────────
