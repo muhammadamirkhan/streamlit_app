@@ -31,6 +31,45 @@ if not _check_password():
 # ── Data file (lives next to this script, so it works locally and on the cloud) ─
 EXCEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Muraba Veil Unit list.xlsx")
 COMMENTS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "unit_comments.json")
+STATE_PATH    = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app_state.json")
+
+
+# ── Saved working state (explicit Save / Reset) ────────────────────────────────
+
+def save_state():
+    """Snapshot the full working state (register, floors, params) to STATE_PATH."""
+    state = {
+        "units": json.loads(st.session_state.units.to_json(orient="records")),
+        "floors": st.session_state.floors,
+        "params": st.session_state.fm_params,
+        "uid_counter": int(st.session_state.get("uid_counter", len(st.session_state.units))),
+    }
+    with open(STATE_PATH, "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False, indent=2)
+
+def load_state():
+    """Return (units_df, floors, params, uid_counter) from STATE_PATH, or None on failure."""
+    try:
+        with open(STATE_PATH, "r", encoding="utf-8") as f:
+            state = json.load(f)
+        units = pd.DataFrame(state["units"])
+        if "Terrace_Override" in units.columns:
+            units["Terrace_Override"] = units["Terrace_Override"].where(
+                units["Terrace_Override"].notna(), pd.NA)
+        if "Comment" in units.columns:
+            units["Comment"] = units["Comment"].fillna("").astype(str)
+        return units, state["floors"], state["params"], int(state.get("uid_counter", len(units)))
+    except Exception:
+        return None
+
+def has_saved_state():
+    return os.path.exists(STATE_PATH)
+
+def clear_saved_state():
+    try:
+        os.remove(STATE_PATH)
+    except Exception:
+        pass
 
 
 def comment_key(unit, type_, floor):
@@ -556,8 +595,16 @@ def recalc(df, params):
 
 def _init():
     if "units" not in st.session_state:
-        st.session_state.units = load_unit_data()
-        st.session_state.uid_counter = len(st.session_state.units)
+        loaded = load_state() if has_saved_state() else None
+        if loaded is not None:                       # resume from last saved state
+            units, floors, fparams, ctr = loaded
+            st.session_state.units = units
+            st.session_state.floors = floors
+            st.session_state.fm_params = fparams
+            st.session_state.uid_counter = ctr
+        else:                                        # fresh from the original Excel
+            st.session_state.units = load_unit_data()
+            st.session_state.uid_counter = len(st.session_state.units)
     if "fm_params" not in st.session_state: st.session_state.fm_params = load_params()
     if "floors"    not in st.session_state: st.session_state.floors    = build_floor_list(st.session_state.units)
     if "blocked"   not in st.session_state: st.session_state.blocked   = load_blocked_floors()
@@ -673,12 +720,29 @@ def unit_mix_builder(state_key, default_rows, qmin=1):
 with st.sidebar:
     st.title("Muraba Veil")
     st.caption("Unit Manager")
-    if st.button("Reload from Excel", use_container_width=True):
+
+    if st.button("💾  Save state", use_container_width=True, type="primary"):
+        save_state()
+        st.session_state["flash"] = ("success", "✅ Working state saved. The app will reopen here.")
+        st.rerun()
+
+    if st.button("↩️  Reset to original Excel", use_container_width=True):
+        clear_saved_state()
         for k in ["units", "fm_params", "floors", "blocked", "uid_counter"]:
             st.session_state.pop(k, None)
+        st.session_state["flash"] = ("success", "↩️ Reset to the original Excel baseline.")
         st.rerun()
+
+    if has_saved_state():
+        import datetime as _dt
+        _ts = _dt.datetime.fromtimestamp(os.path.getmtime(STATE_PATH)).strftime("%d %b %Y, %H:%M")
+        st.caption(f"📂 Loaded from saved state · last saved **{_ts}**")
+    else:
+        st.caption("📄 Loaded from the original Excel (no saved state yet)")
+
     st.divider()
-    st.caption("Add / edit / remove floors in the **Floor Manager** tab.")
+    st.caption("Add / edit / remove floors in the **Floor Manager** tab. "
+               "Click **Save state** to keep your changes for next time.")
     if blocked:
         st.caption("**Blocked floors (MEP / Majlis):** " + ", ".join(str(k) for k in sorted(blocked)))
 

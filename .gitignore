@@ -12,6 +12,10 @@ _test_*.xlsx
 mv_test*.xlsx
 ~$*.xlsx
 
+# Local working state (saved by the app) — keep out of git unless you want it deployed
+app_state.json
+unit_comments.json
+
 # OS
 .DS_Store
 Thumbs.db
