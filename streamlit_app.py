@@ -205,9 +205,33 @@ def load_pool_floors(units_df: pd.DataFrame) -> list:
 
 
 def build_floor_list(units_df: pd.DataFrame) -> list:
-    floors = load_floor_data(units_df) + load_pool_floors(units_df)
-    floors.sort(key=lambda x: x["floor"])
-    return floors
+    """Build the floor list directly from the register so EVERY unit is represented
+    (Standard, Pool, Duplex, XL, Penthouse). This guarantees the Floor Manager grand
+    total matches the portfolio value — earlier it only read the Standard+Pool sheets
+    and silently dropped the 4 Duplex/XL/PH units (~AED 825M)."""
+    fnum = pd.to_numeric(units_df["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True),
+                         errors="coerce")
+    buckets = {}
+    for pos in range(len(units_df)):
+        f = fnum.iloc[pos]
+        if pd.isna(f):
+            continue
+        r = units_df.iloc[pos]
+        buckets.setdefault(int(f), []).append({
+            "unit_no": str(r["Unit"]), "type": r["Type"],
+            "rate": float(r["Price_sqft"]), "uid": r["uid"],
+        })
+    out = []
+    for f in sorted(buckets):
+        units = buckets[f]
+        types = [u["type"] for u in units]
+        levels = max(TYPE_DEFAULTS.get(t, {"levels": 1})["levels"] for t in types)
+        if   any("Pool" in t for t in types):    kind = "Pool"
+        elif any("Duplex" in t for t in types):  kind = "Duplex"
+        elif any(t == "4 Bedroom XL" for t in types): kind = "XL"
+        else:                                     kind = "Standard"
+        out.append({"floor": f, "kind": kind, "levels": levels, "units": units})
+    return out
 
 
 def load_params() -> dict:
