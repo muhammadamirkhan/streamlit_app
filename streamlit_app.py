@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
+import json
 from io import BytesIO
 
 st.set_page_config(page_title="Muraba Veil – Unit Manager", layout="wide", page_icon="🏙️")
@@ -29,6 +30,35 @@ if not _check_password():
 
 # ── Data file (lives next to this script, so it works locally and on the cloud) ─
 EXCEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Muraba Veil Unit list.xlsx")
+COMMENTS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "unit_comments.json")
+
+
+def comment_key(unit, type_, floor):
+    return f"{unit}|{type_}|{floor}"
+
+def load_comments_file() -> dict:
+    try:
+        with open(COMMENTS_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_comments_file(mapping: dict):
+    try:
+        with open(COMMENTS_PATH, "w", encoding="utf-8") as f:
+            json.dump(mapping, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+def persist_all_comments():
+    """Write every non-empty comment in the register to the JSON file, keyed by unit/type/floor."""
+    u = st.session_state.units
+    mapping = {}
+    for _, r in u.iterrows():
+        c = r.get("Comment", "")
+        if isinstance(c, str) and c.strip():
+            mapping[comment_key(r["Unit"], r["Type"], r["Floor"])] = c
+    save_comments_file(mapping)
 
 UNIT_TYPES = [
     "2 Bedroom", "3 Bedroom", "3 Bedroom Pool", "4 Bedroom Pool",
@@ -155,7 +185,9 @@ def load_unit_data() -> pd.DataFrame:
         df["Price_sqft"] = df["Price_sqft"].fillna(0.0)        # last-resort guard
 
     df["Terrace_Override"] = pd.NA                                     # per-unit terrace-rate override (set by bulk tool)
-    df["Comment"] = ""                                                # free-text note per unit
+    cmts = load_comments_file()                                       # free-text notes per unit, persisted to JSON
+    df["Comment"] = [cmts.get(comment_key(u, t, fl), "")
+                     for u, t, fl in zip(df["Unit"], df["Type"], df["Floor"])]
     df["uid"] = [f"u{i}" for i in range(len(df))]   # stable unique row id (unit numbers are NOT unique)
     return df
 
@@ -651,62 +683,59 @@ with tab1:
 
     if "Comment" not in view.columns:
         view["Comment"] = ""
-    cols = ["Type","Status","Unit","Floor","Parking",
-            "Internal_sqft","External_sqft","Total_sqft","Sellable_sqft","Terrace_Rate",
-            "Price_sqft","PSF_total",
-            "Int_Value","Terr_Value","Price","Esc_row","Var_row","Comment"]
-    disp = view[cols].copy()
-    disp.columns = ["Type","Status","Unit","Floor","Parking",
-                    "Internal (sqft)","External (sqft)","Total Area (sqft)","Sellable (sqft)","Terrace Rate",
-                    "Price/Sellable sqft","Price/Total sqft",
-                    "Internal Value (AED)","Terrace Value (AED)","Total Price (AED)",
-                    "Escalation vs below (/sqft)","Floor Wise Variance (AED)","Comment"]
-    disp["Comment"] = disp["Comment"].fillna("").astype(str)
 
-    # Pre-format variance as a string so Sold / first-in-typology rows render fully empty (no placeholder)
-    disp["Floor Wise Variance (AED)"] = disp["Floor Wise Variance (AED)"].apply(
-        lambda v: "" if pd.isna(v) else f"AED {v:,.0f}")
+    def _money(v):  return "" if pd.isna(v) else f"AED {v:,.0f}"
+    def _num1(v):   return "" if pd.isna(v) else f"{v:,.1f}"
 
-    fmt = {
-        "Internal (sqft)": "{:,.1f}", "External (sqft)": "{:,.1f}",
-        "Total Area (sqft)": "{:,.1f}", "Sellable (sqft)": "{:,.1f}",
-        "Terrace Rate": "{:.0%}",
-        "Price/Sellable sqft": "AED {:,.0f}", "Price/Total sqft": "AED {:,.0f}",
-        "Internal Value (AED)": "AED {:,.0f}", "Terrace Value (AED)": "AED {:,.0f}",
-        "Total Price (AED)": "AED {:,.0f}",
-        "Escalation vs below (/sqft)": "AED {:,.0f}",
-    }
+    # Pre-format every value to a string so the editable grid keeps the same look,
+    # while only the Comment column stays editable.
+    disp = pd.DataFrame({
+        "Type": view["Type"].values, "Status": view["Status"].values,
+        "Unit": view["Unit"].values, "Floor": view["Floor"].values,
+        "Parking": view["Parking"].astype(int).astype(str).values,
+        "Internal (sqft)": view["Internal_sqft"].map(_num1).values,
+        "External (sqft)": view["External_sqft"].map(_num1).values,
+        "Total Area (sqft)": view["Total_sqft"].map(_num1).values,
+        "Sellable (sqft)": view["Sellable_sqft"].map(_num1).values,
+        "Terrace Rate": view["Terrace_Rate"].map(lambda v: "" if pd.isna(v) else f"{v:.0%}").values,
+        "Price/Sellable sqft": view["Price_sqft"].map(_money).values,
+        "Price/Total sqft": view["PSF_total"].map(_money).values,
+        "Internal Value (AED)": view["Int_Value"].map(_money).values,
+        "Terrace Value (AED)": view["Terr_Value"].map(_money).values,
+        "Total Price (AED)": view["Price"].map(_money).values,
+        "Escalation vs below (/sqft)": view["Esc_row"].map(_money).values,
+        "Floor Wise Variance (AED)": view["Var_row"].map(_money).values,
+        "Comment": view["Comment"].fillna("").astype(str).values,
+        "uid": view["uid"].values,
+    })
 
-    # Sold highlight uses the row index (survives column hiding), so Status can be hidden too
-    sold_by_idx = disp["Status"] == "Sold"
-    show_cols = column_picker(list(disp.columns), key="reg_cols", locked=["Type", "Unit"])
-    disp = disp[show_cols]
+    display_cols = [c for c in disp.columns if c != "uid"]
+    show_cols = column_picker(display_cols, key="reg_cols", locked=["Type", "Unit", "Comment"])
 
-    def _hl_sold(row):
-        sold = bool(sold_by_idx.loc[row.name])
-        return ["background-color:#9DC3E6" if sold else "" for _ in row]
-
-    styler = disp.style.apply(_hl_sold, axis=1).format(fmt, na_rep="–")
-    st.dataframe(styler, use_container_width=True, hide_index=True, height=460)
-    st.caption(f"Showing {len(view)} of {len(df)} units · Sold units highlighted in blue · "
+    edited = st.data_editor(
+        disp, hide_index=True, height=460, use_container_width=True, key="reg_editor",
+        column_order=show_cols,
+        disabled=[c for c in disp.columns if c != "Comment"],
+        column_config={
+            "Comment": st.column_config.TextColumn(
+                "Comment", width="large",
+                help="Type a note for this unit. Saved automatically and reloaded next time."),
+        },
+    )
+    st.caption(f"Showing {len(view)} of {len(df)} units · the **Comment** column is editable — "
+               f"edits save to file and reload automatically · "
                f"“vs below” compares each unit to the one a floor lower in the same typology")
 
-    with st.expander("💬  Add / edit a comment"):
-        def _cmt_label(uid):
-            r = view[view["uid"] == uid]
-            if r.empty:
-                return uid
-            r = r.iloc[0]
-            return f"Unit {r['Unit']} · {r['Type']} · Floor {r['Floor']} · {r['Status']}"
-        c_uid = st.selectbox("Unit", view["uid"].tolist(), format_func=_cmt_label, key="cmt_uid")
-        cur = st.session_state.units.loc[st.session_state.units["uid"] == c_uid, "Comment"]
-        cur_val = str(cur.iloc[0]) if not cur.empty and pd.notna(cur.iloc[0]) else ""
-        new_cmt = st.text_input("Comment", value=cur_val, key=f"cmt_txt_{c_uid}",
-                                placeholder="e.g. held for VIP client, repriced after review…")
-        if st.button("Save comment", key="cmt_save"):
-            st.session_state.units.loc[st.session_state.units["uid"] == c_uid, "Comment"] = new_cmt
-            st.session_state["flash"] = ("success", "✅ Comment saved.")
-            st.rerun()
+    # Persist any comment edits back to the register + JSON file
+    new_cmt = edited["Comment"].fillna("").astype(str).values
+    old_cmt = disp["Comment"].values
+    if not (new_cmt == old_cmt).all():
+        cmap = dict(zip(edited["uid"].values, new_cmt))
+        u = st.session_state.units
+        u["Comment"] = u.apply(
+            lambda r: cmap.get(r["uid"], r.get("Comment", "")), axis=1)
+        persist_all_comments()
+        st.rerun()
 
 
 # ── Tab 2: Summary by Type (no Bank Locked column, full values) ────────────────
