@@ -986,17 +986,6 @@ with tab5:
         topo_show = column_picker(list(tvd.columns), key="topo_cols", locked=["Type"])
         excel_table(tvd[topo_show])
 
-        st.divider()
-        c1, c2 = st.columns(2)
-        with c1:
-            st.caption("Avg price per total sqft by topology (excl. Sold)")
-            st.bar_chart(tv.set_index("Type")["Avg_PSF"])
-        with c2:
-            st.caption("Total value by topology, incl. Sold (AED M)")
-            chart2 = tv.set_index("Type")[["Total_Value_All"]].copy()
-            chart2["AED M"] = chart2["Total_Value_All"] / 1e6
-            st.bar_chart(chart2["AED M"])
-
 
 # ── Tab 3: Floor Manager ───────────────────────────────────────────────────────
 
