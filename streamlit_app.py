@@ -635,12 +635,17 @@ with tab1:
     view["Var_row"]    = view["uid"].map(var_map)
 
     # Scorecards
+    ALLOWABLE_SELLABLE = 818186.683338944   # fixed design cap; shown rounded as 818,187
     tot_area = view["Total_sqft"].sum()
-    s1, s2, s3, s4 = st.columns(4)
+    variance = tot_area - ALLOWABLE_SELLABLE
+    s1, s2, s3, s4, s5, s6 = st.columns(6)
     s1.metric("Units shown", len(view))
     s2.metric("Total Area (sqft)", f"{tot_area:,.0f}")
-    s3.metric("Total Price/sqft", aed(view["Price"].sum()/tot_area) if tot_area else "—")
-    s4.metric("Portfolio Value", aed(view["Price"].sum()))
+    s3.metric("Total Allowable Sellable (sqft)", f"{ALLOWABLE_SELLABLE:,.0f}")
+    s4.metric("Variance: Total − Allowable (sqft)", f"{variance:,.0f}",
+              delta=f"{variance:,.0f}", delta_color="inverse")
+    s5.metric("Total Price/sqft", aed(view["Price"].sum()/tot_area) if tot_area else "—")
+    s6.metric("Portfolio Value", aed(view["Price"].sum()))
 
     cols = ["Type","Status","Unit","Floor","Parking",
             "Internal_sqft","External_sqft","Total_sqft","Sellable_sqft","Terrace_Rate",
