@@ -908,9 +908,6 @@ with tab2:
                "Total Sellable Counted = Internal + Counted Terraces (drives Price per unit).")
 
     st.divider()
-    chart = nm[nm["Typology"] != "Total"][["Typology", "Total Sales"]].set_index("Typology")
-    chart["AED M"] = chart["Total Sales"] / 1e6
-    st.bar_chart(chart["AED M"])
 
     # ── Furniture Pack (static reference, from Excel Sale Summary) ──────────────
     with st.expander("🛋️  Muraba Veil Furniture Pack (reference, from Excel)", expanded=False):
