@@ -32,7 +32,7 @@ EXCEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Muraba Ve
 
 UNIT_TYPES = [
     "2 Bedroom", "3 Bedroom", "3 Bedroom Pool", "4 Bedroom Pool",
-    "4 Bedroom Simplex", "3 Bedroom Duplex", "4 Bedroom Duplex", "5 Bedroom Duplex",
+    "4 Bedroom XL", "3 Bedroom Duplex", "4 Bedroom Duplex", "5 Bedroom Duplex",
 ]
 STATUS_OPTIONS = ["Available", "Sold"]
 
@@ -41,7 +41,7 @@ TYPE_DEFAULTS = {
     "3 Bedroom":         {"internal": 2880.530062, "external": 2058.920781, "parking": 2, "terrace_rate": 0.30, "levels": 1},
     "3 Bedroom Pool":    {"internal": 2880.530062, "external": 2059.243699, "parking": 2, "terrace_rate": 0.65, "levels": 2},
     "4 Bedroom Pool":    {"internal": 4643.550947, "external": 5258.816065, "parking": 3, "terrace_rate": 0.55, "levels": 2},
-    "4 Bedroom Simplex": {"internal": 7474.889938, "external": 7857.654592, "parking": 4, "terrace_rate": 0.65, "levels": 1},
+    "4 Bedroom XL": {"internal": 7474.889938, "external": 7857.654592, "parking": 4, "terrace_rate": 0.65, "levels": 1},
     "3 Bedroom Duplex":  {"internal": 4733.537238, "external": 3334.228886, "parking": 3, "terrace_rate": 0.75, "levels": 2},
     "4 Bedroom Duplex":  {"internal": 7485.653849, "external": 7260.042287, "parking": 4, "terrace_rate": 0.75, "levels": 2},
     "5 Bedroom Duplex":  {"internal": 11648.17,    "external": 15018.56,    "parking": 6, "terrace_rate": 1.00, "levels": 2},
@@ -53,7 +53,7 @@ LEVEL_CAPACITY = {"2 Bedroom": 2, "3 Bedroom": 1}   # standard residential floor
 ESC_DEFAULTS = {
     "2 Bedroom": 150.0, "3 Bedroom": 150.0,
     "3 Bedroom Pool": 104.0, "4 Bedroom Pool": 104.0,
-    "4 Bedroom Simplex": 497.0, "3 Bedroom Duplex": 308.0,
+    "4 Bedroom XL": 497.0, "3 Bedroom Duplex": 308.0,
     "4 Bedroom Duplex": 305.0, "5 Bedroom Duplex": 0.0,
 }
 # Terrace-rate groups (% of internal), variable; from Launches XL SX DX
@@ -141,8 +141,10 @@ def load_unit_data() -> pd.DataFrame:
         "Price_sqft":    pd.to_numeric(data[10], errors="coerce"),
     })
     df = df[df["Type"].notna() & (df["Type"] != "Total")].reset_index(drop=True)
+    df["Type"]   = df["Type"].replace("4 Bedroom Simplex", "4 Bedroom XL")  # renamed typology
     df["Floor"]  = df["Floor"].apply(ordinal)                          # normalise 33 / 33.0 / "4th" -> "33rd" / "4th"
     df["Status"] = df["Status"].replace("Bank Locked", "Available")   # Bank Locked reclassified as Available
+    df["Terrace_Override"] = pd.NA                                     # per-unit terrace-rate override (set by bulk tool)
     df["uid"] = [f"u{i}" for i in range(len(df))]   # stable unique row id (unit numbers are NOT unique)
     return df
 
@@ -214,7 +216,7 @@ def load_params() -> dict:
         esc["3 Bedroom Pool"]    = float(xl.iloc[1][16])
         esc["4 Bedroom Pool"]    = float(xl.iloc[2][16])
         esc["3 Bedroom Duplex"]  = float(xl.iloc[4][16])
-        esc["4 Bedroom Simplex"] = float(xl.iloc[5][16])
+        esc["4 Bedroom XL"] = float(xl.iloc[5][16])
         esc["4 Bedroom Duplex"]  = float(xl.iloc[6][16])
         terrace["3 Bedroom Pool"] = float(xl.iloc[7][16])
         terrace["4 Bedroom Pool"] = float(xl.iloc[8][16])
@@ -257,7 +259,7 @@ def terrace_for(t, params):
     if t in ("2 Bedroom", "3 Bedroom"):                 return tr["standard"]
     if t == "3 Bedroom Pool":                           return tr["3 Bedroom Pool"]
     if t == "4 Bedroom Pool":                           return tr["4 Bedroom Pool"]
-    if t == "4 Bedroom Simplex":                        return tr["simplex"]
+    if t == "4 Bedroom XL":                        return tr["simplex"]
     if t in ("3 Bedroom Duplex", "4 Bedroom Duplex"):   return tr["duplex"]
     # 5 Bedroom Duplex (penthouse) keeps its own 100% terrace
     return TYPE_DEFAULTS[t]["terrace_rate"]
@@ -278,8 +280,48 @@ def last_available_price(t, units_df):
     sub = sub.sort_values("_fnum")
     return float(sub.iloc[-1]["Price_sqft"])
 
-def new_unit_rate(t, units_df, params):
-    rate = last_available_price(t, units_df) + escalation_for(t, params)
+def _fnum_series(units_df):
+    return pd.to_numeric(units_df["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True),
+                         errors="coerce")
+
+def escalation_reference(t, target_floor, units_df):
+    """Pick the escalation reference for a new/edited unit of type t on target_floor.
+
+    Rule (per client spec):
+      • Among type-t units on floors BELOW target, let A = the highest-floor *Available* unit.
+      • Candidate references = A + every unit on floors strictly between A and target
+        (those in-between are the Sold ones we skip past).
+      • Reference R = the candidate with the HIGHEST price/sqft.
+      • steps = (# distinct floors carrying a type-t unit strictly between R and target) + 1.
+    Returns {ref_unit, ref_floor, ref_psf, steps} or None when nothing sits below target.
+    """
+    sub = units_df[units_df["Type"] == t].copy()
+    if sub.empty:
+        return None
+    sub["fn"] = _fnum_series(sub)
+    below = sub.dropna(subset=["fn"])
+    below = below[below["fn"] < target_floor]
+    if below.empty:
+        return None
+    avail = below[below["Status"] == "Available"]
+    if not avail.empty:
+        a_floor = avail["fn"].max()
+        cand = below[below["fn"] >= a_floor]      # A plus everything between A and target
+    else:
+        cand = below                               # no Available below → all below are candidates
+    R = cand.loc[cand["Price_sqft"].astype(float).idxmax()]
+    r_floor = float(R["fn"])
+    steps = int(sub[(sub["fn"] > r_floor) & (sub["fn"] < target_floor)]["fn"].nunique()) + 1
+    return {"ref_unit": str(R["Unit"]), "ref_floor": int(r_floor),
+            "ref_psf": float(R["Price_sqft"]), "steps": steps}
+
+def new_unit_rate(t, target_floor, units_df, params):
+    esc = escalation_for(t, params)
+    ref = escalation_reference(t, target_floor, units_df)
+    if ref is None:
+        rate = last_available_price(t, units_df) + esc
+    else:
+        rate = ref["ref_psf"] + esc * ref["steps"]
     if "Duplex" in t:
         rate += params.get("duplex_premium", 0.0)
     return rate
@@ -307,6 +349,10 @@ def recalc(df, params):
         df.loc[m, "Internal_sqft"] = internal
         df.loc[m, "External_sqft"] = external
         df.loc[m, "Terrace_Rate"]  = terrace_for(t, params)
+    # per-unit terrace overrides win over the type default (set by the floor-range tool)
+    if "Terrace_Override" in df.columns:
+        ov = df["Terrace_Override"].notna()
+        df.loc[ov, "Terrace_Rate"] = pd.to_numeric(df.loc[ov, "Terrace_Override"], errors="coerce")
     df["Sellable_sqft"] = df["Internal_sqft"] + df["Terrace_Rate"]*df["External_sqft"]
     df["Total_sqft"]    = df["Internal_sqft"] + df["External_sqft"]
     df["Price"]         = df["Price_sqft"] * df["Sellable_sqft"]
@@ -359,7 +405,8 @@ def add_units_to_register(unit_list, floor_num, params):
         st.session_state.units = pd.concat([st.session_state.units, pd.DataFrame([{
             "Type": u["type"], "Status": "Available", "Unit": u["unit_no"], "Floor": ordinal(floor_num),
             "Parking": d["parking"], "Internal_sqft": internal, "External_sqft": external,
-            "Terrace_Rate": terrace_for(u["type"], params), "Price_sqft": u["rate"], "uid": uid,
+            "Terrace_Rate": terrace_for(u["type"], params), "Price_sqft": u["rate"],
+            "Terrace_Override": pd.NA, "uid": uid,
         }])], ignore_index=True)
 
 def remove_units_from_register(uids):
@@ -732,7 +779,7 @@ with tab3:
     ESC_LABELS = {
         "2 Bedroom": "2 Bedroom Ascending", "3 Bedroom": "3 Bedroom Ascending",
         "3 Bedroom Pool": "3 BR Pool Ascending", "4 Bedroom Pool": "4 BR Pool Ascending",
-        "4 Bedroom Simplex": "4 SX Ascending (XL)", "3 Bedroom Duplex": "3 DX Ascending",
+        "4 Bedroom XL": "4 SX Ascending (XL)", "3 Bedroom Duplex": "3 DX Ascending",
         "4 Bedroom Duplex": "4 DX Ascending", "5 Bedroom Duplex": "5 DX Ascending",
     }
     with st.expander("⚙️  Escalation & Terrace Settings (all variable, from launch sheets)", expanded=True):
@@ -781,24 +828,26 @@ with tab3:
             st.session_state.fm_params = {**st.session_state.fm_params, "area": new_area}
             st.rerun()
 
-    with st.expander("📈  Bulk Escalation (add AED/sqft to a typology across a floor range)", expanded=False):
-        st.caption("Pick a typology and a floor range (or All floors), enter an amount, and it is "
-                   "**added flat** to the Price/sqft of every **Available** unit of that typology in range. "
-                   "Sold units are never changed.")
+    with st.expander("📈  Bulk Update by Typology & Floor Range (escalation + terrace %)", expanded=False):
+        st.caption("Pick a typology and a floor range (From → To, or All floors), then optionally "
+                   "**add escalation** (AED/sqft) and/or **set the terrace %**. Both apply only to "
+                   "**Available** units of that typology in range — Sold units are never changed.")
         u_all = st.session_state.units
-        u_all_fn = pd.to_numeric(u_all["Floor"].str.replace(r"[^0-9]", "", regex=True), errors="coerce")
+        u_all_fn = pd.to_numeric(u_all["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True),
+                                 errors="coerce")
 
-        be1, be2 = st.columns([2, 2])
-        be_type = be1.selectbox("Typology", UNIT_TYPES, key="be_type")
-        be_all  = be2.checkbox("All floors", value=True, key="be_all")
+        bt1, bt2 = st.columns([2, 1])
+        be_type = bt1.selectbox("Typology", UNIT_TYPES, key="be_type")
+        be_all  = bt2.checkbox("All floors", value=True, key="be_all")
 
         # floors that actually have an Available unit of this typology
         elig = u_all[(u_all["Type"] == be_type) & (u_all["Status"] == "Available")].copy()
         elig_fn = sorted(set(pd.to_numeric(
-            elig["Floor"].str.replace(r"[^0-9]", "", regex=True), errors="coerce").dropna().astype(int)))
+            elig["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True),
+            errors="coerce").dropna().astype(int)))
 
         if not elig_fn:
-            st.info(f"No Available {be_type} units to escalate.")
+            st.info(f"No Available {be_type} units to update.")
         else:
             if be_all:
                 f_from, f_to = elig_fn[0], elig_fn[-1]
@@ -811,19 +860,37 @@ with tab3:
                 f_to = fc2.selectbox("To floor", to_opts, index=len(to_opts) - 1,
                                      format_func=ordinal, key="be_to")
 
-            amount = st.number_input("Escalation to add (AED/sqft)", value=100.0, step=10.0,
-                                     key="be_amount")
+            ac1, ac2, ac3 = st.columns([1.2, 1, 1.2])
+            do_esc = ac1.checkbox("Add escalation", value=True, key="be_do_esc")
+            amount = ac2.number_input("AED/sqft", value=100.0, step=10.0,
+                                      key="be_amount", disabled=not do_esc)
+            cur_tr = terrace_for(be_type, params) * 100
+            tr_opts = [0, 30, 55, 65, 75, 100]
+            if round(cur_tr) not in tr_opts:
+                tr_opts = sorted(set(tr_opts + [int(round(cur_tr))]))
+            do_tr = ac3.checkbox("Set terrace %", value=False, key="be_do_tr")
+            tr_pct = ac3.selectbox("Terrace %", tr_opts,
+                                   index=tr_opts.index(int(round(cur_tr))) if int(round(cur_tr)) in tr_opts else 0,
+                                   key="be_trpct", disabled=not do_tr)
 
             mask = ((u_all["Type"] == be_type) & (u_all["Status"] == "Available") &
                     (u_all_fn >= f_from) & (u_all_fn <= f_to))
             n_hit = int(mask.sum())
-            st.caption(f"Will adjust **{n_hit}** Available {be_type} unit(s) "
-                       f"on floors {ordinal(f_from)}–{ordinal(f_to)} by **{amount:+,.0f} AED/sqft**.")
+            bits = []
+            if do_esc: bits.append(f"escalate **{amount:+,.0f} AED/sqft**")
+            if do_tr:  bits.append(f"set terrace **{tr_pct}%**")
+            action_txt = " and ".join(bits) if bits else "make no change (tick an action)"
+            st.caption(f"Will update **{n_hit}** Available {be_type} unit(s) on floors "
+                       f"{ordinal(f_from)}–{ordinal(f_to)}: {action_txt}.")
 
-            if st.button("Apply Escalation", type="primary", disabled=(n_hit == 0), key="be_apply"):
-                st.session_state.units.loc[mask, "Price_sqft"] = \
-                    st.session_state.units.loc[mask, "Price_sqft"] + amount
-                # keep the floor objects' unit rates in sync for the floor table / export
+            can_apply = n_hit > 0 and (do_esc or do_tr)
+            if st.button("Apply", type="primary", disabled=not can_apply, key="be_apply"):
+                if do_esc:
+                    st.session_state.units.loc[mask, "Price_sqft"] = \
+                        st.session_state.units.loc[mask, "Price_sqft"] + amount
+                if do_tr:
+                    st.session_state.units.loc[mask, "Terrace_Override"] = tr_pct / 100.0
+                # keep floor-object rates in sync for the floor table / export
                 for fl in st.session_state.floors:
                     if f_from <= fl["floor"] <= f_to:
                         for un in fl["units"]:
@@ -833,15 +900,15 @@ with tab3:
                                 if not r.empty and r.iloc[0]["Type"] == be_type and r.iloc[0]["Status"] == "Available":
                                     un["rate"] = float(r.iloc[0]["Price_sqft"])
                 st.session_state["flash"] = ("success",
-                    f"✅ Added {amount:+,.0f} AED/sqft to {n_hit} Available {be_type} unit(s) "
-                    f"on floors {ordinal(f_from)}–{ordinal(f_to)}.")
+                    f"✅ Updated {n_hit} Available {be_type} unit(s) on floors "
+                    f"{ordinal(f_from)}–{ordinal(f_to)}: {action_txt.replace('**','')}.")
                 st.rerun()
 
     # Floors table + totals
     smap_all = uid_status_map()
     rows, grand = [], 0
     TYPE_ABBR = {"2 Bedroom":"2BR","3 Bedroom":"3BR","3 Bedroom Pool":"3BR Pool","4 Bedroom Pool":"4BR Pool",
-                 "4 Bedroom Simplex":"4BR XL","3 Bedroom Duplex":"3BR DX","4 Bedroom Duplex":"4BR DX","5 Bedroom Duplex":"5BR DX"}
+                 "4 Bedroom XL":"4BR XL","3 Bedroom Duplex":"3BR DX","4 Bedroom Duplex":"4BR DX","5 Bedroom Duplex":"5BR DX"}
     for fl in floors:
         ft = floor_total(fl, params); grand += ft
         mix = ", ".join(f"{sum(1 for u in fl['units'] if u['type']==t)}x {t}"
@@ -871,8 +938,9 @@ with tab3:
     # ─────────────────────── ADD A NEW FLOOR ──────────────────────────────────
     if action == "Add a New Floor":
         st.subheader("Add a New Floor")
-        st.caption("Enter a floor number and choose the unit mix. Each unit is priced as "
-                   "*(last available unit of that type + escalation)*.")
+        st.caption("Enter a floor number and choose the unit mix. Each unit is priced from the "
+                   "**highest-priced reference** at/above the last available unit of that type, "
+                   "stepped up by escalation × number of floors to this one.")
         existing = [fl["floor"] for fl in floors]
         nf = st.number_input("Floor number", min_value=1, max_value=999,
                              value=(max(existing)+1 if existing else 59), step=1, key="newfl")
@@ -890,13 +958,20 @@ with tab3:
         if mix:
             preview, total = [], 0
             for t, q in mix:
-                rate = new_unit_rate(t, st.session_state.units, params)
-                base = last_available_price(t, st.session_state.units)
+                rate = new_unit_rate(t, nf, st.session_state.units, params)
+                ref  = escalation_reference(t, nf, st.session_state.units)
                 uv   = unit_val(t, rate, params)["total"]
                 total += uv*q
+                if ref:
+                    ref_txt = f"Unit {ref['ref_unit']} (Flr {ordinal(ref['ref_floor'])})"
+                    base_psf = f"AED {ref['ref_psf']:,.0f}"
+                    step_txt = f"{escalation_for(t, params):,.0f} × {ref['steps']}"
+                else:
+                    ref_txt, base_psf, step_txt = "—", "—", f"{escalation_for(t, params):,.0f} × 1"
                 preview.append({"Type": t, "Qty": q,
-                                "Base (last avail)": f"AED {base:,.0f}",
-                                "+ Escalation": f"AED {escalation_for(t, params):,.0f}",
+                                "Reference": ref_txt,
+                                "Ref Rate/sqft": base_psf,
+                                "+ Escalation (esc × steps)": step_txt,
                                 "Rate/sqft": f"AED {rate:,.0f}",
                                 "Value each": aed(uv), "Subtotal": aed(uv*q)})
             excel_table(pd.DataFrame(preview))
@@ -914,7 +989,7 @@ with tab3:
                     ordered.sort(key=lambda t: (t != "3 Bedroom", t))
                     nos = gen_unit_nos(nf, ordered)
                     new_units = [{"unit_no": no, "type": t,
-                                  "rate": new_unit_rate(t, st.session_state.units, params)}
+                                  "rate": new_unit_rate(t, nf, st.session_state.units, params)}
                                  for no, t in zip(nos, ordered)]
                     add_units_to_register(new_units, nf, params)
                     st.session_state.floors.append({"floor": nf, "kind": "Added",
@@ -985,7 +1060,7 @@ with tab3:
                         if j < len(same):
                             avail_total += unit_val(t, same[j]["rate"], params)["total"]
                         else:
-                            avail_total += unit_val(t, new_unit_rate(t, st.session_state.units, params), params)["total"]
+                            avail_total += unit_val(t, new_unit_rate(t, sel, st.session_state.units, params), params)["total"]
                 new_total  = locked_total + avail_total
                 old_total  = floor_total(fl, params)
                 grand_excl = grand - old_total
@@ -1016,7 +1091,7 @@ with tab3:
                             new_meta.sort(key=lambda t: (t != "3 Bedroom", t))
                             nos = gen_unit_nos(sel, new_meta)
                             added_units = [{"unit_no": no, "type": t,
-                                            "rate": new_unit_rate(t, st.session_state.units, params)}
+                                            "rate": new_unit_rate(t, sel, st.session_state.units, params)}
                                            for no, t in zip(nos, new_meta)]
                             add_units_to_register(added_units, sel, params)
                         final_units = locked_units + keep_avail + added_units
