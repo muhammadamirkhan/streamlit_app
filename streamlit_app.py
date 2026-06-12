@@ -147,6 +147,29 @@ def area_fmt(x, sqm=False):
     return f"{v:,.0f}"
 
 
+def avail_adjusted_median_psf(sub):
+    """Median over ALL rows of a typology (Sold + Available), sorted by floor: take the
+    median row position (the 52nd of 104, etc.). The value must come from an Available unit —
+    if the median row is Sold, step to the row above (lower floor) until an Available one is
+    found; if none above, step down. Returns that row's Price ÷ Total Area."""
+    if sub is None or sub.empty:
+        return float("nan")
+    s = sub.copy()
+    s["_fn"] = pd.to_numeric(s["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True),
+                             errors="coerce")
+    s = s.sort_values(["_fn", "Unit"]).reset_index(drop=True)
+    n = len(s)
+    mid = (n + 1) // 2 - 1                         # 0-based index of the median row
+    i = mid
+    while i >= 0 and s.loc[i, "Status"] != "Available":
+        i -= 1                                      # step up to an Available row
+    if i < 0:                                       # none above → step down from the median row
+        i = mid
+        while i < n and s.loc[i, "Status"] != "Available":
+            i += 1
+    return float(s.loc[i, "PSF_total"]) if 0 <= i < n else float("nan")
+
+
 def ensure_new_options(key, options):
     """Keep a 'show-all' multiselect honest: when a brand-new option appears in the data
     (e.g. a freshly added topology), add it to the current selection so it shows by default —
@@ -902,24 +925,26 @@ with tab2:
 
 with tab5:
     st.subheader("Topology Summary Statistics")
-    st.caption("**Total Units** and **Total Value** include all units (Sold + Available). "
-               "All other columns (Min / Median / Avg / Max /sqft and Avg Unit Price) are "
-               "based on **Available units only** (Sold excluded). "
-               "Price/sqft = unit Price ÷ Total Area (Internal + External); "
-               "Avg /sqft is value-weighted = Total Value ÷ Total Area.")
+    st.caption("**Total Units**, **Total Value** and **Avg Unit Price** (= Total Value ÷ Total Units) "
+               "include all units (Sold + Available). **Median /sqft** takes the median row position "
+               "across all rows (incl. Sold) but reports the nearest **Available** unit's value "
+               "(stepping up if the median row is Sold). **Min / Max / Avg /sqft** are Available-only. "
+               "Price/sqft = unit Price ÷ Total Area (Internal + External).")
     all_types = [t for t in UNIT_TYPES if t in set(df["Type"])] + \
                 [t for t in sorted(df["Type"].unique()) if t not in UNIT_TYPES]
     ensure_new_options("topo_filter", all_types)
     pick = st.multiselect("Filter topologies", all_types, default=all_types, key="topo_filter")
 
-    # all-status aggregate (Sold + Available) → drives Total Units & Total Value
+    # all-status aggregate (Sold + Available) → drives Total Units, Total Value, Avg, Median
     alldf = df.copy()
     if pick:
         alldf = alldf[alldf["Type"].isin(pick)]
+    alldf["PSF_total"] = alldf["Price"] / alldf["Total_sqft"]
     allagg = alldf.groupby("Type").agg(
         Total_Units=("Unit", "count"),
         Total_Value_All=("Price", "sum"),
     ).reset_index()
+    median_psf = {t: avail_adjusted_median_psf(g) for t, g in alldf.groupby("Type")}
 
     # available-only aggregate → drives every pricing stat
     tvdf = df[df["Status"] != "Sold"].copy()
@@ -932,14 +957,14 @@ with tab5:
     else:
         tv = tvdf.groupby("Type").agg(
             Min_PSF=("PSF_total","min"),
-            Median_PSF=("PSF_total","median"),
             Max_PSF=("PSF_total","max"),
-            Avg_Price=("Price","mean"),
             Total_Area=("Total_sqft","sum"),
             Avail_Value=("Price","sum"),
         ).reset_index()
         tv["Avg_PSF"] = tv["Avail_Value"] / tv["Total_Area"]   # value-weighted (available)
-        tv = tv.merge(allagg, on="Type", how="left")           # bring in all-status Units & Value
+        tv = tv.merge(allagg, on="Type", how="left")           # all-status Units & Value
+        tv["Median_PSF"] = tv["Type"].map(median_psf)          # all-rows position, Available value
+        tv["Avg_Price"]  = tv["Total_Value_All"] / tv["Total_Units"]   # all rows: value ÷ units
 
         tvd = tv[["Type","Total_Units","Min_PSF","Median_PSF","Avg_PSF","Max_PSF",
                   "Avg_Price","Total_Value_All"]].copy()
@@ -950,7 +975,7 @@ with tab5:
         tvd["Total_Units"]     = tvd["Total_Units"].astype(int)
         tvd.columns = ["Type","Total Units (incl. Sold)",
                        "Min /sqft (lowest)","Median /sqft (mid)","Avg /sqft (wtd)","Max /sqft (highest)",
-                       "Avg Unit Price (avail)","Total Value (incl. Sold)"]
+                       "Avg Unit Price","Total Value (incl. Sold)"]
         topo_show = column_picker(list(tvd.columns), key="topo_cols", locked=["Type"])
         excel_table(tvd[topo_show])
 
