@@ -91,6 +91,12 @@ TYPE_DEFAULTS = {
 
 LEVEL_CAPACITY = {"2 Bedroom": 2, "3 Bedroom": 1}   # standard residential floor
 
+TYPE_ABBR = {
+    "2 Bedroom": "2BR", "3 Bedroom - New": "3BR New", "3 Bedroom": "3BR",
+    "3 Bedroom Pool": "3BR Pool", "4 Bedroom Pool": "4BR Pool", "4 Bedroom XL": "4BR XL",
+    "3 Bedroom Duplex": "3BR DX", "4 Bedroom Duplex": "4BR DX", "5 Bedroom Duplex": "5BR DX",
+}
+
 # Fallback escalation defaults (overridden by what we read from the sheets)
 ESC_DEFAULTS = {
     "2 Bedroom": 150.0, "3 Bedroom - New": 150.0, "3 Bedroom": 150.0,
@@ -1103,6 +1109,19 @@ with tab3:
             elig["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True),
             errors="coerce").dropna().astype(int)))
 
+        # floor → "302 (2BR), 303 (2BR), 301 (3BR)" so the dropdowns show what's on each floor
+        _tmp = u_all.assign(_fn=u_all_fn).dropna(subset=["_fn"]).copy()
+        _tmp["_un"] = pd.to_numeric(_tmp["Unit"].astype(str).str.replace(r"[^0-9]", "", regex=True),
+                                    errors="coerce")
+        _floor_units = {}
+        for f, g in _tmp.groupby("_fn"):
+            g = g.sort_values("_un")
+            _floor_units[int(f)] = ", ".join(
+                f"{r['Unit']} ({TYPE_ABBR.get(r['Type'], r['Type'])})" for _, r in g.iterrows())
+        def floor_label(f):
+            info = _floor_units.get(int(f))
+            return f"{ordinal(f)} — {info}" if info else ordinal(f)
+
         if not elig_fn:
             st.info(f"No Available {be_type} units to update.")
         else:
@@ -1110,15 +1129,15 @@ with tab3:
                 f_from, f_to = elig_fn[0], elig_fn[-1]
                 st.caption(f"Range: **{ordinal(f_from)} → {ordinal(f_to)}** (all {len(elig_fn)} eligible floor(s)).")
             elif be_scope == "Single floor":
-                f_one = st.selectbox("Floor", elig_fn, format_func=ordinal, key="be_one")
+                f_one = st.selectbox("Floor", elig_fn, format_func=floor_label, key="be_one")
                 f_from = f_to = f_one
             else:  # Floor range
                 fc1, fc2 = st.columns(2)
                 f_from = fc1.selectbox("From floor", elig_fn, index=0,
-                                       format_func=ordinal, key="be_from")
+                                       format_func=floor_label, key="be_from")
                 to_opts = [f for f in elig_fn if f >= f_from]
                 f_to = fc2.selectbox("To floor", to_opts, index=len(to_opts) - 1,
-                                     format_func=ordinal, key="be_to")
+                                     format_func=floor_label, key="be_to")
 
             ac1, ac2, ac3 = st.columns([1.2, 1, 1.2])
             do_esc = ac1.checkbox("Add escalation", value=True, key="be_do_esc")
@@ -1167,8 +1186,6 @@ with tab3:
     # Floors table + totals
     smap_all = uid_status_map()
     rows, grand = [], 0
-    TYPE_ABBR = {"2 Bedroom":"2BR","3 Bedroom - New":"3BR New","3 Bedroom":"3BR","3 Bedroom Pool":"3BR Pool","4 Bedroom Pool":"4BR Pool",
-                 "4 Bedroom XL":"4BR XL","3 Bedroom Duplex":"3BR DX","4 Bedroom Duplex":"4BR DX","5 Bedroom Duplex":"5BR DX"}
     for fl in floors:
         ft = floor_total(fl, params); grand += ft
         mix = ", ".join(f"{sum(1 for u in fl['units'] if u['type']==t)}x {t}"
