@@ -1253,9 +1253,9 @@ def _esc(s):
 
 def render_building_view():
     st.subheader("Building View — Muraba Veil")
-    st.caption("The tower at a glance — every floor, every unit. Lit (solid) blocks are **available**, "
-               "dimmed outlined blocks are **sold**. Pool & Duplex levels are double-height; gold marks "
-               "the penthouse crown; hatched bands are MEP / Majlis. Hover any unit for its details. Live.")
+    st.caption("A live elevation of the tower beside a typology dashboard. Lit blocks are available, "
+               "dim outlined blocks are sold; hover any unit for instant details. Scroll the tower on the "
+               "left — the KPIs and typology panel on the right track counts, availability and value live.")
 
     bdf = df.copy()
     bdf["_fn"] = pd.to_numeric(bdf["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True), errors="coerce")
@@ -1264,18 +1264,11 @@ def render_building_view():
     floor_nums = [int(f) for f in units_by_floor]
     max_floor = max(floor_nums + list(blocked) + [1]); min_floor = 1
 
-    tot_units = len(df); tot_av = int((df["Status"] == "Available").sum())
-    kc = st.columns(4)
-    kc[0].metric("Top floor", ordinal(max_floor))
-    kc[1].metric("Residential floors", len(floor_nums))
-    kc[2].metric("Units", tot_units)
-    kc[3].metric("Available", tot_av)
-
-    # ── geometry ──
-    W, TW = 880, 380
-    TX = (W - TW) / 2; cx = TX + TW / 2
+    # ── geometry (tower SVG) ──
+    W, TW, TX = 660, 360, 200
+    cx = TX + TW / 2
     H_STD, H_TALL, GAP, MULL = 20, 34, 3, 3
-    PAD_TOP, CROWN_H, BASE_H, PAD_BOT = 18, 52, 34, 20
+    PAD_TOP, CROWN_H, BASE_H, PAD_BOT = 18, 50, 32, 18
 
     defs = (
         '<defs>'
@@ -1302,37 +1295,34 @@ def render_building_view():
         floor_y[f] = y + h / 2
         body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="3" fill="#0b1830"/>')
         body.append(f'<text x="{TX+TW+8:.0f}" y="{y+h/2+3.5:.0f}" text-anchor="start" font-size="10" '
-                    f'fill="#8aa0bd" font-family="Calibri,Arial">{f}</text>')
+                    f'pointer-events="none" fill="#8aa0bd" font-family="Calibri,Arial">{f}</text>')
         if g is not None and len(g):
             n = len(g); cw = (TW - (n - 1) * MULL) / n
             for i, (_, u) in enumerate(g.iterrows()):
                 xi = TX + i * (cw + MULL)
                 col = BUILDING_COLORS.get(u["Type"], "#7f8c9b")
                 sold = u["Status"] == "Sold"
-                tip = _esc(
-                    f"Unit {u['Unit']}  ·  {u['Type']}  ·  Floor {u['Floor']}  ·  {u['Status']}\n"
-                    f"{aed(u['Price'])}   ({u['Price_sqft']:,.0f}/sqft)\n"
-                    f"Internal {u['Internal_sqft']:,.0f} sqft  ·  External {u['External_sqft']:,.0f} sqft  "
-                    f"·  Total {u['Total_sqft']:,.0f} sqft")
+                gattr = (f'class="u" data-u="{_esc(str(u["Unit"]))}" data-ty="{_esc(u["Type"])}" '
+                         f'data-fl="{_esc(str(u["Floor"]))}" data-st="{u["Status"]}" '
+                         f'data-pr="{_esc(aed(u["Price"]))}" data-ps="{u["Price_sqft"]:,.0f}" '
+                         f'data-ai="{u["Internal_sqft"]:,.0f}" data-ae="{u["External_sqft"]:,.0f}" '
+                         f'data-at="{u["Total_sqft"]:,.0f}" data-c="{col}"')
                 if sold:
-                    body.append(f'<g><title>{tip}</title>'
-                                f'<rect x="{xi:.1f}" y="{y+1:.0f}" width="{cw:.1f}" height="{h-2}" rx="2.5" '
-                                f'fill="{col}" fill-opacity="0.16" stroke="{col}" stroke-opacity="0.55"/></g>')
+                    body.append(f'<g {gattr}><rect x="{xi:.1f}" y="{y+1:.0f}" width="{cw:.1f}" height="{h-2}" '
+                                f'rx="2.5" fill="{col}" fill-opacity="0.16" stroke="{col}" stroke-opacity="0.55"/></g>')
                 else:
                     hl = max(4, (h - 2) * 0.42)
-                    body.append(f'<g><title>{tip}</title>'
-                                f'<rect x="{xi:.1f}" y="{y+1:.0f}" width="{cw:.1f}" height="{h-2}" rx="2.5" fill="{col}"/>'
+                    body.append(f'<g {gattr}><rect x="{xi:.1f}" y="{y+1:.0f}" width="{cw:.1f}" height="{h-2}" rx="2.5" fill="{col}"/>'
                                 f'<rect x="{xi:.1f}" y="{y+1:.0f}" width="{cw:.1f}" height="{hl:.0f}" rx="2.5" '
                                 f'fill="#ffffff" fill-opacity="0.16"/></g>')
-                if cw > 32:
+                if cw > 30:
                     body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2+3.2:.0f}" text-anchor="middle" font-size="9" '
-                                f'fill="#ffffff" fill-opacity="{"0.95" if not sold else "0.8"}" '
-                                f'font-family="Calibri,Arial">{_esc(u["Unit"])}</text>')
+                                f'pointer-events="none" fill="#ffffff" fill-opacity="{"0.95" if not sold else "0.8"}" '
+                                f'font-family="Calibri,Arial">{_esc(str(u["Unit"]))}</text>')
         elif is_blocked:
-            body.append(f'<g><title>{_esc("Amenity / services level — " + str(blocked[f]))}</title>'
-                        f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="3" fill="url(#amen)"/>'
+            body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="3" fill="url(#amen)"/>'
                         f'<text x="{cx:.0f}" y="{y+h/2+3.2:.0f}" text-anchor="middle" font-size="9" '
-                        f'fill="#9fb3d0" letter-spacing="2" font-family="Calibri,Arial">MEP / MAJLIS</text></g>')
+                        f'pointer-events="none" fill="#9fb3d0" letter-spacing="2" font-family="Calibri,Arial">MEP / MAJLIS</text>')
         else:
             body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="3" fill="none" '
                         f'stroke="#1c2c46" stroke-dasharray="3 3"/>')
@@ -1350,56 +1340,135 @@ def render_building_view():
         f'<rect x="{TX-22:.0f}" y="{tower_bottom+4:.0f}" width="{TW+44}" height="{BASE_H-10}" rx="5" fill="url(#podium)"/>'
         f'<text x="{cx:.0f}" y="{tower_bottom+4+(BASE_H-10)/2+4:.0f}" text-anchor="middle" font-size="11" '
         f'fill="#E6B450" letter-spacing="5" font-family="Calibri,Arial">MURABA VEIL</text>'
-        f'<rect x="{TX-66:.0f}" y="{tower_bottom+BASE_H-4:.0f}" width="{TW+132}" height="5" rx="2" fill="#0A1322"/>')
+        f'<rect x="{TX-50:.0f}" y="{tower_bottom+BASE_H-4:.0f}" width="{TW+100}" height="5" rx="2" fill="#0A1322"/>')
     bg = (f'<rect x="0" y="0" width="{W}" height="{total_h:.0f}" fill="url(#sky)"/>'
-          f'<ellipse cx="{cx:.0f}" cy="{total_h*0.4:.0f}" rx="{W*0.5:.0f}" ry="{total_h*0.45:.0f}" fill="url(#glow)"/>')
+          f'<ellipse cx="{cx:.0f}" cy="{total_h*0.4:.0f}" rx="{W*0.55:.0f}" ry="{total_h*0.45:.0f}" fill="url(#glow)"/>')
 
-    # ── left-side level annotations with leader lines (brochure style) ──
+    # ── left-side level leader-lines (brochure style) ──
     info = {}
     for t in bdf["Type"].unique():
         fls = sorted({int(x) for x in bdf[bdf["Type"] == t]["_fn"].dropna() if int(x) in floor_y})
         if not fls:
             continue
-        info[t] = {"mid": sum(floor_y[f] for f in fls) / len(fls),
-                   "lo": min(fls), "hi": max(fls), "n": int((bdf["Type"] == t).sum())}
-    a_types = sorted(info, key=lambda t: info[t]["mid"])           # top floor first
+        info[t] = {"mid": sum(floor_y[f] for f in fls) / len(fls), "lo": min(fls), "hi": max(fls)}
+    a_types = sorted(info, key=lambda t: info[t]["mid"])
     k = max(1, len(a_types))
-    y_top, y_bot, LX = PAD_TOP + CROWN_H + 8, tower_bottom - 8, 200
+    y_top, y_bot, LX = PAD_TOP + CROWN_H + 8, tower_bottom - 8, 192
     ann = []
     for i, t in enumerate(a_types):
         slot = y_top + (i + 0.5) * (y_bot - y_top) / k
         inf = info[t]
         lvl = f"LEVEL {inf['lo']}" if inf["lo"] == inf["hi"] else f"LEVEL {inf['lo']}–{inf['hi']}"
-        ann.append(f'<text x="{LX}" y="{slot-7:.0f}" text-anchor="end" font-size="11" font-weight="bold" '
+        ann.append(f'<text x="{LX}" y="{slot-3:.0f}" text-anchor="end" font-size="10.5" font-weight="bold" '
                    f'fill="#eef3f9" font-family="Calibri,Arial">{_esc(t.upper())}</text>')
-        ann.append(f'<text x="{LX}" y="{slot+5:.0f}" text-anchor="end" font-size="9.5" fill="#9fb3d0" '
+        ann.append(f'<text x="{LX}" y="{slot+9:.0f}" text-anchor="end" font-size="9" fill="#9fb3d0" '
                    f'font-family="Calibri,Arial">{lvl}</text>')
-        ann.append(f'<text x="{LX}" y="{slot+17:.0f}" text-anchor="end" font-size="9.5" fill="#9fb3d0" '
-                   f'font-family="Calibri,Arial">{inf["n"]} UNITS</text>')
         ann.append(f'<polyline points="{LX+8},{slot:.0f} {(LX+TX)/2:.0f},{slot:.0f} {TX:.0f},{inf["mid"]:.0f}" '
                    f'fill="none" stroke="#6f86a6" stroke-width="1"/>')
         ann.append(f'<circle cx="{TX:.0f}" cy="{inf["mid"]:.0f}" r="3" fill="#eef3f9"/>')
 
-    # ── legend, top-right ──
-    leg = []
-    lx, ry = 700, PAD_TOP + 18
-    leg.append(f'<text x="{lx}" y="{ry-8}" font-size="10" font-weight="bold" letter-spacing="1" '
-               f'fill="#cdd6e2" font-family="Calibri,Arial">TYPOLOGY</text>')
-    for t in BUILDING_COLORS:
-        if t in info:
-            leg.append(f'<rect x="{lx}" y="{ry-1}" width="11" height="11" rx="2" fill="{BUILDING_COLORS[t]}"/>')
-            leg.append(f'<text x="{lx+17}" y="{ry+8}" font-size="10" fill="#cdd6e2" '
-                       f'font-family="Calibri,Arial">{_esc(t)}</text>')
-            ry += 17
-    leg.append(f'<rect x="{lx}" y="{ry-1}" width="11" height="11" rx="2" fill="none" stroke="#8aa0bd"/>')
-    leg.append(f'<text x="{lx+17}" y="{ry+8}" font-size="10" fill="#cdd6e2" font-family="Calibri,Arial">Sold (dim)</text>')
-
     svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{total_h:.0f}" '
-           f'viewBox="0 0 {W} {total_h:.0f}">{defs}{bg}{crown}{"".join(body)}'
-           f'{"".join(ann)}{"".join(leg)}{base}</svg>')
+           f'viewBox="0 0 {W} {total_h:.0f}">{defs}{bg}{crown}{"".join(body)}{"".join(ann)}{base}</svg>')
 
-    comp = f'<div style="background:#05080F;border-radius:12px;padding:8px 0;text-align:center;">{svg}</div>'
-    components.html(comp, height=int(total_h) + 24, scrolling=True)
+    # ── per-typology stats + KPIs (live) ──
+    def _stat(t):
+        gg = bdf[bdf["Type"] == t]; ta = float(gg["Total_sqft"].sum())
+        return {"n": len(gg), "av": int((gg["Status"] == "Available").sum()),
+                "so": int((gg["Status"] == "Sold").sum()), "val": float(gg["Price"].sum()),
+                "psf": (float(gg["Price"].sum()) / ta) if ta else 0.0}
+    present = [t for t in BUILDING_COLORS if t in set(bdf["Type"])]
+    present += [t for t in sorted(bdf["Type"].unique()) if t not in present]
+
+    TU = len(df); AV = int((df["Status"] == "Available").sum()); SO = TU - AV
+    VAL = float(df["Price"].sum()); AVAL = float(df[df["Status"] == "Available"]["Price"].sum())
+    TA = float(df["Total_sqft"].sum()); PSF = VAL / TA if TA else 0.0
+    STp = (SO / TU * 100) if TU else 0.0
+
+    def _kpi(label, val, sub=None):
+        s = f'<div class="ks">{sub}</div>' if sub else ""
+        return f'<div class="kpi"><div class="kl">{label}</div><div class="kv">{val}</div>{s}</div>'
+    kpis = "".join([
+        _kpi("Total Units", f"{TU}"),
+        _kpi("Available", f"{AV}", f"{(AV/TU*100):.0f}% of stock" if TU else ""),
+        _kpi("Sold", f"{SO}", f"{STp:.0f}% sold"),
+        _kpi("Portfolio Value", aed(VAL)),
+        _kpi("Available Value", aed(AVAL)),
+        _kpi("Avg Price/sqft", aed(PSF)),
+    ])
+    rows = []
+    for t in present:
+        s = _stat(t); col = BUILDING_COLORS.get(t, "#7f8c9b")
+        avpct = (s["av"] / s["n"] * 100) if s["n"] else 0
+        rows.append(
+            f'<div class="lg"><span class="sw" style="background:{col}"></span>'
+            f'<div class="lgm"><div class="lgt">{_esc(t)}</div>'
+            f'<div class="lgs">{s["n"]} units &middot; {s["av"]} avail &middot; {s["so"]} sold</div>'
+            f'<div class="bar"><span style="width:{avpct:.0f}%;background:{col}"></span></div></div>'
+            f'<div class="lgv">{aed(s["val"])}<div class="lgv2">{aed(s["psf"])}/sqft</div></div></div>')
+    legend_html = "".join(rows)
+
+    css = """<style>
+    *{box-sizing:border-box;}
+    .bv{display:flex;gap:14px;height:720px;background:#05080F;border-radius:12px;padding:12px;
+        font-family:Calibri,Arial,sans-serif;}
+    .tower{flex:0 0 700px;overflow-y:auto;border-radius:10px;}
+    .tower svg{display:block;margin:0 auto;}
+    .tower::-webkit-scrollbar,.legend::-webkit-scrollbar{width:8px;}
+    .tower::-webkit-scrollbar-thumb,.legend::-webkit-scrollbar-thumb{background:#24395c;border-radius:5px;}
+    .side{flex:1;min-width:260px;display:flex;flex-direction:column;gap:12px;color:#e6edf6;}
+    .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+    .kpi{background:#0d1b30;border:1px solid #1e3357;border-radius:9px;padding:9px 11px;}
+    .kl{font-size:11px;color:#9fb3d0;}
+    .kv{font-size:17px;font-weight:700;margin-top:2px;}
+    .ks{font-size:10px;color:#7f97b5;margin-top:1px;}
+    .sh{font-size:13px;font-weight:700;color:#cdd6e2;letter-spacing:.4px;}
+    .sh span{font-weight:400;color:#7f97b5;font-size:11px;}
+    .legend{overflow-y:auto;display:flex;flex-direction:column;gap:7px;padding-right:5px;}
+    .lg{display:flex;align-items:center;gap:10px;background:#0b1830;border:1px solid #16263f;
+        border-radius:9px;padding:8px 11px;}
+    .sw{width:14px;height:14px;border-radius:4px;flex:none;}
+    .lgm{flex:1;min-width:0;}
+    .lgt{font-size:13px;font-weight:600;}
+    .lgs{font-size:11px;color:#9fb3d0;margin:1px 0 5px;}
+    .bar{height:5px;background:#1c2c46;border-radius:3px;overflow:hidden;}
+    .bar span{display:block;height:100%;border-radius:3px;}
+    .lgv{text-align:right;font-size:13px;font-weight:700;color:#F0CE78;white-space:nowrap;}
+    .lgv2{font-size:10px;color:#7f97b5;font-weight:400;}
+    .u{cursor:pointer;}
+    #bvtip{position:fixed;display:none;z-index:99999;pointer-events:none;background:#0d1b30;
+        border:1px solid #2a3f5f;border-left:4px solid #888;border-radius:9px;padding:9px 12px;
+        color:#e6edf6;font:12px/1.55 Calibri,Arial;box-shadow:0 8px 28px rgba(0,0,0,.55);max-width:300px;}
+    #bvtip .h{font-size:13px;font-weight:700;margin-bottom:3px;}
+    #bvtip .p{color:#F0CE78;font-weight:700;margin-top:4px;}
+    #bvtip .a{color:#9fb3d0;margin-top:3px;font-size:11px;}
+    </style>"""
+    dyn = (f'<div class="bv"><div class="tower">{svg}</div>'
+           f'<div class="side"><div class="kpis">{kpis}</div>'
+           f'<div class="sh">By Typology <span>&nbsp;live counts &amp; value</span></div>'
+           f'<div class="legend">{legend_html}</div></div></div><div id="bvtip"></div>')
+    js = """<script>
+    (function(){
+      var tip=document.getElementById('bvtip'), tw=document.querySelector('.tower');
+      function move(e){
+        var el=e.target.closest('.u');
+        if(!el){tip.style.display='none';return;}
+        var d=el.dataset, sc=(d.st==='Sold')?'#F08C8C':'#5AD18B';
+        tip.style.borderLeftColor=d.c;
+        tip.innerHTML='<div class="h">'+d.u+' &middot; '+d.ty+'</div>'+
+          '<div>Floor '+d.fl+' &middot; <b style="color:'+sc+'">'+d.st+'</b></div>'+
+          '<div class="p">'+d.pr+' <span style="font-weight:400;color:#9fb3d0">('+d.ps+'/sqft)</span></div>'+
+          '<div class="a">Internal '+d.ai+' &middot; External '+d.ae+' &middot; Total '+d.at+' sqft</div>';
+        tip.style.display='block';
+        var x=e.clientX+16, y=e.clientY+16, tw2=tip.offsetWidth, th=tip.offsetHeight;
+        if(x+tw2>window.innerWidth-8)  x=e.clientX-tw2-16;
+        if(y+th>window.innerHeight-8)  y=e.clientY-th-16;
+        tip.style.left=x+'px'; tip.style.top=y+'px';
+      }
+      if(tw){ tw.addEventListener('mousemove',move);
+              tw.addEventListener('mouseleave',function(){tip.style.display='none';}); }
+    })();
+    </script>"""
+    components.html(css + dyn + js, height=748, scrolling=False)
 
 
 if tab6 is not None:                 # only when enabled (hidden on the published app)
