@@ -953,13 +953,14 @@ SHOW_BV = _bv_flag not in ("0", "false", "no", "off")
 
 _labels = ["Unit Register", "Summary by Type", "Topology View"]
 if SHOW_BV:
-    _labels += ["Building View", "Building View ✦"]
+    _labels += ["Building View", "Building View ✦", "Building View (Plan)"]
 _labels += ["Floor Manager", "Edit / Remove Units"]
 _tmap = dict(zip(_labels, st.tabs(_labels)))
 tab1 = _tmap["Unit Register"]; tab2 = _tmap["Summary by Type"]; tab5 = _tmap["Topology View"]
 tab3 = _tmap["Floor Manager"]; tab4 = _tmap["Edit / Remove Units"]
 tab6 = _tmap.get("Building View")
 tab6b = _tmap.get("Building View ✦")
+tab6c = _tmap.get("Building View (Plan)")
 
 
 # ── Tab 1: Unit Register ───────────────────────────────────────────────────────
@@ -1567,12 +1568,237 @@ def render_building_view(enhanced=False):
     components.html(f"<!--bv:{_esc(sig)}-->" + css + dyn + js, height=748, scrolling=False)
 
 
+BROCHURE_COLORS = {
+    "2 Bedroom": "#6E7E6A", "3 Bedroom - New": "#7E8C77", "3 Bedroom": "#566A54",
+    "3 Bedroom Pool": "#5C7A7C", "4 Bedroom Pool": "#46625F", "4 Bedroom XL": "#A8743C",
+    "3 Bedroom Duplex": "#7A7A3C", "4 Bedroom Duplex": "#5C5E2E", "5 Bedroom Duplex": "#9C7A3A",
+}
+
+def render_building_view_brochure():
+    st.subheader("Building View — Plan (brochure theme)")
+    st.caption("The same live tower in the brochure's warm architectural palette — tan page, sepia "
+               "line-work, muted earth tones. Filled units are available, hollow units are sold; hover "
+               "for details, click a unit or typology to focus. Level leader-lines as in the plan.")
+
+    bdf = df.copy()
+    bdf["_fn"] = pd.to_numeric(bdf["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True), errors="coerce")
+    bdf["_un"] = pd.to_numeric(bdf["Unit"].astype(str).str.replace(r"[^0-9]", "", regex=True), errors="coerce")
+    units_by_floor = {int(f): g.sort_values("_un") for f, g in bdf.dropna(subset=["_fn"]).groupby("_fn")}
+    floor_nums = [int(f) for f in units_by_floor]
+    max_floor = max(floor_nums + list(blocked) + [1]); min_floor = 1
+
+    # ── brochure palette ──
+    PAGE, INK, SUB = "#B4A48D", "#33302A", "#6E6657"
+    SLAB, SLABLN, SOLDS = "#AC9C84", "#9C8E76", "#8C8270"
+
+    W, TW, TX = 820, 520, 200
+    cx = TX + TW / 2
+    H_STD, H_TALL, GAP, MULL = 20, 34, 3, 3
+    PAD_TOP, CROWN_H, BASE_H, PAD_BOT = 18, 50, 30, 18
+
+    defs = ('<defs><pattern id="amenP" width="10" height="10" patternTransform="rotate(45)" '
+            'patternUnits="userSpaceOnUse"><rect width="10" height="10" fill="#A2937B"/>'
+            '<rect width="5" height="10" fill="#94866F"/></pattern></defs>')
+
+    body, y, floor_y = [], PAD_TOP + CROWN_H, {}
+    for f in range(max_floor, min_floor - 1, -1):
+        g = units_by_floor.get(f)
+        is_blocked = f in blocked
+        types = list(g["Type"]) if g is not None else []
+        tall = g is not None and any(("Pool" in t or "Duplex" in t) for t in types)
+        h = H_TALL if tall else H_STD
+        floor_y[f] = y + h / 2
+        body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="2" '
+                    f'fill="{SLAB}" stroke="{SLABLN}" stroke-width="0.5"/>')
+        body.append(f'<text x="{TX+TW+8:.0f}" y="{y+h/2+3.5:.0f}" text-anchor="start" font-size="10" '
+                    f'pointer-events="none" fill="{SUB}" font-family="Calibri,Arial">{f}</text>')
+        if g is not None and len(g):
+            n = len(g); cw = (TW - (n - 1) * MULL) / n
+            for i, (_, u) in enumerate(g.iterrows()):
+                xi = TX + i * (cw + MULL)
+                sold = u["Status"] == "Sold"
+                col = BROCHURE_COLORS.get(u["Type"], "#7d7461")
+                gattr = (f'class="u" data-u="{_esc(str(u["Unit"]))}" data-ty="{_esc(u["Type"])}" '
+                         f'data-fl="{_esc(str(u["Floor"]))}" data-st="{u["Status"]}" '
+                         f'data-pr="{_esc(aed(u["Price"]))}" data-ps="{u["Price_sqft"]:,.0f}" '
+                         f'data-ai="{u["Internal_sqft"]:,.0f}" data-ae="{u["External_sqft"]:,.0f}" '
+                         f'data-at="{u["Total_sqft"]:,.0f}" data-c="{col}"')
+                if sold:
+                    body.append(f'<g {gattr}><rect x="{xi:.1f}" y="{y+1:.0f}" width="{cw:.1f}" height="{h-2}" '
+                                f'rx="2" fill="none" stroke="{SOLDS}" stroke-width="1"/></g>')
+                else:
+                    body.append(f'<g {gattr}><rect x="{xi:.1f}" y="{y+1:.0f}" width="{cw:.1f}" height="{h-2}" '
+                                f'rx="2" fill="{col}" stroke="{INK}" stroke-width="0.5"/></g>')
+                if cw > 30:
+                    tcol = "#EDE6D7" if not sold else SUB
+                    body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2+3.2:.0f}" text-anchor="middle" font-size="9" '
+                                f'pointer-events="none" fill="{tcol}" font-family="Calibri,Arial">{_esc(str(u["Unit"]))}</text>')
+        elif is_blocked:
+            body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="2" fill="url(#amenP)"/>'
+                        f'<text x="{cx:.0f}" y="{y+h/2+3.2:.0f}" text-anchor="middle" font-size="9" '
+                        f'pointer-events="none" fill="{SUB}" letter-spacing="2" font-family="Calibri,Arial">MEP / MAJLIS</text>')
+        else:
+            body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="2" fill="none" '
+                        f'stroke="{SLABLN}" stroke-dasharray="3 3"/>')
+        y += h + GAP
+
+    tower_bottom = y - GAP
+    total_h = tower_bottom + BASE_H + PAD_BOT
+
+    crown = (f'<polygon points="{cx-22:.0f},{PAD_TOP+16} {cx+22:.0f},{PAD_TOP+16} '
+             f'{TX+TW:.0f},{PAD_TOP+CROWN_H} {TX:.0f},{PAD_TOP+CROWN_H}" fill="{SLAB}" '
+             f'stroke="{INK}" stroke-width="1"/>'
+             f'<line x1="{cx:.0f}" y1="{PAD_TOP}" x2="{cx:.0f}" y2="{PAD_TOP+16}" stroke="{INK}" stroke-width="1.5"/>'
+             f'<circle cx="{cx:.0f}" cy="{PAD_TOP}" r="3" fill="{INK}"/>')
+    base = (f'<rect x="{TX-22:.0f}" y="{tower_bottom+4:.0f}" width="{TW+44}" height="{BASE_H-10}" rx="3" '
+            f'fill="{SLAB}" stroke="{SLABLN}"/>'
+            f'<text x="{cx:.0f}" y="{tower_bottom+4+(BASE_H-10)/2+4:.0f}" text-anchor="middle" font-size="11" '
+            f'fill="{INK}" letter-spacing="5" font-family="Calibri,Arial">MURABA VEIL</text>'
+            f'<rect x="{TX-50:.0f}" y="{tower_bottom+BASE_H-4:.0f}" width="{TW+100}" height="4" rx="2" fill="{INK}"/>')
+    bg = f'<rect x="0" y="0" width="{W}" height="{total_h:.0f}" fill="{PAGE}"/>'
+
+    info = {}
+    for t in bdf["Type"].unique():
+        fls = sorted({int(x) for x in bdf[bdf["Type"] == t]["_fn"].dropna() if int(x) in floor_y})
+        if not fls:
+            continue
+        info[t] = {"mid": sum(floor_y[f] for f in fls) / len(fls), "lo": min(fls), "hi": max(fls)}
+    a_types = sorted(info, key=lambda t: info[t]["mid"]); k = max(1, len(a_types))
+    y_top, y_bot, LX = PAD_TOP + CROWN_H + 8, tower_bottom - 8, 192
+    ann = []
+    for i, t in enumerate(a_types):
+        slot = y_top + (i + 0.5) * (y_bot - y_top) / k
+        inf = info[t]
+        lvl = f"LEVEL {inf['lo']}" if inf["lo"] == inf["hi"] else f"LEVEL {inf['lo']}–{inf['hi']}"
+        ann.append(f'<text x="{LX}" y="{slot-3:.0f}" text-anchor="end" font-size="10.5" font-weight="bold" '
+                   f'fill="{INK}" font-family="Calibri,Arial">{_esc(t.upper())}</text>')
+        ann.append(f'<text x="{LX}" y="{slot+9:.0f}" text-anchor="end" font-size="9" fill="{SUB}" '
+                   f'font-family="Calibri,Arial">{lvl}</text>')
+        ann.append(f'<polyline points="{LX+8},{slot:.0f} {(LX+TX)/2:.0f},{slot:.0f} {TX:.0f},{inf["mid"]:.0f}" '
+                   f'fill="none" stroke="{INK}" stroke-width="0.8"/>')
+        ann.append(f'<circle cx="{TX:.0f}" cy="{inf["mid"]:.0f}" r="3.2" fill="#FBF7EF" stroke="{INK}" stroke-width="0.8"/>')
+
+    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{total_h:.0f}" '
+           f'viewBox="0 0 {W} {total_h:.0f}">{defs}{bg}{crown}{"".join(body)}{"".join(ann)}{base}</svg>')
+
+    def _stat(t):
+        gg = bdf[bdf["Type"] == t]; ta = float(gg["Total_sqft"].sum())
+        return {"n": len(gg), "av": int((gg["Status"] == "Available").sum()),
+                "so": int((gg["Status"] == "Sold").sum()), "val": float(gg["Price"].sum()),
+                "psf": (float(gg["Price"].sum()) / ta) if ta else 0.0}
+    present = [t for t in BROCHURE_COLORS if t in set(bdf["Type"])]
+    present += [t for t in sorted(bdf["Type"].unique()) if t not in present]
+    TU = len(df); AV = int((df["Status"] == "Available").sum()); SO = TU - AV
+    VAL = float(df["Price"].sum()); AVAL = float(df[df["Status"] == "Available"]["Price"].sum())
+    TA = float(df["Total_sqft"].sum()); PSF = VAL / TA if TA else 0.0; STp = (SO / TU * 100) if TU else 0.0
+
+    def _kpi(label, val, sub=None):
+        s = f'<div class="ks">{sub}</div>' if sub else ""
+        return f'<div class="kpi"><div class="kl">{label}</div><div class="kv">{val}</div>{s}</div>'
+    kpis = "".join([
+        _kpi("Total Units", f"{TU}"), _kpi("Available", f"{AV}", f"{(AV/TU*100):.0f}% of stock" if TU else ""),
+        _kpi("Sold", f"{SO}", f"{STp:.0f}% sold"), _kpi("Portfolio Value", aed(VAL)),
+        _kpi("Available Value", aed(AVAL)), _kpi("Avg Price/sqft", aed(PSF))])
+    rows = []
+    for t in present:
+        s = _stat(t); col = BROCHURE_COLORS.get(t, "#7d7461")
+        avpct = (s["av"] / s["n"] * 100) if s["n"] else 0
+        rows.append(
+            f'<div class="lg" data-ty="{_esc(t)}"><span class="sw" style="background:{col}"></span>'
+            f'<div class="lgm"><div class="lgt">{_esc(t)}</div>'
+            f'<div class="lgs">{s["n"]} units &middot; {s["av"]} avail &middot; {s["so"]} sold</div>'
+            f'<div class="bar"><span style="width:{avpct:.0f}%;background:{col}"></span></div></div>'
+            f'<div class="lgv">{aed(s["val"])}<div class="lgv2">{aed(s["psf"])}/sqft</div></div></div>')
+    legend_html = "".join(rows)
+
+    css = """<style>
+    *{box-sizing:border-box;}
+    .bv{display:flex;gap:14px;height:720px;background:#B4A48D;border-radius:12px;padding:12px;
+        font-family:Calibri,Arial,sans-serif;}
+    .tower{flex:0 0 860px;overflow-y:auto;border-radius:10px;}
+    .tower svg{display:block;margin:0 auto;}
+    .tower::-webkit-scrollbar,.legend::-webkit-scrollbar{width:8px;}
+    .tower::-webkit-scrollbar-thumb,.legend::-webkit-scrollbar-thumb{background:#8C7E66;border-radius:5px;}
+    .side{flex:1;min-width:230px;max-width:360px;display:flex;flex-direction:column;gap:12px;color:#33302A;}
+    .kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+    .kpi{background:#C6B9A4;border:1px solid #9C8E76;border-radius:9px;padding:9px 11px;}
+    .kl{font-size:11px;color:#6E6657;}
+    .kv{font-size:17px;font-weight:700;margin-top:2px;}
+    .ks{font-size:10px;color:#7d735f;margin-top:1px;}
+    .sh{font-size:13px;font-weight:700;color:#33302A;letter-spacing:.4px;}
+    .sh span{font-weight:400;color:#7d735f;font-size:11px;}
+    .legend{overflow-y:auto;display:flex;flex-direction:column;gap:7px;padding-right:5px;}
+    .lg{display:flex;align-items:center;gap:10px;background:#C6B9A4;border:1px solid #9C8E76;
+        border-radius:9px;padding:8px 11px;cursor:pointer;transition:border-color .12s;}
+    .lg.on{border-color:#33302A;background:#CFC2AD;}
+    .sw{width:14px;height:14px;border-radius:4px;flex:none;}
+    .lgm{flex:1;min-width:0;}
+    .lgt{font-size:13px;font-weight:600;}
+    .lgs{font-size:11px;color:#6E6657;margin:1px 0 5px;}
+    .bar{height:5px;background:#A2937B;border-radius:3px;overflow:hidden;}
+    .bar span{display:block;height:100%;border-radius:3px;}
+    .lgv{text-align:right;font-size:13px;font-weight:700;color:#5C4A28;white-space:nowrap;}
+    .lgv2{font-size:10px;color:#7d735f;font-weight:400;}
+    .u{cursor:pointer;}
+    .u.dim{opacity:.16;}
+    .u.hot rect{stroke:#33302A;stroke-width:1.8;}
+    #bvtip2{position:fixed;display:none;z-index:99999;pointer-events:none;background:#F3ECDD;
+        border:1px solid #B8A98E;border-left:4px solid #8A6D3B;border-radius:9px;padding:9px 12px;
+        color:#33302A;font:12px/1.55 Calibri,Arial;box-shadow:0 8px 22px rgba(60,50,30,.35);max-width:300px;}
+    #bvtip2 .h{font-size:13px;font-weight:700;margin-bottom:3px;}
+    #bvtip2 .p{color:#5C4A28;font-weight:700;margin-top:4px;}
+    #bvtip2 .a{color:#6E6657;margin-top:3px;font-size:11px;}
+    </style>"""
+    dyn = (f'<div class="bv"><div class="tower">{svg}</div>'
+           f'<div class="side"><div class="kpis">{kpis}</div>'
+           f'<div class="sh">By Typology <span>&nbsp;live counts &amp; value</span></div>'
+           f'<div class="legend">{legend_html}</div></div></div><div id="bvtip2"></div>')
+    js = """<script>
+    (function(){
+      var tip=document.getElementById('bvtip2'), tw=document.querySelector('.tower');
+      var units=Array.prototype.slice.call(document.querySelectorAll('.u'));
+      var rows=Array.prototype.slice.call(document.querySelectorAll('.lg'));
+      var focus=null;
+      function applyFocus(){
+        units.forEach(function(el){ el.classList.remove('hot','dim');
+          if(focus){ el.classList.add(el.dataset.ty===focus?'hot':'dim'); } });
+        rows.forEach(function(r){ r.classList.toggle('on', !!focus && r.dataset.ty===focus); });
+      }
+      function setFocus(t){ focus=(t===focus)?null:t; applyFocus(); }
+      function move(e){
+        var el=e.target.closest('.u');
+        if(!el){tip.style.display='none';return;}
+        var d=el.dataset, sc=(d.st==='Sold')?'#B5532F':'#3E7A4E';
+        tip.style.borderLeftColor=d.c;
+        tip.innerHTML='<div class="h">'+d.u+' &middot; '+d.ty+'</div>'+
+          '<div>Floor '+d.fl+' &middot; <b style="color:'+sc+'">'+d.st+'</b></div>'+
+          '<div class="p">'+d.pr+' <span style="font-weight:400;color:#6E6657">('+d.ps+'/sqft)</span></div>'+
+          '<div class="a">Internal '+d.ai+' &middot; External '+d.ae+' &middot; Total '+d.at+' sqft</div>';
+        tip.style.display='block';
+        var x=e.clientX+16, y=e.clientY+16, tw2=tip.offsetWidth, th=tip.offsetHeight;
+        if(x+tw2>window.innerWidth-8)  x=e.clientX-tw2-16;
+        if(y+th>window.innerHeight-8)  y=e.clientY-th-16;
+        tip.style.left=x+'px'; tip.style.top=y+'px';
+      }
+      if(tw){ tw.addEventListener('mousemove',move);
+              tw.addEventListener('mouseleave',function(){tip.style.display='none';});
+              tw.addEventListener('click',function(e){ var el=e.target.closest('.u'); setFocus(el?el.dataset.ty:null); }); }
+      rows.forEach(function(r){ r.addEventListener('click',function(){ setFocus(r.dataset.ty); }); });
+    })();
+    </script>"""
+    sig = f"{len(df)}|{int(df['Price'].sum())}|{int((df['Status']=='Sold').sum())}|plan"
+    components.html(f"<!--bvp:{_esc(sig)}-->" + css + dyn + js, height=748, scrolling=False)
+
+
 if tab6 is not None:                 # only when enabled (hidden on the published app)
     with tab6:
         render_building_view(enhanced=False)
 if tab6b is not None:
     with tab6b:
         render_building_view(enhanced=True)
+if tab6c is not None:
+    with tab6c:
+        render_building_view_brochure()
 
 
 # ── Tab 3: Floor Manager ───────────────────────────────────────────────────────
