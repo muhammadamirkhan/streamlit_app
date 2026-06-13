@@ -161,8 +161,17 @@ SQFT_PER_SQM = 10.7639   # 1 m² = 10.7639 ft²  →  sqm = sqft / 10.7639
 
 # ── Excel-style table renderer (first column left, numeric columns centered) ───
 
+TOTAL_LABELS = {"total", "grand total", "totals"}
+
+def _is_total_row(first_cell):
+    return str(first_cell).strip().lower() in TOTAL_LABELS
+
 def excel_table(df: pd.DataFrame):
-    sty = (df.style.hide(axis="index").set_table_styles([
+    def _hl_total(row):
+        if _is_total_row(row.iloc[0]):
+            return [f"font-weight:bold;background-color:{BLUE_MED};color:#FFFFFF;" for _ in row]
+        return ["" for _ in row]
+    sty = (df.style.hide(axis="index").apply(_hl_total, axis=1).set_table_styles([
         {"selector": "", "props": "border-collapse:collapse;font-size:13px;width:100%;"
                                    "font-family:Calibri,Arial,sans-serif;"},
         {"selector": "thead th", "props": f"background-color:{BLUE_DARK};color:#FFFFFF;font-weight:bold;"
@@ -174,6 +183,63 @@ def excel_table(df: pd.DataFrame):
         {"selector": "tbody tr:nth-child(odd)",  "props": "background-color:#FFFFFF;"},
     ]))
     st.markdown(f'<div style="overflow-x:auto">{sty.to_html()}</div>', unsafe_allow_html=True)
+
+
+def df_to_styled_xlsx(df: pd.DataFrame, sheet_name="Sheet1", title=None):
+    """One formatted sheet (bold blue header, banded rows, highlighted Total row, auto widths)."""
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    sheet_name = (sheet_name or "Sheet1")[:31]
+    out = BytesIO()
+    with pd.ExcelWriter(out, engine="openpyxl") as writer:
+        startrow = 1 if title else 0
+        df.to_excel(writer, index=False, sheet_name=sheet_name, startrow=startrow)
+        ws = writer.book[sheet_name]
+        ncols = len(df.columns)
+        thin = Side(style="thin", color="BDD7EE")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        head_fill  = PatternFill("solid", fgColor="1F4E78")
+        band_fill  = PatternFill("solid", fgColor="DDEBF7")
+        total_fill = PatternFill("solid", fgColor="2E75B6")
+        center = Alignment(horizontal="center", vertical="center")
+        left   = Alignment(horizontal="left", vertical="center")
+
+        if title:
+            ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols)
+            tc = ws.cell(row=1, column=1, value=title)
+            tc.fill = head_fill; tc.font = Font(bold=True, color="FFFFFF", size=13); tc.alignment = left
+            ws.row_dimensions[1].height = 24
+
+        hrow = startrow + 1
+        for c in ws[hrow]:
+            c.fill, c.font, c.alignment, c.border = head_fill, Font(bold=True, color="FFFFFF"), center, border
+        ws.freeze_panes = ws.cell(row=hrow + 1, column=1).coordinate
+        ws.row_dimensions[hrow].height = 22
+
+        first_data = hrow + 1
+        for r in range(first_data, ws.max_row + 1):
+            is_total = _is_total_row(ws.cell(row=r, column=1).value)
+            for ci in range(1, ncols + 1):
+                cell = ws.cell(row=r, column=ci)
+                cell.border = border
+                cell.alignment = left if ci == 1 else center
+                if is_total:
+                    cell.fill = total_fill
+                    cell.font = Font(bold=True, color="FFFFFF")
+                elif (r - first_data) % 2 == 1:
+                    cell.fill = band_fill
+        for ci in range(1, ncols + 1):
+            col = get_column_letter(ci)
+            maxlen = max((len(str(ws.cell(row=rr, column=ci).value or "")) for rr in range(hrow, ws.max_row + 1)),
+                         default=12)
+            ws.column_dimensions[col].width = min(max(maxlen + 3, 12), 42)
+    return out.getvalue()
+
+
+def export_button(df: pd.DataFrame, file_name, key, title=None, label="⬇️  Export to Excel"):
+    st.download_button(label, data=df_to_styled_xlsx(df, sheet_name=(title or "Sheet1"), title=title),
+                       file_name=file_name, key=key,
+                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 def aed(x):  return f"AED {x:,.0f}"
@@ -934,6 +1000,8 @@ with tab1:
                  hide_index=True, height=460)
     st.caption(f"Showing {len(view)} of {len(df)} units · Sold units highlighted in blue · "
                f"“vs below” compares each unit to the one a floor lower in the same typology")
+    export_button(vis.reset_index(drop=True), "Unit_Register.xlsx", key="exp_reg",
+                  title="Muraba Veil Unit Register")
 
     # Inline comment editor (toggle to show/hide); edits persist to file and reload on launch
     show_editor = st.toggle("✏️ Show inline comment editor", value=False, key="show_cmt_editor")
@@ -1056,6 +1124,8 @@ with tab2:
 
     sum_show = column_picker(list(disp.columns), key="sum_cols", locked=["Typology"])
     excel_table(disp[sum_show])
+    export_button(disp[sum_show], "Muraba_Veil_Sale_Summary.xlsx", key="exp_sum",
+                  title="Muraba Veil Sale Summary")
     st.caption(f"Conversion: 1 m² = {SQFT_PER_SQM} ft²  ·  "
                "Total Sellable = Internal + full Terrace  ·  "
                "Counted Terraces = rate-adjusted terrace  ·  "
@@ -1072,6 +1142,7 @@ with tab2:
         })
         fp["Amount in AED"] = fp["Amount in AED"].apply(lambda x: f"AED {x:,.0f}")
         excel_table(fp)
+        export_button(fp, "Furniture_Pack.xlsx", key="exp_fp", title="Muraba Veil Furniture Pack")
 
 
 # ── Tab 5: Topology View (min/max/avg stats) ───────────────────────────────────
@@ -1138,6 +1209,8 @@ with tab5:
                        "Min Price","Median Price","Max Price","Avg Unit Price","Total Value (incl. Sold)"]
         topo_show = column_picker(list(tvd.columns), key="topo_cols", locked=["Type"])
         excel_table(tvd[topo_show])
+        export_button(tvd[topo_show], "Topology_View.xlsx", key="exp_topo",
+                      title="Muraba Veil Topology Summary")
 
 
 # ── Tab 3: Floor Manager ───────────────────────────────────────────────────────
@@ -1263,7 +1336,10 @@ with tab3:
                              "Escalation (AED/sqft)": f"{params['escalation'].get(t, 0):,.0f}",
                              "Terrace %": f"{trv:.0f}%",
                              "Base /sqft": base_txt})
-        excel_table(pd.DataFrame(ref_rows))
+        _ref_df = pd.DataFrame(ref_rows)
+        excel_table(_ref_df)
+        export_button(_ref_df, "Escalation_Terrace_Settings.xlsx", key="exp_settings",
+                      title="Escalation & Terrace Settings")
 
     with st.expander("📐  Area Settings (Internal & External sqft per topology — cascades to all units of that type)", expanded=False):
         st.caption("Change a topology's area and every unit of that type updates — sellable area, price and all stats recompute.")
