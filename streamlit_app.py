@@ -1393,31 +1393,13 @@ with tab3:
                    "is configured on its own** below. Units are priced from the escalation ladder for "
                    "their floor (built bottom-up). Blocked / existing floors are skipped.")
         existing = [fl["floor"] for fl in floors]
-        top = max(existing) if existing else 58
-        # All non-blocked floors are selectable as endpoints (1 … top+10); MEP/Majlis floors are
-        # excluded. Existing floors in the chosen range are simply skipped when adding.
-        cand = [f for f in range(1, top + 11) if f not in blocked]
-        existing_units = {fl["floor"]: ", ".join(
-            f"{u['unit_no']} ({TYPE_ABBR.get(u['type'], u['type'])})" for u in fl["units"])
-            for fl in floors}
         DEFAULT_ADD_MIX = [{"type": "3 Bedroom", "qty": 1}, {"type": "2 Bedroom", "qty": 2}]
-        def _add_label(f):
-            if f in existing_units:                                # existing floor → its real units
-                return f"Floor {ordinal(f)}  —  {existing_units[f]}"
-            ordered = []                                           # new floor → projected default mix
-            for r in DEFAULT_ADD_MIX:
-                ordered += [r["type"]] * r["qty"]
-            ordered.sort(key=lambda t: (t != "3 Bedroom", t))     # 3BR first → ends in 01
-            items = sorted((f * 100 + i + 1, t) for i, t in enumerate(ordered))
-            parts = ", ".join(f"{no} ({TYPE_ABBR.get(t, t)})" for no, t in items)
-            return f"Floor {ordinal(f)}  —  {parts}"
-        # default the From box to the first addable floor (not an existing/blocked one)
-        first_add = next((f for f in cand if f not in existing and f not in blocked), cand[0])
+        # New floors don't exist yet → type the floor number(s). Set From = To for a single floor.
         ac1, ac2 = st.columns(2)
-        nf_from = ac1.selectbox("From floor", cand, index=cand.index(first_add),
-                                format_func=_add_label, key="newfl_from")
-        to_opts = [f for f in cand if f >= nf_from]
-        nf_to = ac2.selectbox("To floor", to_opts, index=0, format_func=_add_label, key="newfl_to")
+        nf_from = ac1.number_input("From floor", min_value=1, max_value=999,
+                                   value=(max(existing)+1 if existing else 59), step=1, key="newfl_from")
+        nf_to = ac2.number_input("To floor", min_value=1, max_value=999,
+                                 value=int(nf_from), step=1, key="newfl_to")
         lo, hi = int(min(nf_from, nf_to)), int(max(nf_from, nf_to))
         rng = list(range(lo, hi + 1))
         valid       = [f for f in rng if f not in blocked and f not in existing]
