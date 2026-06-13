@@ -1394,14 +1394,19 @@ with tab3:
                    "their floor (built bottom-up). Blocked / existing floors are skipped.")
         existing = [fl["floor"] for fl in floors]
         top = max(existing) if existing else 58
-        # candidate (addable) floors: not already present, not blocked — up to a bit above the top
-        cand = [f for f in range(1, top + 11) if f not in existing and f not in blocked]
-        if not cand:
-            st.info("No addable floors available.")
-            cand = [top + 1]
+        # ALL floors are selectable as endpoints (1 … top+10); existing/blocked in the chosen
+        # range are simply skipped when adding.
+        cand = list(range(1, top + 11))
+        existing_units = {fl["floor"]: ", ".join(
+            f"{u['unit_no']} ({TYPE_ABBR.get(u['type'], u['type'])})" for u in fl["units"])
+            for fl in floors}
         DEFAULT_ADD_MIX = [{"type": "3 Bedroom", "qty": 1}, {"type": "2 Bedroom", "qty": 2}]
         def _add_label(f):
-            # preview the unit numbers/types this floor would get from the default mix
+            if f in blocked:
+                return f"Floor {ordinal(f)} — 🔒 {blocked[f]}"
+            if f in existing_units:
+                return f"Floor {ordinal(f)} — {existing_units[f]} (exists)"
+            # new/addable → preview the unit numbers/types from the default mix
             ordered = []
             for r in DEFAULT_ADD_MIX:
                 ordered += [r["type"]] * r["qty"]
@@ -1409,8 +1414,11 @@ with tab3:
             items = sorted((f * 100 + i + 1, t) for i, t in enumerate(ordered))
             parts = ", ".join(f"{no} ({TYPE_ABBR.get(t, t)})" for no, t in items)
             return f"Floor {ordinal(f)} — {parts}"
+        # default the From box to the first addable floor (not an existing/blocked one)
+        first_add = next((f for f in cand if f not in existing and f not in blocked), cand[0])
         ac1, ac2 = st.columns(2)
-        nf_from = ac1.selectbox("From floor", cand, index=0, format_func=_add_label, key="newfl_from")
+        nf_from = ac1.selectbox("From floor", cand, index=cand.index(first_add),
+                                format_func=_add_label, key="newfl_from")
         to_opts = [f for f in cand if f >= nf_from]
         nf_to = ac2.selectbox("To floor", to_opts, index=0, format_func=_add_label, key="newfl_to")
         lo, hi = int(min(nf_from, nf_to)), int(max(nf_from, nf_to))
