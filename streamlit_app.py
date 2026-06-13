@@ -1273,15 +1273,16 @@ with tab6:
         '<rect width="12" height="12" fill="#162844"/><rect width="6" height="12" fill="#21385c"/></pattern>'
         '</defs>')
 
-    body, y = [], PAD_TOP + CROWN_H
+    body, y, floor_y = [], PAD_TOP + CROWN_H, {}
     for f in range(max_floor, min_floor - 1, -1):
         g = units_by_floor.get(f)
         is_blocked = f in blocked
         types = list(g["Type"]) if g is not None else []
         tall = g is not None and any(("Pool" in t or "Duplex" in t) for t in types)
         h = H_TALL if tall else H_STD
+        floor_y[f] = y + h / 2
         body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="3" fill="#0b1830"/>')
-        body.append(f'<text x="{TX-12:.0f}" y="{y+h/2+3.5:.0f}" text-anchor="end" font-size="10" '
+        body.append(f'<text x="{TX+TW+8:.0f}" y="{y+h/2+3.5:.0f}" text-anchor="start" font-size="10" '
                     f'fill="#8aa0bd" font-family="Calibri,Arial">{f}</text>')
         if g is not None and len(g):
             n = len(g); cw = (TW - (n - 1) * MULL) / n
@@ -1289,8 +1290,11 @@ with tab6:
                 xi = TX + i * (cw + MULL)
                 col = BUILDING_COLORS.get(u["Type"], "#7f8c9b")
                 sold = u["Status"] == "Sold"
-                tip = _esc(f"Unit {u['Unit']} · {u['Type']} · {u['Status']} · "
-                           f"AED {u['Price_sqft']:,.0f}/sqft · {aed(u['Price'])}")
+                tip = _esc(
+                    f"Unit {u['Unit']}  ·  {u['Type']}  ·  Floor {u['Floor']}  ·  {u['Status']}\n"
+                    f"{aed(u['Price'])}   ({u['Price_sqft']:,.0f}/sqft)\n"
+                    f"Internal {u['Internal_sqft']:,.0f} sqft  ·  External {u['External_sqft']:,.0f} sqft  "
+                    f"·  Total {u['Total_sqft']:,.0f} sqft")
                 if sold:
                     body.append(f'<g><title>{tip}</title>'
                                 f'<rect x="{xi:.1f}" y="{y+1:.0f}" width="{cw:.1f}" height="{h-2}" rx="2.5" '
@@ -1331,22 +1335,52 @@ with tab6:
     bg = (f'<rect x="0" y="0" width="{W}" height="{total_h:.0f}" fill="url(#sky)"/>'
           f'<ellipse cx="{cx:.0f}" cy="{total_h*0.4:.0f}" rx="{W*0.5:.0f}" ry="{total_h*0.45:.0f}" fill="url(#glow)"/>')
 
+    # ── left-side level annotations with leader lines (brochure style) ──
+    info = {}
+    for t in bdf["Type"].unique():
+        fls = sorted({int(x) for x in bdf[bdf["Type"] == t]["_fn"].dropna() if int(x) in floor_y})
+        if not fls:
+            continue
+        info[t] = {"mid": sum(floor_y[f] for f in fls) / len(fls),
+                   "lo": min(fls), "hi": max(fls), "n": int((bdf["Type"] == t).sum())}
+    a_types = sorted(info, key=lambda t: info[t]["mid"])           # top floor first
+    k = max(1, len(a_types))
+    y_top, y_bot, LX = PAD_TOP + CROWN_H + 8, tower_bottom - 8, 200
+    ann = []
+    for i, t in enumerate(a_types):
+        slot = y_top + (i + 0.5) * (y_bot - y_top) / k
+        inf = info[t]
+        lvl = f"LEVEL {inf['lo']}" if inf["lo"] == inf["hi"] else f"LEVEL {inf['lo']}–{inf['hi']}"
+        ann.append(f'<text x="{LX}" y="{slot-7:.0f}" text-anchor="end" font-size="11" font-weight="bold" '
+                   f'fill="#eef3f9" font-family="Calibri,Arial">{_esc(t.upper())}</text>')
+        ann.append(f'<text x="{LX}" y="{slot+5:.0f}" text-anchor="end" font-size="9.5" fill="#9fb3d0" '
+                   f'font-family="Calibri,Arial">{lvl}</text>')
+        ann.append(f'<text x="{LX}" y="{slot+17:.0f}" text-anchor="end" font-size="9.5" fill="#9fb3d0" '
+                   f'font-family="Calibri,Arial">{inf["n"]} UNITS</text>')
+        ann.append(f'<polyline points="{LX+8},{slot:.0f} {(LX+TX)/2:.0f},{slot:.0f} {TX:.0f},{inf["mid"]:.0f}" '
+                   f'fill="none" stroke="#6f86a6" stroke-width="1"/>')
+        ann.append(f'<circle cx="{TX:.0f}" cy="{inf["mid"]:.0f}" r="3" fill="#eef3f9"/>')
+
+    # ── legend, top-right ──
+    leg = []
+    lx, ry = 700, PAD_TOP + 18
+    leg.append(f'<text x="{lx}" y="{ry-8}" font-size="10" font-weight="bold" letter-spacing="1" '
+               f'fill="#cdd6e2" font-family="Calibri,Arial">TYPOLOGY</text>')
+    for t in BUILDING_COLORS:
+        if t in info:
+            leg.append(f'<rect x="{lx}" y="{ry-1}" width="11" height="11" rx="2" fill="{BUILDING_COLORS[t]}"/>')
+            leg.append(f'<text x="{lx+17}" y="{ry+8}" font-size="10" fill="#cdd6e2" '
+                       f'font-family="Calibri,Arial">{_esc(t)}</text>')
+            ry += 17
+    leg.append(f'<rect x="{lx}" y="{ry-1}" width="11" height="11" rx="2" fill="none" stroke="#8aa0bd"/>')
+    leg.append(f'<text x="{lx+17}" y="{ry+8}" font-size="10" fill="#cdd6e2" font-family="Calibri,Arial">Sold (dim)</text>')
+
     svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{total_h:.0f}" '
-           f'viewBox="0 0 {W} {total_h:.0f}">{defs}{bg}{crown}{"".join(body)}{base}</svg>')
+           f'viewBox="0 0 {W} {total_h:.0f}">{defs}{bg}{crown}{"".join(body)}'
+           f'{"".join(ann)}{"".join(leg)}{base}</svg>')
 
-    legend_items = [
-        f'<span style="margin:0 9px;white-space:nowrap;"><span style="display:inline-block;width:12px;height:12px;'
-        f'border-radius:3px;background:{BUILDING_COLORS[t]};vertical-align:middle;margin-right:5px;"></span>{_esc(t)}</span>'
-        for t in BUILDING_COLORS if t in set(df["Type"])]
-    legend_items.append('<span style="margin:0 9px;white-space:nowrap;"><span style="display:inline-block;width:12px;'
-                        'height:12px;border-radius:3px;border:1.5px solid #8aa0bd;vertical-align:middle;margin-right:5px;">'
-                        '</span>Sold (outlined / dim)</span>')
-    legend = (f'<div style="text-align:center;color:#cdd6e2;font-family:Calibri,Arial;font-size:12px;'
-              f'padding:10px 6px 4px;line-height:1.9;">{"".join(legend_items)}</div>')
-
-    comp = (f'<div style="background:#05080F;border-radius:12px;padding:8px 0 4px;text-align:center;">'
-            f'{svg}{legend}</div>')
-    components.html(comp, height=int(total_h) + 80, scrolling=True)
+    comp = f'<div style="background:#05080F;border-radius:12px;padding:8px 0;text-align:center;">{svg}</div>'
+    components.html(comp, height=int(total_h) + 24, scrolling=True)
 
 
 # ── Tab 3: Floor Manager ───────────────────────────────────────────────────────
