@@ -1393,11 +1393,19 @@ with tab3:
                    "is configured on its own** below. Units are priced from the escalation ladder for "
                    "their floor (built bottom-up). Blocked / existing floors are skipped.")
         existing = [fl["floor"] for fl in floors]
+        top = max(existing) if existing else 58
+        # candidate (addable) floors: not already present, not blocked — up to a bit above the top
+        cand = [f for f in range(1, top + 11) if f not in existing and f not in blocked]
+        if not cand:
+            st.info("No addable floors available.")
+            cand = [top + 1]
+        def _add_label(f):
+            tag = f" — {blocked[f]}" if f in blocked else ""
+            return f"Floor {ordinal(f)}{tag}"
         ac1, ac2 = st.columns(2)
-        nf_from = ac1.number_input("From floor", min_value=1, max_value=999,
-                                   value=(max(existing)+1 if existing else 59), step=1, key="newfl_from")
-        nf_to = ac2.number_input("To floor", min_value=1, max_value=999,
-                                 value=int(nf_from), step=1, key="newfl_to")
+        nf_from = ac1.selectbox("From floor", cand, index=0, format_func=_add_label, key="newfl_from")
+        to_opts = [f for f in cand if f >= nf_from]
+        nf_to = ac2.selectbox("To floor", to_opts, index=0, format_func=_add_label, key="newfl_to")
         lo, hi = int(min(nf_from, nf_to)), int(max(nf_from, nf_to))
         rng = list(range(lo, hi + 1))
         valid       = [f for f in rng if f not in blocked and f not in existing]
@@ -1484,7 +1492,8 @@ with tab3:
         if sel != "— select —":
             to_opts = [f for f in floor_nums if f >= sel]
             sel_to = ec2.selectbox("To floor", to_opts, index=0,
-                                   format_func=lambda x: f"Floor {ordinal(x)}", key="edit_floor_to")
+                                   format_func=lambda x: _fl_labels.get(x, f"Floor {ordinal(x)}"),
+                                   key="edit_floor_to")
 
         if sel != "— select —":
             lo, hi = int(sel), int(sel_to)
@@ -1649,24 +1658,30 @@ with tab4:
         cur_psf   = float(row["Price_sqft"])                    # price per sellable sqft (stored rate)
         cur_total = cur_psf * sell
 
-        e1, e2 = st.columns(2)
-        ns = e1.selectbox("Status", STATUS_OPTIONS,
+        # Two linked, both-editable fields: edit either one and the other updates.
+        psf_key, tot_key = f"u_psf_{sel_uid}", f"u_tot_{sel_uid}"
+        if psf_key not in st.session_state:
+            st.session_state[psf_key] = float(round(cur_psf, 2))
+            st.session_state[tot_key] = float(round(cur_total, 0))
+
+        def _sync_total():
+            st.session_state[tot_key] = st.session_state[psf_key] * sell
+
+        def _sync_psf():
+            st.session_state[psf_key] = (st.session_state[tot_key] / sell) if sell else 0.0
+
+        ns = st.selectbox("Status", STATUS_OPTIONS,
                           index=STATUS_OPTIONS.index(row["Status"]) if row["Status"] in STATUS_OPTIONS else 0)
-        mode = e2.radio("Set price by", ["Price / sellable sqft", "Total unit price"],
-                        horizontal=True, key="edit_price_mode")
+        e1, e2 = st.columns(2)
+        e1.number_input("Price / sellable sqft (AED)", min_value=0.0, step=50.0,
+                        key=psf_key, on_change=_sync_total)
+        e2.number_input("Total unit price (AED)", min_value=0.0, step=10000.0,
+                        key=tot_key, on_change=_sync_psf)
 
-        if mode == "Total unit price":
-            new_total = st.number_input("Unit Price (AED, total)", min_value=0.0,
-                                        value=float(round(cur_total, 0)), step=10000.0, key="edit_total")
-            new_psf = (new_total / sell) if sell else 0.0
-        else:
-            new_psf = st.number_input("Price / sellable area (AED/sqft)", min_value=0.0,
-                                      value=float(round(cur_psf, 2)), step=50.0, key="edit_psf")
-            new_total = new_psf * sell
-
+        new_psf   = float(st.session_state[psf_key])
+        new_total = float(st.session_state[tot_key])
         psf_total = (new_total / tot) if tot else 0.0
-        st.caption(f"→ **Price / sellable sqft:** AED {new_psf:,.0f}  ·  "
-                   f"**Unit Price (total):** AED {new_total:,.0f}  ·  "
+        st.caption(f"Edit either field — the other updates automatically.  "
                    f"**Price / total sqft:** AED {psf_total:,.0f}  "
                    f"(sellable {sell:,.0f} sqft · total {tot:,.0f} sqft)")
 
