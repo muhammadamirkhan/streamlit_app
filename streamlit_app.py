@@ -1399,9 +1399,16 @@ with tab3:
         if not cand:
             st.info("No addable floors available.")
             cand = [top + 1]
+        DEFAULT_ADD_MIX = [{"type": "3 Bedroom", "qty": 1}, {"type": "2 Bedroom", "qty": 2}]
         def _add_label(f):
-            tag = f" — {blocked[f]}" if f in blocked else ""
-            return f"Floor {ordinal(f)}{tag}"
+            # preview the unit numbers/types this floor would get from the default mix
+            ordered = []
+            for r in DEFAULT_ADD_MIX:
+                ordered += [r["type"]] * r["qty"]
+            ordered.sort(key=lambda t: (t != "3 Bedroom", t))     # 3BR first → ends in 01
+            items = sorted((f * 100 + i + 1, t) for i, t in enumerate(ordered))
+            parts = ", ".join(f"{no} ({TYPE_ABBR.get(t, t)})" for no, t in items)
+            return f"Floor {ordinal(f)} — {parts}"
         ac1, ac2 = st.columns(2)
         nf_from = ac1.selectbox("From floor", cand, index=0, format_func=_add_label, key="newfl_from")
         to_opts = [f for f in cand if f >= nf_from]
@@ -1419,7 +1426,7 @@ with tab3:
         if not valid:
             st.error("No valid floors in this range (all are blocked or already exist).")
         else:
-            default_rows = [{"type": "3 Bedroom", "qty": 1}, {"type": "2 Bedroom", "qty": 2}]
+            default_rows = [dict(r) for r in DEFAULT_ADD_MIX]
             floor_mixes = {}
             if len(valid) == 1:
                 f = valid[0]
@@ -1648,7 +1655,9 @@ with tab4:
         return f"Unit {r['Unit']} - {r['Type']} (Floor {r['Floor']}) - {r['Status']}"
 
     st.subheader("Edit a Unit")
-    sel_uid = st.selectbox("Select unit", ["— select —"] + df["uid"].tolist(),
+    st.caption("Only **Available** units are editable — Sold units are protected.")
+    avail_uids = df[df["Status"] == "Available"]["uid"].tolist()
+    sel_uid = st.selectbox("Select unit", ["— select —"] + avail_uids,
                            format_func=lambda x: uid_label(x, df) if x != "— select —" else x, key="edit_sel")
     if sel_uid != "— select —":
         idx = st.session_state.units[st.session_state.units["uid"] == sel_uid].index[0]
