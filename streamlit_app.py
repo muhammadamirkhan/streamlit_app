@@ -1254,8 +1254,9 @@ def _esc(s):
 def render_building_view():
     st.subheader("Building View — Muraba Veil")
     st.caption("A live elevation of the tower beside a typology dashboard. Lit blocks are available, "
-               "dim outlined blocks are sold; hover any unit for instant details. Scroll the tower on the "
-               "left — the KPIs and typology panel on the right track counts, availability and value live.")
+               "dim outlined blocks are sold; hover for instant details. **Click a unit (or a typology in "
+               "the panel) to highlight all units of that type** — click again to clear. Scroll the tower; "
+               "the KPIs and typology panel track counts, availability and value live.")
 
     bdf = df.copy()
     bdf["_fn"] = pd.to_numeric(bdf["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True), errors="coerce")
@@ -1265,7 +1266,7 @@ def render_building_view():
     max_floor = max(floor_nums + list(blocked) + [1]); min_floor = 1
 
     # ── geometry (tower SVG) ──
-    W, TW, TX = 660, 360, 200
+    W, TW, TX = 820, 520, 200
     cx = TX + TW / 2
     H_STD, H_TALL, GAP, MULL = 20, 34, 3, 3
     PAD_TOP, CROWN_H, BASE_H, PAD_BOT = 18, 50, 32, 18
@@ -1400,7 +1401,7 @@ def render_building_view():
         s = _stat(t); col = BUILDING_COLORS.get(t, "#7f8c9b")
         avpct = (s["av"] / s["n"] * 100) if s["n"] else 0
         rows.append(
-            f'<div class="lg"><span class="sw" style="background:{col}"></span>'
+            f'<div class="lg" data-ty="{_esc(t)}"><span class="sw" style="background:{col}"></span>'
             f'<div class="lgm"><div class="lgt">{_esc(t)}</div>'
             f'<div class="lgs">{s["n"]} units &middot; {s["av"]} avail &middot; {s["so"]} sold</div>'
             f'<div class="bar"><span style="width:{avpct:.0f}%;background:{col}"></span></div></div>'
@@ -1411,12 +1412,12 @@ def render_building_view():
     *{box-sizing:border-box;}
     .bv{display:flex;gap:14px;height:720px;background:#05080F;border-radius:12px;padding:12px;
         font-family:Calibri,Arial,sans-serif;}
-    .tower{flex:0 0 700px;overflow-y:auto;border-radius:10px;}
+    .tower{flex:0 0 860px;overflow-y:auto;border-radius:10px;}
     .tower svg{display:block;margin:0 auto;}
     .tower::-webkit-scrollbar,.legend::-webkit-scrollbar{width:8px;}
     .tower::-webkit-scrollbar-thumb,.legend::-webkit-scrollbar-thumb{background:#24395c;border-radius:5px;}
-    .side{flex:1;min-width:260px;display:flex;flex-direction:column;gap:12px;color:#e6edf6;}
-    .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+    .side{flex:1;min-width:230px;max-width:360px;display:flex;flex-direction:column;gap:12px;color:#e6edf6;}
+    .kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
     .kpi{background:#0d1b30;border:1px solid #1e3357;border-radius:9px;padding:9px 11px;}
     .kl{font-size:11px;color:#9fb3d0;}
     .kv{font-size:17px;font-weight:700;margin-top:2px;}
@@ -1434,7 +1435,11 @@ def render_building_view():
     .bar span{display:block;height:100%;border-radius:3px;}
     .lgv{text-align:right;font-size:13px;font-weight:700;color:#F0CE78;white-space:nowrap;}
     .lgv2{font-size:10px;color:#7f97b5;font-weight:400;}
+    .lg{cursor:pointer;transition:border-color .12s;}
+    .lg.on{border-color:#F0CE78;background:#13233d;}
     .u{cursor:pointer;}
+    .u.dim{opacity:.14;}
+    .u.hot rect{stroke:#ffffff;stroke-width:1.6;}
     #bvtip{position:fixed;display:none;z-index:99999;pointer-events:none;background:#0d1b30;
         border:1px solid #2a3f5f;border-left:4px solid #888;border-radius:9px;padding:9px 12px;
         color:#e6edf6;font:12px/1.55 Calibri,Arial;box-shadow:0 8px 28px rgba(0,0,0,.55);max-width:300px;}
@@ -1449,6 +1454,17 @@ def render_building_view():
     js = """<script>
     (function(){
       var tip=document.getElementById('bvtip'), tw=document.querySelector('.tower');
+      var units=Array.prototype.slice.call(document.querySelectorAll('.u'));
+      var rows=Array.prototype.slice.call(document.querySelectorAll('.lg'));
+      var focus=null;
+      function applyFocus(){
+        units.forEach(function(el){
+          el.classList.remove('hot','dim');
+          if(focus){ el.classList.add(el.dataset.ty===focus?'hot':'dim'); }
+        });
+        rows.forEach(function(r){ r.classList.toggle('on', !!focus && r.dataset.ty===focus); });
+      }
+      function setFocus(t){ focus=(t===focus)?null:t; applyFocus(); }
       function move(e){
         var el=e.target.closest('.u');
         if(!el){tip.style.display='none';return;}
@@ -1464,8 +1480,12 @@ def render_building_view():
         if(y+th>window.innerHeight-8)  y=e.clientY-th-16;
         tip.style.left=x+'px'; tip.style.top=y+'px';
       }
-      if(tw){ tw.addEventListener('mousemove',move);
-              tw.addEventListener('mouseleave',function(){tip.style.display='none';}); }
+      if(tw){
+        tw.addEventListener('mousemove',move);
+        tw.addEventListener('mouseleave',function(){tip.style.display='none';});
+        tw.addEventListener('click',function(e){ var el=e.target.closest('.u'); setFocus(el?el.dataset.ty:null); });
+      }
+      rows.forEach(function(r){ r.addEventListener('click',function(){ setFocus(r.dataset.ty); }); });
     })();
     </script>"""
     components.html(css + dyn + js, height=748, scrolling=False)
