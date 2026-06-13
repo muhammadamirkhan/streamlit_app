@@ -933,9 +933,22 @@ g6.metric("Portfolio Value", aed(df["Price"].sum()))
 
 st.divider()
 
-tab1, tab2, tab5, tab6, tab3, tab4 = st.tabs(
-    ["Unit Register", "Summary by Type", "Topology View", "Building View",
-     "Floor Manager", "Edit / Remove Units"])
+# Building View is hidden on the published app; enable locally via secrets/env
+# (set `show_building_view = true` in .streamlit/secrets.toml, or SHOW_BUILDING_VIEW=1).
+try:
+    _bv_secret = st.secrets.get("show_building_view", "")
+except Exception:
+    _bv_secret = ""
+SHOW_BV = str(_bv_secret or os.environ.get("SHOW_BUILDING_VIEW", "")).strip().lower() in ("1", "true", "yes", "on")
+
+_labels = ["Unit Register", "Summary by Type", "Topology View"]
+if SHOW_BV:
+    _labels.append("Building View")
+_labels += ["Floor Manager", "Edit / Remove Units"]
+_tmap = dict(zip(_labels, st.tabs(_labels)))
+tab1 = _tmap["Unit Register"]; tab2 = _tmap["Summary by Type"]; tab5 = _tmap["Topology View"]
+tab3 = _tmap["Floor Manager"]; tab4 = _tmap["Edit / Remove Units"]
+tab6 = _tmap.get("Building View")
 
 
 # ── Tab 1: Unit Register ───────────────────────────────────────────────────────
@@ -1232,7 +1245,7 @@ BUILDING_COLORS = {
 def _esc(s):
     return (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;"))
 
-with tab6:
+def render_building_view():
     st.subheader("Building View — Muraba Veil")
     st.caption("The tower at a glance — every floor, every unit. Lit (solid) blocks are **available**, "
                "dimmed outlined blocks are **sold**. Pool & Duplex levels are double-height; gold marks "
@@ -1381,6 +1394,11 @@ with tab6:
 
     comp = f'<div style="background:#05080F;border-radius:12px;padding:8px 0;text-align:center;">{svg}</div>'
     components.html(comp, height=int(total_h) + 24, scrolling=True)
+
+
+if tab6 is not None:                 # only when enabled (hidden on the published app)
+    with tab6:
+        render_building_view()
 
 
 # ── Tab 3: Floor Manager ───────────────────────────────────────────────────────
