@@ -1394,16 +1394,14 @@ with tab3:
                    "their floor (built bottom-up). Blocked / existing floors are skipped.")
         existing = [fl["floor"] for fl in floors]
         top = max(existing) if existing else 58
-        # ALL floors are selectable as endpoints (1 … top+10); existing/blocked in the chosen
-        # range are simply skipped when adding.
-        cand = list(range(1, top + 11))
+        # All non-blocked floors are selectable as endpoints (1 … top+10); MEP/Majlis floors are
+        # excluded. Existing floors in the chosen range are simply skipped when adding.
+        cand = [f for f in range(1, top + 11) if f not in blocked]
         existing_units = {fl["floor"]: ", ".join(
             f"{u['unit_no']} ({TYPE_ABBR.get(u['type'], u['type'])})" for u in fl["units"])
             for fl in floors}
         DEFAULT_ADD_MIX = [{"type": "3 Bedroom", "qty": 1}, {"type": "2 Bedroom", "qty": 2}]
         def _add_label(f):
-            if f in blocked:
-                return f"Floor {ordinal(f)} — 🔒 {blocked[f]}"
             if f in existing_units:
                 return f"Floor {ordinal(f)} — {existing_units[f]} (exists)"
             # new/addable → preview the unit numbers/types from the default mix
