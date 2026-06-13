@@ -192,11 +192,12 @@ def area_fmt(x, sqm=False):
     return f"{v:,.0f}"
 
 
-def avail_adjusted_median_psf(sub):
+def avail_adjusted_median(sub, col):
     """Median over ALL rows of a typology (Sold + Available), sorted by floor: take the
     median row position (the 52nd of 104, etc.). The value must come from an Available unit —
     if the median row is Sold, step to the row above (lower floor) until an Available one is
-    found; if none above, step down. Returns that row's Price ÷ Total Area."""
+    found; if none above, step down. Returns that median row's value in `col` (e.g. PSF_total
+    for Median /sqft, or Price for Median Price)."""
     if sub is None or sub.empty:
         return float("nan")
     s = sub.copy()
@@ -206,7 +207,7 @@ def avail_adjusted_median_psf(sub):
     n = len(s)
     mid = (n + 1) // 2 - 1                         # 0-based index of the median row
     if not (s["Status"] == "Available").any():     # fully-sold typology → use the median row as-is
-        return float(s.loc[mid, "PSF_total"])
+        return float(s.loc[mid, col])
     i = mid
     while i >= 0 and s.loc[i, "Status"] != "Available":
         i -= 1                                      # step up to an Available row
@@ -214,7 +215,7 @@ def avail_adjusted_median_psf(sub):
         i = mid
         while i < n and s.loc[i, "Status"] != "Available":
             i += 1
-    return float(s.loc[i, "PSF_total"]) if 0 <= i < n else float("nan")
+    return float(s.loc[i, col]) if 0 <= i < n else float("nan")
 
 
 def ensure_new_options(key, options):
@@ -961,7 +962,7 @@ with tab2:
                "using the app's sellable-area pricing.")
 
     # Column order exactly as in the Excel Sale Summary tab
-    SUM_COLS = ["Typology", "Number of Units", "Price/Sq.ft", "Area (sqft)", "Area (sqm)",
+    SUM_COLS = ["Typology", "Number of Units", "Avg. Price /Sq.ft", "Area (sqft)", "Area (sqm)",
                 "Internal (sqft/unit)", "Terrace (sqft/unit)", "Total Internal (sqft)",
                 "Total Terrace (sqft)", "Total Sellable", "Counted Terraces",
                 "Total Sellable Counted", "Price (per unit)", "Total Sales",
@@ -986,7 +987,7 @@ with tab2:
         num_rows.append({
             "Typology": t,
             "Number of Units": n,
-            "Price/Sq.ft": total_sales / tot_sellable if tot_sellable else 0.0,
+            "Avg. Price /Sq.ft": total_sales / tot_sellable if tot_sellable else 0.0,
             "Area (sqft)": area_sqft,
             "Area (sqm)": area_sqft / SQFT_PER_SQM,
             "Internal (sqft/unit)": internal_u,
@@ -1003,13 +1004,13 @@ with tab2:
         })
     nm = pd.DataFrame(num_rows)
 
-    # Total row (sum additive; Price/Sq.ft value-weighted; per-unit cells blank like Excel)
+    # Total row (sum additive; Avg. Price /Sq.ft value-weighted; per-unit cells blank like Excel)
     tot_counted_all = nm["Total Sellable Counted"].sum()
     tot_sellable_all = nm["Total Sellable"].sum()
     total = {
         "Typology": "Total",
         "Number of Units": int(nm["Number of Units"].sum()),
-        "Price/Sq.ft": (nm["Total Sales"].sum() / tot_sellable_all) if tot_sellable_all else 0.0,
+        "Avg. Price /Sq.ft": (nm["Total Sales"].sum() / tot_sellable_all) if tot_sellable_all else 0.0,
         "Area (sqft)": None, "Area (sqm)": None,
         "Internal (sqft/unit)": None, "Terrace (sqft/unit)": None,
         "Total Internal (sqft)": nm["Total Internal (sqft)"].sum(),
@@ -1037,7 +1038,7 @@ with tab2:
     disp = pd.DataFrame({
         "Typology": nm["Typology"],
         "Number of Units": nm["Number of Units"].apply(lambda v: _f(v, "int")),
-        "Price/Sq.ft": nm["Price/Sq.ft"].apply(lambda v: _f(v, "aed0")),
+        "Avg. Price /Sq.ft": nm["Avg. Price /Sq.ft"].apply(lambda v: _f(v, "aed0")),
         "Area (sqft)": nm["Area (sqft)"].apply(lambda v: _f(v, "area")),
         "Area (sqm)": nm["Area (sqm)"].apply(lambda v: _f(v, "area")),
         "Internal (sqft/unit)": nm["Internal (sqft/unit)"].apply(lambda v: _f(v, "area")),
@@ -1093,7 +1094,8 @@ with tab5:
     if pick:
         alldf = alldf[alldf["Type"].isin(pick)]
     alldf["PSF_total"] = alldf["Price"] / alldf["Total_sqft"]
-    median_psf = {t: avail_adjusted_median_psf(g) for t, g in alldf.groupby("Type")}
+    median_psf   = {t: avail_adjusted_median(g, "PSF_total") for t, g in alldf.groupby("Type")}
+    median_price = {t: avail_adjusted_median(g, "Price")     for t, g in alldf.groupby("Type")}
 
     if alldf.empty:
         st.info("No units for the selected topologies.")
@@ -1113,6 +1115,7 @@ with tab5:
                 "Max_PSF": base["PSF_total"].max(),
                 "Avg_PSF": (base["Price"].sum() / base_area) if base_area else float("nan"),
                 "Median_PSF": median_psf.get(t, float("nan")),
+                "Median_Price": median_price.get(t, float("nan")),
                 "Min_Price": base["Price"].min(),
                 "Max_Price": base["Price"].max(),
                 "Total_Value_All": g_all["Price"].sum(),
@@ -1124,15 +1127,15 @@ with tab5:
         tv = tv.sort_values("Type", key=lambda s: s.map(_o)).reset_index(drop=True)
 
         tvd = tv[["Type","Total_Units","Min_PSF","Median_PSF","Max_PSF",
-                  "Min_Price","Max_Price","Avg_Price","Total_Value_All"]].copy()
+                  "Min_Price","Median_Price","Max_Price","Avg_Price","Total_Value_All"]].copy()
         for c in ["Min_PSF","Median_PSF","Max_PSF"]:
             tvd[c] = tvd[c].apply(lambda x: f"AED {x:,.0f}")
-        for c in ["Min_Price","Max_Price","Avg_Price","Total_Value_All"]:
+        for c in ["Min_Price","Median_Price","Max_Price","Avg_Price","Total_Value_All"]:
             tvd[c] = tvd[c].apply(lambda x: aed(x))
         tvd["Total_Units"]     = tvd["Total_Units"].astype(int)
         tvd.columns = ["Type","Total Units (incl. Sold)",
                        "Min /sqft (lowest)","Median /sqft (mid)","Max /sqft (highest)",
-                       "Min Price","Max Price","Avg Unit Price","Total Value (incl. Sold)"]
+                       "Min Price","Median Price","Max Price","Avg Unit Price","Total Value (incl. Sold)"]
         topo_show = column_picker(list(tvd.columns), key="topo_cols", locked=["Type"])
         excel_table(tvd[topo_show])
 
@@ -1386,9 +1389,9 @@ with tab3:
     # ─────────────────────── ADD A NEW FLOOR ──────────────────────────────────
     if action == "Add a New Floor":
         st.subheader("Add New Floor(s)")
-        st.caption("Pick a floor range (set **From = To** for a single floor) and a unit mix. The same "
-                   "mix is added to every floor in range that isn't blocked or already present. Each "
-                   "unit is priced from the escalation ladder for its own floor (built bottom-up).")
+        st.caption("Pick a floor range (set **From = To** for a single floor). For a range, **each floor "
+                   "is configured on its own** below. Units are priced from the escalation ladder for "
+                   "their floor (built bottom-up). Blocked / existing floors are skipped.")
         existing = [fl["floor"] for fl in floors]
         ac1, ac2 = st.columns(2)
         nf_from = ac1.number_input("From floor", min_value=1, max_value=999,
@@ -1405,33 +1408,43 @@ with tab3:
         if skip_exists:
             st.warning("Skipping floors that already exist: " + ", ".join(ordinal(f) for f in skip_exists))
 
-        st.markdown("**Unit mix** — pick topology and use **− / +** to set quantity (applied to each floor):")
-        mix = unit_mix_builder("addmix", [{"type": "3 Bedroom", "qty": 1}, {"type": "2 Bedroom", "qty": 2}])
-
-        if mix and not valid:
+        if not valid:
             st.error("No valid floors in this range (all are blocked or already exist).")
-        elif mix:
-            per_floor_units = sum(q for _, q in mix)
-            # approximate added value (current-state pricing; actual build escalates floor-by-floor)
+        else:
+            default_rows = [{"type": "3 Bedroom", "qty": 1}, {"type": "2 Bedroom", "qty": 2}]
+            floor_mixes = {}
+            if len(valid) == 1:
+                f = valid[0]
+                st.markdown("**Unit mix** — pick topology and use **− / +** to set quantity:")
+                floor_mixes[f] = unit_mix_builder(f"addmix_{f}", default_rows)
+            else:
+                st.markdown(f"**Configure each of the {len(valid)} floors** "
+                            f"({ordinal(lo)}–{ordinal(hi)}) — set its own unit mix:")
+                for f in valid:
+                    with st.expander(f"Floor {ordinal(f)}", expanded=(f == valid[0])):
+                        floor_mixes[f] = unit_mix_builder(f"addmix_{f}", default_rows)
+
+            total_units = sum(sum(q for _, q in floor_mixes[f]) for f in valid)
             approx = 0.0
             for f in valid:
-                for t, q in mix:
+                for t, q in floor_mixes[f]:
                     approx += unit_val(t, new_unit_rate(t, f, st.session_state.units, params), params)["total"] * q
             m1, m2, m3 = st.columns(3)
             m1.metric("Floors to add", len(valid))
-            m2.metric("Units to add", len(valid) * per_floor_units)
+            m2.metric("Units to add", total_units)
             m3.metric("Added value (≈)", aed(approx))
-            st.caption(f"Floors to add: {', '.join(ordinal(f) for f in valid)}")
 
             label = (f"Add Floor {ordinal(valid[0])}" if len(valid) == 1
                      else f"Add {len(valid)} floors ({ordinal(lo)}–{ordinal(hi)})")
-            if st.button(label, type="primary", key="btn_addfl"):
+            if st.button(label, type="primary", key="btn_addfl", disabled=(total_units == 0)):
                 try:
-                    ordered = []
-                    for t, q in mix:
-                        ordered += [t] * q
-                    ordered.sort(key=lambda t: (t != "3 Bedroom", t))
                     for f in valid:                       # ascending → each floor escalates off the one below
+                        ordered = []
+                        for t, q in floor_mixes[f]:
+                            ordered += [t] * q
+                        if not ordered:
+                            continue
+                        ordered.sort(key=lambda t: (t != "3 Bedroom", t))
                         nos = gen_unit_nos(f, ordered)
                         new_units = [{"unit_no": no, "type": t,
                                       "rate": new_unit_rate(t, f, st.session_state.units, params)}
@@ -1441,10 +1454,10 @@ with tab3:
                                                         "levels": max(TYPE_DEFAULTS[t]["levels"] for t in ordered),
                                                         "units": new_units})
                     st.session_state.floors.sort(key=lambda x: x["floor"])
-                    clear_builder("addmix")
+                    for f in valid:
+                        clear_builder(f"addmix_{f}")
                     st.session_state["flash"] = ("success",
-                        f"✅ Added {len(valid)} floor(s) ({ordinal(lo)}–{ordinal(hi)}), "
-                        f"{len(valid)*per_floor_units} unit(s).")
+                        f"✅ Added {len(valid)} floor(s) ({ordinal(lo)}–{ordinal(hi)}), {total_units} unit(s).")
                 except Exception as e:
                     st.session_state["flash"] = ("error", f"❌ Could not add floors: {e}")
                 st.rerun()
@@ -1513,54 +1526,66 @@ with tab3:
                     st.session_state.floors = [f for f in st.session_state.floors if f["floor"] != floor_num]
                 return (len(added), len(removed), len(locked), False)
 
-            fl = next(f for f in floors if f["floor"] == sel)
-            locked_units, avail_units = split_floor_units(fl)
-
-            st.markdown(f"**Floor {ordinal(sel)}** ({fl['kind']}) — current units"
-                        + (" *(this floor is the reference for the range)*:" if is_range else ":"))
-            cur = [{"Unit": u["unit_no"], "Type": u["type"],
-                    "Status": unit_status(u, smap),
-                    "Editable": "Yes" if unit_status(u, smap) == "Available" else "🔒 No",
-                    "Rate/sqft": f"AED {u['rate']:,.0f}",
-                    "Value": aed(unit_val(u["type"], u["rate"], params)["total"])} for u in fl["units"]]
-            excel_table(pd.DataFrame(cur))
-
-            if not avail_units:
-                st.error(f"🔒 Floor {ordinal(sel)} has no Available units — pick a floor with available units.")
-            else:
-                if locked_units and not is_range:
-                    st.info(f"{len(locked_units)} unit(s) on this floor are Sold and will be kept "
-                            f"unchanged. You are editing the **{len(avail_units)} Available** unit(s) only.")
-
+            def floor_mix_editor(floor_num, key_suffix):
+                """Show a floor's current units + an editable Available mix builder.
+                Returns (mix, has_available)."""
+                fobj = next(x for x in floors if x["floor"] == floor_num)
+                lk, av = split_floor_units(fobj)
+                cur = [{"Unit": u["unit_no"], "Type": u["type"], "Status": unit_status(u, smap),
+                        "Editable": "Yes" if unit_status(u, smap) == "Available" else "🔒 No",
+                        "Rate/sqft": f"AED {u['rate']:,.0f}",
+                        "Value": aed(unit_val(u["type"], u["rate"], params)["total"])} for u in fobj["units"]]
+                excel_table(pd.DataFrame(cur))
+                if not av:
+                    st.caption("🔒 No Available units on this floor — it will be skipped.")
+                    return [], False
+                if lk:
+                    st.caption(f"{len(lk)} Sold unit(s) kept; editing the {len(av)} Available unit(s).")
                 comp = {}
-                for u in avail_units:
+                for u in av:
                     comp[u["type"]] = comp.get(u["type"], 0) + 1
-                default_rows = [{"type": t, "qty": q} for t, q in comp.items()] or [{"type": "2 Bedroom", "qty": 1}]
-                st.markdown("**Editable (Available) unit mix — use − / + to set quantity:**")
-                mix = unit_mix_builder(f"editmix_{sel}_{sel_to}", default_rows, qmin=0)
+                drows = [{"type": t, "qty": q} for t, q in comp.items()] or [{"type": "2 Bedroom", "qty": 1}]
+                return unit_mix_builder(f"editmix_{key_suffix}", drows, qmin=0), True
 
-                if is_range:
-                    aff = [f for f in range_floors
-                           if any(unit_status(u, smap) == "Available"
-                                  for u in next(x for x in floors if x["floor"] == f)["units"])]
-                    st.warning(f"**Range mode** — the mix above will be applied to **{len(aff)}** floor(s) "
-                               f"with available units in {ordinal(lo)}–{ordinal(hi)}: "
-                               f"{', '.join(ordinal(f) for f in aff)}. Sold units on each floor are kept.")
-                    if st.button(f"Apply to {len(aff)} floor(s)", type="primary",
-                                 key="btn_edit_apply_rng", disabled=not aff):
-                        try:
-                            tot_add = tot_rem = 0
-                            for f in aff:                       # ascending so escalation builds up
-                                a, r, l, sk = apply_mix_to_floor(f, mix)
-                                tot_add += a; tot_rem += r
-                            st.session_state.floors.sort(key=lambda x: x["floor"])
-                            clear_builder(f"editmix_{sel}_{sel_to}")
-                            st.session_state["flash"] = ("success",
-                                f"✅ Updated {len(aff)} floor(s) {ordinal(lo)}–{ordinal(hi)} — "
-                                f"{tot_add} added, {tot_rem} removed.")
-                        except Exception as e:
-                            st.session_state["flash"] = ("error", f"❌ Could not update range: {e}")
-                        st.rerun()
+            if is_range:
+                st.markdown(f"**Configure each floor in {ordinal(lo)}–{ordinal(hi)} on its own.** "
+                            "Sold units on every floor are kept; fully-sold floors are skipped.")
+                floor_mixes = {}
+                aff = []
+                for f in range_floors:
+                    fobj = next(x for x in floors if x["floor"] == f)
+                    has_av = any(unit_status(u, smap) == "Available" for u in fobj["units"])
+                    with st.expander(f"Floor {ordinal(f)} ({fobj['kind']})", expanded=(f == range_floors[0])):
+                        m, ok = floor_mix_editor(f, f"{f}")
+                        if ok:
+                            floor_mixes[f] = m
+                            aff.append(f)
+                st.divider()
+                if st.button(f"Apply to {len(aff)} floor(s)", type="primary",
+                             key="btn_edit_apply_rng", disabled=not aff):
+                    try:
+                        tot_add = tot_rem = 0
+                        for f in aff:                          # ascending so escalation builds up
+                            a, r, l, sk = apply_mix_to_floor(f, floor_mixes[f])
+                            tot_add += a; tot_rem += r
+                        st.session_state.floors.sort(key=lambda x: x["floor"])
+                        for f in aff:
+                            clear_builder(f"editmix_{f}")
+                        st.session_state["flash"] = ("success",
+                            f"✅ Updated {len(aff)} floor(s) {ordinal(lo)}–{ordinal(hi)} — "
+                            f"{tot_add} added, {tot_rem} removed.")
+                    except Exception as e:
+                        st.session_state["flash"] = ("error", f"❌ Could not update range: {e}")
+                    st.rerun()
+            else:
+                fl = next(f for f in floors if f["floor"] == sel)
+                locked_units, avail_units = split_floor_units(fl)
+                st.markdown(f"**Floor {ordinal(sel)}** ({fl['kind']}, {fl['levels']} level"
+                            f"{'s' if fl['levels']>1 else ''}) — current units:")
+                mix, has_av = floor_mix_editor(sel, f"{sel}")
+
+                if not has_av:
+                    st.error(f"🔒 Floor {ordinal(sel)} has no Available units — pick a floor with available units.")
                 else:
                     locked_total = sum(unit_val(u["type"], u["rate"], params)["total"] for u in locked_units)
                     avail_total = 0
@@ -1584,7 +1609,7 @@ with tab3:
                     if b1.button("Apply Changes", type="primary", key="btn_edit_apply"):
                         try:
                             a, r, l, sk = apply_mix_to_floor(sel, mix)
-                            clear_builder(f"editmix_{sel}_{sel_to}")
+                            clear_builder(f"editmix_{sel}")
                             st.session_state["flash"] = ("success",
                                 f"✅ Floor {ordinal(sel)} updated — {a} added, {r} removed, "
                                 f"{l} protected unit(s) kept.")
@@ -1598,7 +1623,7 @@ with tab3:
                     elif b2.button("Remove Entire Floor", key="btn_edit_remove"):
                         remove_units_from_register([u["uid"] for u in fl["units"]])
                         st.session_state.floors = [f2 for f2 in st.session_state.floors if f2["floor"] != sel]
-                        clear_builder(f"editmix_{sel}_{sel_to}")
+                        clear_builder(f"editmix_{sel}")
                         st.session_state["flash"] = ("success", f"✅ Floor {ordinal(sel)} removed entirely.")
                         st.rerun()
 
