@@ -241,6 +241,13 @@ def export_button(df: pd.DataFrame, file_name, key, title=None, label="⬇️  E
                        file_name=file_name, key=key,
                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
+def table_with_export(df: pd.DataFrame, file_name, key, title=None):
+    """Render the export button in the top-right above the styled table."""
+    c = st.columns([0.74, 0.26])
+    with c[1]:
+        export_button(df, file_name, key, title)
+    excel_table(df)
+
 
 def aed(x):  return f"AED {x:,.0f}"
 
@@ -996,12 +1003,14 @@ with tab1:
     vis.index = disp["uid"].values
     def _hl_sold(row):
         return ["background-color:#9DC3E6" if bool(sold_by_idx.loc[row.name]) else "" for _ in row]
+    _ur = st.columns([0.74, 0.26])
+    with _ur[1]:
+        export_button(vis.reset_index(drop=True), "Unit_Register.xlsx", key="exp_reg",
+                      title="Muraba Veil Unit Register")
     st.dataframe(vis.style.apply(_hl_sold, axis=1), use_container_width=True,
                  hide_index=True, height=460)
     st.caption(f"Showing {len(view)} of {len(df)} units · Sold units highlighted in blue · "
                f"“vs below” compares each unit to the one a floor lower in the same typology")
-    export_button(vis.reset_index(drop=True), "Unit_Register.xlsx", key="exp_reg",
-                  title="Muraba Veil Unit Register")
 
     # Inline comment editor (toggle to show/hide); edits persist to file and reload on launch
     show_editor = st.toggle("✏️ Show inline comment editor", value=False, key="show_cmt_editor")
@@ -1123,9 +1132,8 @@ with tab2:
     })[SUM_COLS]
 
     sum_show = column_picker(list(disp.columns), key="sum_cols", locked=["Typology"])
-    excel_table(disp[sum_show])
-    export_button(disp[sum_show], "Muraba_Veil_Sale_Summary.xlsx", key="exp_sum",
-                  title="Muraba Veil Sale Summary")
+    table_with_export(disp[sum_show], "Muraba_Veil_Sale_Summary.xlsx", "exp_sum",
+                      title="Muraba Veil Sale Summary")
     st.caption(f"Conversion: 1 m² = {SQFT_PER_SQM} ft²  ·  "
                "Total Sellable = Internal + full Terrace  ·  "
                "Counted Terraces = rate-adjusted terrace  ·  "
@@ -1141,8 +1149,7 @@ with tab2:
             "Amount in AED": [475000, 550000, 600000, 800000, 800000, 850000, 850000, 1250000],
         })
         fp["Amount in AED"] = fp["Amount in AED"].apply(lambda x: f"AED {x:,.0f}")
-        excel_table(fp)
-        export_button(fp, "Furniture_Pack.xlsx", key="exp_fp", title="Muraba Veil Furniture Pack")
+        table_with_export(fp, "Furniture_Pack.xlsx", "exp_fp", title="Muraba Veil Furniture Pack")
 
 
 # ── Tab 5: Topology View (min/max/avg stats) ───────────────────────────────────
@@ -1208,9 +1215,8 @@ with tab5:
                        "Min /sqft (lowest)","Median /sqft (mid)","Max /sqft (highest)",
                        "Min Price","Median Price","Max Price","Avg Unit Price","Total Value (incl. Sold)"]
         topo_show = column_picker(list(tvd.columns), key="topo_cols", locked=["Type"])
-        excel_table(tvd[topo_show])
-        export_button(tvd[topo_show], "Topology_View.xlsx", key="exp_topo",
-                      title="Muraba Veil Topology Summary")
+        table_with_export(tvd[topo_show], "Topology_View.xlsx", "exp_topo",
+                          title="Muraba Veil Topology Summary")
 
 
 # ── Tab 3: Floor Manager ───────────────────────────────────────────────────────
@@ -1337,9 +1343,8 @@ with tab3:
                              "Terrace %": f"{trv:.0f}%",
                              "Base /sqft": base_txt})
         _ref_df = pd.DataFrame(ref_rows)
-        excel_table(_ref_df)
-        export_button(_ref_df, "Escalation_Terrace_Settings.xlsx", key="exp_settings",
-                      title="Escalation & Terrace Settings")
+        table_with_export(_ref_df, "Escalation_Terrace_Settings.xlsx", "exp_settings",
+                          title="Escalation & Terrace Settings")
 
     with st.expander("📐  Area Settings (Internal & External sqft per topology — cascades to all units of that type)", expanded=False):
         st.caption("Change a topology's area and every unit of that type updates — sellable area, price and all stats recompute.")
@@ -1786,9 +1791,7 @@ with tab4:
             st.rerun()
 
 
-# ── Export ─────────────────────────────────────────────────────────────────────
-
-st.divider()
+# ── Export helpers (per-table export buttons live on each tab) ──────────────────
 
 def _style_export_sheet(ws):
     """Apply clean, professional formatting to a worksheet: bold blue header, frozen
@@ -1867,8 +1870,5 @@ def build_export():
         for ws in writer.book.worksheets:        # apply professional styling to every sheet
             _style_export_sheet(ws)
     return out.getvalue()
-
-st.download_button("Download Updated Excel", data=build_export(),
-                   file_name="Muraba_Veil_Updated.xlsx",
-                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-st.caption("Downloads current state. Does not overwrite the source file.")
+# Note: the page-level "Download Updated Excel" button was removed — each table now has its
+# own top-right "Export to Excel" button. build_export() is kept for potential reuse.
