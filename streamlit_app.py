@@ -1462,7 +1462,7 @@ with tab3:
             new_tr_map[gkey] = new_t / 100.0
         np_ = {"escalation": new_esc_map, "terrace": new_tr_map,
                "duplex_premium": new_dpx, "area": dict(params.get("area", {})),
-               "base": dict(params.get("base", {}))}
+               "parking": dict(params.get("parking", {})), "base": dict(params.get("base", {}))}
         if np_ != old:
             st.session_state.fm_params = np_
             n = 0
