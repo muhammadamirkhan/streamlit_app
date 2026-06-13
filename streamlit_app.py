@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import os
 import json
@@ -1223,29 +1224,27 @@ with tab5:
 # ── Tab 6: Building View (full floor-by-floor tower elevation) ─────────────────
 
 BUILDING_COLORS = {
-    "2 Bedroom": "#8FAADC", "3 Bedroom - New": "#5B9BD5", "3 Bedroom": "#2E75B6",
-    "3 Bedroom Pool": "#4472C4", "4 Bedroom Pool": "#264478", "4 Bedroom XL": "#C55A11",
-    "3 Bedroom Duplex": "#548235", "4 Bedroom Duplex": "#375623", "5 Bedroom Duplex": "#7030A0",
+    "2 Bedroom": "#5AA9E6", "3 Bedroom - New": "#7FC8F8", "3 Bedroom": "#3C78D8",
+    "3 Bedroom Pool": "#22C1C3", "4 Bedroom Pool": "#0E8C8C", "4 Bedroom XL": "#F2A65A",
+    "3 Bedroom Duplex": "#8BC34A", "4 Bedroom Duplex": "#4E8C2F", "5 Bedroom Duplex": "#E6B450",
 }
+
+def _esc(s):
+    return (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;"))
 
 with tab6:
     st.subheader("Building View — Muraba Veil")
-    st.caption("The full tower, floor by floor. Each block is a unit, coloured by typology; "
-               "**sold units are faded with a diagonal hatch**, available units are solid. "
-               "Double-height Pool & Duplex floors are taller. Grey floors are MEP / Majlis (amenity). "
-               "Hover any unit for its details. Everything updates live with edits.")
+    st.caption("The tower at a glance — every floor, every unit. Lit (solid) blocks are **available**, "
+               "dimmed outlined blocks are **sold**. Pool & Duplex levels are double-height; gold marks "
+               "the penthouse crown; hatched bands are MEP / Majlis. Hover any unit for its details. Live.")
 
     bdf = df.copy()
-    bdf["_fn"] = pd.to_numeric(bdf["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True),
-                               errors="coerce")
-    bdf["_un"] = pd.to_numeric(bdf["Unit"].astype(str).str.replace(r"[^0-9]", "", regex=True),
-                               errors="coerce")
+    bdf["_fn"] = pd.to_numeric(bdf["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True), errors="coerce")
+    bdf["_un"] = pd.to_numeric(bdf["Unit"].astype(str).str.replace(r"[^0-9]", "", regex=True), errors="coerce")
     units_by_floor = {int(f): g.sort_values("_un") for f, g in bdf.dropna(subset=["_fn"]).groupby("_fn")}
     floor_nums = [int(f) for f in units_by_floor]
-    max_floor = max(floor_nums + list(blocked) + [1])
-    min_floor = 1
+    max_floor = max(floor_nums + list(blocked) + [1]); min_floor = 1
 
-    # KPI strip
     tot_units = len(df); tot_av = int((df["Status"] == "Available").sum())
     kc = st.columns(4)
     kc[0].metric("Top floor", ordinal(max_floor))
@@ -1253,74 +1252,101 @@ with tab6:
     kc[2].metric("Units", tot_units)
     kc[3].metric("Available", tot_av)
 
-    H_STD, H_TALL, GUT = 26, 46, 46     # row heights (px) and floor-number gutter width
-    def _is_tall(types):
-        return any(("Pool" in t or "Duplex" in t) for t in types)
+    # ── geometry ──
+    W, TW = 880, 380
+    TX = (W - TW) / 2; cx = TX + TW / 2
+    H_STD, H_TALL, GAP, MULL = 20, 34, 3, 3
+    PAD_TOP, CROWN_H, BASE_H, PAD_BOT = 18, 52, 34, 20
 
-    html = ['<div style="max-width:640px;margin:4px auto 0;font-family:Calibri,Arial,sans-serif;">']
-    # ── crown / roof ──
-    html.append('<div style="width:38%;height:14px;margin:0 auto;background:linear-gradient('
-                '#4A4A4A,#6E6E6E);border-radius:7px 7px 0 0;"></div>')
-    html.append('<div style="width:70%;height:10px;margin:0 auto;background:#6E6E6E;'
-                'border-radius:5px 5px 0 0;"></div>')
-    html.append('<div style="border:1px solid #C9C9C9;border-bottom:none;background:#FBFBFB;'
-                'padding:4px 6px 0;">')
+    defs = (
+        '<defs>'
+        '<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">'
+        '<stop offset="0" stop-color="#0E2747"/><stop offset="1" stop-color="#05080F"/></linearGradient>'
+        '<radialGradient id="glow" cx="50%" cy="36%" r="58%">'
+        '<stop offset="0" stop-color="#5B8DEF" stop-opacity="0.22"/>'
+        '<stop offset="1" stop-color="#5B8DEF" stop-opacity="0"/></radialGradient>'
+        '<linearGradient id="crown" x1="0" y1="0" x2="0" y2="1">'
+        '<stop offset="0" stop-color="#F0CE78"/><stop offset="1" stop-color="#9C7A2E"/></linearGradient>'
+        '<linearGradient id="podium" x1="0" y1="0" x2="0" y2="1">'
+        '<stop offset="0" stop-color="#16243C"/><stop offset="1" stop-color="#0A1322"/></linearGradient>'
+        '<pattern id="amen" width="12" height="12" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">'
+        '<rect width="12" height="12" fill="#162844"/><rect width="6" height="12" fill="#21385c"/></pattern>'
+        '</defs>')
 
+    body, y = [], PAD_TOP + CROWN_H
     for f in range(max_floor, min_floor - 1, -1):
         g = units_by_floor.get(f)
         is_blocked = f in blocked
         types = list(g["Type"]) if g is not None else []
-        h = H_TALL if (g is not None and _is_tall(types)) else H_STD
-        # floor-number gutter + the floor slab
-        row = [f'<div style="display:flex;align-items:stretch;height:{h}px;margin:1px 0;">',
-               f'<div style="width:{GUT}px;flex:none;display:flex;align-items:center;justify-content:flex-end;'
-               f'padding-right:7px;font-size:11px;color:#7F7F7F;">{f}</div>',
-               '<div style="flex:1;display:flex;gap:2px;">']
+        tall = g is not None and any(("Pool" in t or "Duplex" in t) for t in types)
+        h = H_TALL if tall else H_STD
+        body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="3" fill="#0b1830"/>')
+        body.append(f'<text x="{TX-12:.0f}" y="{y+h/2+3.5:.0f}" text-anchor="end" font-size="10" '
+                    f'fill="#8aa0bd" font-family="Calibri,Arial">{f}</text>')
         if g is not None and len(g):
-            for _, u in g.iterrows():
-                col = BUILDING_COLORS.get(u["Type"], "#808080")
+            n = len(g); cw = (TW - (n - 1) * MULL) / n
+            for i, (_, u) in enumerate(g.iterrows()):
+                xi = TX + i * (cw + MULL)
+                col = BUILDING_COLORS.get(u["Type"], "#7f8c9b")
                 sold = u["Status"] == "Sold"
+                tip = _esc(f"Unit {u['Unit']} · {u['Type']} · {u['Status']} · "
+                           f"AED {u['Price_sqft']:,.0f}/sqft · {aed(u['Price'])}")
                 if sold:
-                    bg = (f"background:repeating-linear-gradient(45deg,{col},{col} 6px,"
-                          f"rgba(255,255,255,.55) 6px,rgba(255,255,255,.55) 12px);")
+                    body.append(f'<g><title>{tip}</title>'
+                                f'<rect x="{xi:.1f}" y="{y+1:.0f}" width="{cw:.1f}" height="{h-2}" rx="2.5" '
+                                f'fill="{col}" fill-opacity="0.16" stroke="{col}" stroke-opacity="0.55"/></g>')
                 else:
-                    bg = f"background:{col};"
-                tip = (f"Unit {u['Unit']} · {u['Type']} · {u['Status']} · "
-                       f"AED {u['Price_sqft']:,.0f}/sqft · {aed(u['Price'])}")
-                row.append(
-                    f'<div title="{tip}" style="flex:1;{bg}border-radius:3px;color:#FFFFFF;'
-                    f'font-size:10px;display:flex;align-items:center;justify-content:center;'
-                    f'overflow:hidden;{"opacity:.85;" if sold else ""}">{u["Unit"]}</div>')
+                    hl = max(4, (h - 2) * 0.42)
+                    body.append(f'<g><title>{tip}</title>'
+                                f'<rect x="{xi:.1f}" y="{y+1:.0f}" width="{cw:.1f}" height="{h-2}" rx="2.5" fill="{col}"/>'
+                                f'<rect x="{xi:.1f}" y="{y+1:.0f}" width="{cw:.1f}" height="{hl:.0f}" rx="2.5" '
+                                f'fill="#ffffff" fill-opacity="0.16"/></g>')
+                if cw > 32:
+                    body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2+3.2:.0f}" text-anchor="middle" font-size="9" '
+                                f'fill="#ffffff" fill-opacity="{"0.95" if not sold else "0.8"}" '
+                                f'font-family="Calibri,Arial">{_esc(u["Unit"])}</text>')
         elif is_blocked:
-            row.append(
-                f'<div title="Amenity / services level — {blocked[f]}" style="flex:1;'
-                f'background:repeating-linear-gradient(45deg,#E7E6E6,#E7E6E6 8px,#D9D9D9 8px,#D9D9D9 16px);'
-                f'border-radius:3px;color:#7F7F7F;font-size:10px;display:flex;align-items:center;'
-                f'justify-content:center;">MEP / Majlis</div>')
+            body.append(f'<g><title>{_esc("Amenity / services level — " + str(blocked[f]))}</title>'
+                        f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="3" fill="url(#amen)"/>'
+                        f'<text x="{cx:.0f}" y="{y+h/2+3.2:.0f}" text-anchor="middle" font-size="9" '
+                        f'fill="#9fb3d0" letter-spacing="2" font-family="Calibri,Arial">MEP / MAJLIS</text></g>')
         else:
-            row.append('<div style="flex:1;background:#F4F4F4;border:1px dashed #DDDDDD;'
-                       'border-radius:3px;"></div>')
-        row.append('</div></div>')
-        html.append("".join(row))
+            body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="3" fill="none" '
+                        f'stroke="#1c2c46" stroke-dasharray="3 3"/>')
+        y += h + GAP
 
-    html.append('</div>')   # close tower body
-    # ── podium / ground ──
-    html.append('<div style="height:16px;background:#595959;border-radius:0 0 7px 7px;"></div>')
-    html.append('<div style="width:118%;margin-left:-9%;height:7px;background:#3F3F3F;border-radius:3px;"></div>')
-    html.append('</div>')   # close container
-    st.markdown("".join(html), unsafe_allow_html=True)
+    tower_bottom = y - GAP
+    total_h = tower_bottom + BASE_H + PAD_BOT
 
-    # ── legend ──
-    chips = "".join(
-        f'<span style="display:inline-flex;align-items:center;margin:2px 12px 2px 0;font-size:12px;">'
-        f'<span style="width:13px;height:13px;background:{BUILDING_COLORS[t]};border-radius:3px;'
-        f'display:inline-block;margin-right:5px;"></span>{t}</span>'
-        for t in BUILDING_COLORS if t in set(df["Type"]))
-    chips += ('<span style="display:inline-flex;align-items:center;margin:2px 12px;font-size:12px;">'
-              '<span style="width:13px;height:13px;border-radius:3px;display:inline-block;margin-right:5px;'
-              'background:repeating-linear-gradient(45deg,#999,#999 4px,rgba(255,255,255,.6) 4px,rgba(255,255,255,.6) 8px);">'
-              '</span>Sold (faded/hatch)</span>')
-    st.markdown(f'<div style="max-width:760px;margin:10px auto;">{chips}</div>', unsafe_allow_html=True)
+    crown = (
+        f'<polygon points="{cx-22:.0f},{PAD_TOP+16} {cx+22:.0f},{PAD_TOP+16} '
+        f'{TX+TW:.0f},{PAD_TOP+CROWN_H} {TX:.0f},{PAD_TOP+CROWN_H}" fill="url(#crown)"/>'
+        f'<line x1="{cx:.0f}" y1="{PAD_TOP}" x2="{cx:.0f}" y2="{PAD_TOP+16}" stroke="#F0CE78" stroke-width="2"/>'
+        f'<circle cx="{cx:.0f}" cy="{PAD_TOP}" r="3" fill="#F0CE78"/>')
+    base = (
+        f'<rect x="{TX-22:.0f}" y="{tower_bottom+4:.0f}" width="{TW+44}" height="{BASE_H-10}" rx="5" fill="url(#podium)"/>'
+        f'<text x="{cx:.0f}" y="{tower_bottom+4+(BASE_H-10)/2+4:.0f}" text-anchor="middle" font-size="11" '
+        f'fill="#E6B450" letter-spacing="5" font-family="Calibri,Arial">MURABA VEIL</text>'
+        f'<rect x="{TX-66:.0f}" y="{tower_bottom+BASE_H-4:.0f}" width="{TW+132}" height="5" rx="2" fill="#0A1322"/>')
+    bg = (f'<rect x="0" y="0" width="{W}" height="{total_h:.0f}" fill="url(#sky)"/>'
+          f'<ellipse cx="{cx:.0f}" cy="{total_h*0.4:.0f}" rx="{W*0.5:.0f}" ry="{total_h*0.45:.0f}" fill="url(#glow)"/>')
+
+    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{total_h:.0f}" '
+           f'viewBox="0 0 {W} {total_h:.0f}">{defs}{bg}{crown}{"".join(body)}{base}</svg>')
+
+    legend_items = [
+        f'<span style="margin:0 9px;white-space:nowrap;"><span style="display:inline-block;width:12px;height:12px;'
+        f'border-radius:3px;background:{BUILDING_COLORS[t]};vertical-align:middle;margin-right:5px;"></span>{_esc(t)}</span>'
+        for t in BUILDING_COLORS if t in set(df["Type"])]
+    legend_items.append('<span style="margin:0 9px;white-space:nowrap;"><span style="display:inline-block;width:12px;'
+                        'height:12px;border-radius:3px;border:1.5px solid #8aa0bd;vertical-align:middle;margin-right:5px;">'
+                        '</span>Sold (outlined / dim)</span>')
+    legend = (f'<div style="text-align:center;color:#cdd6e2;font-family:Calibri,Arial;font-size:12px;'
+              f'padding:10px 6px 4px;line-height:1.9;">{"".join(legend_items)}</div>')
+
+    comp = (f'<div style="background:#05080F;border-radius:12px;padding:8px 0 4px;text-align:center;">'
+            f'{svg}{legend}</div>')
+    components.html(comp, height=int(total_h) + 80, scrolling=True)
 
 
 # ── Tab 3: Floor Manager ───────────────────────────────────────────────────────
