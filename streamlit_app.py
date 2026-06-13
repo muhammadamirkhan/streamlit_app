@@ -1220,130 +1220,107 @@ with tab5:
                           title="Muraba Veil Topology Summary")
 
 
-# ── Tab 6: Building View (live stacking plan) ──────────────────────────────────
+# ── Tab 6: Building View (full floor-by-floor tower elevation) ─────────────────
 
 BUILDING_COLORS = {
     "2 Bedroom": "#8FAADC", "3 Bedroom - New": "#5B9BD5", "3 Bedroom": "#2E75B6",
     "3 Bedroom Pool": "#4472C4", "4 Bedroom Pool": "#264478", "4 Bedroom XL": "#C55A11",
     "3 Bedroom Duplex": "#548235", "4 Bedroom Duplex": "#375623", "5 Bedroom Duplex": "#7030A0",
 }
-# top → bottom bands, matching the Residences elevation (typologies sharing a level band sit side by side)
-BUILDING_BANDS = [
-    ["5 Bedroom Duplex"],
-    ["3 Bedroom Duplex", "4 Bedroom Duplex"],
-    ["4 Bedroom XL"],
-    ["3 Bedroom Pool", "4 Bedroom Pool"],
-    ["3 Bedroom", "3 Bedroom - New", "2 Bedroom"],
-]
-# Canonical level bands from the architectural elevation (the brochure stacking plan).
-BUILDING_LEVELS = {
-    "2 Bedroom": (3, 30), "3 Bedroom": (3, 30), "3 Bedroom - New": (3, 30),
-    "3 Bedroom Pool": (33, 49), "4 Bedroom Pool": (33, 49),
-    "4 Bedroom XL": (51, 57),
-    "3 Bedroom Duplex": (59, 66), "4 Bedroom Duplex": (59, 66),
-    "5 Bedroom Duplex": (68, 69),
-}
 
 with tab6:
-    st.subheader("Building View — Residences stacking plan")
-    st.caption("Elevation of the tower by typology, per the architectural plan (levels fixed). "
-               "Unit counts, **availability and value update live** with every edit. Hover a band for "
-               "details, or pick a typology below to drill in. Grey strips are MEP / Majlis (amenity) levels.")
+    st.subheader("Building View — Muraba Veil")
+    st.caption("The full tower, floor by floor. Each block is a unit, coloured by typology; "
+               "**sold units are faded with a diagonal hatch**, available units are solid. "
+               "Double-height Pool & Duplex floors are taller. Grey floors are MEP / Majlis (amenity). "
+               "Hover any unit for its details. Everything updates live with edits.")
 
     bdf = df.copy()
     bdf["_fn"] = pd.to_numeric(bdf["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True),
                                errors="coerce")
+    bdf["_un"] = pd.to_numeric(bdf["Unit"].astype(str).str.replace(r"[^0-9]", "", regex=True),
+                               errors="coerce")
+    units_by_floor = {int(f): g.sort_values("_un") for f, g in bdf.dropna(subset=["_fn"]).groupby("_fn")}
+    floor_nums = [int(f) for f in units_by_floor]
+    max_floor = max(floor_nums + list(blocked) + [1])
+    min_floor = 1
 
-    def _tstats(t):
-        g = bdf[bdf["Type"] == t]
-        if g.empty:
-            return None
-        lv = BUILDING_LEVELS.get(t)                # levels follow the architectural plan
-        if lv:
-            lo, hi = lv
-        else:                                      # unknown typology → fall back to its live floors
-            fns = g["_fn"].dropna()
-            lo = int(fns.min()) if not fns.empty else None
-            hi = int(fns.max()) if not fns.empty else None
-        return {"n": len(g), "avail": int((g["Status"] == "Available").sum()),
-                "sold": int((g["Status"] == "Sold").sum()), "value": float(g["Price"].sum()),
-                "lo": lo, "hi": hi}
+    # KPI strip
+    tot_units = len(df); tot_av = int((df["Status"] == "Available").sum())
+    kc = st.columns(4)
+    kc[0].metric("Top floor", ordinal(max_floor))
+    kc[1].metric("Residential floors", len(floor_nums))
+    kc[2].metric("Units", tot_units)
+    kc[3].metric("Available", tot_av)
 
-    # any present typology not in the predefined layout → append to the bottom band
-    layout_types = {t for band in BUILDING_BANDS for t in band}
-    extra = [t for t in bdf["Type"].unique() if t not in layout_types and _tstats(t)]
-    bands = [b for b in BUILDING_BANDS]
-    if extra:
-        bands[-1] = bands[-1] + extra
+    H_STD, H_TALL, GUT = 26, 46, 46     # row heights (px) and floor-number gutter width
+    def _is_tall(types):
+        return any(("Pool" in t or "Duplex" in t) for t in types)
 
-    # compute each band's present typologies + level range
-    rendered = []
-    for band in bands:
-        present = [t for t in band if _tstats(t)]
-        if not present:
-            continue
-        los = [_tstats(t)["lo"] for t in present if _tstats(t)["lo"] is not None]
-        his = [_tstats(t)["hi"] for t in present if _tstats(t)["hi"] is not None]
-        lo, hi = (min(los), max(his)) if los and his else (None, None)
-        rendered.append((present, lo, hi))
+    html = ['<div style="max-width:640px;margin:4px auto 0;font-family:Calibri,Arial,sans-serif;">']
+    # ── crown / roof ──
+    html.append('<div style="width:38%;height:14px;margin:0 auto;background:linear-gradient('
+                '#4A4A4A,#6E6E6E);border-radius:7px 7px 0 0;"></div>')
+    html.append('<div style="width:70%;height:10px;margin:0 auto;background:#6E6E6E;'
+                'border-radius:5px 5px 0 0;"></div>')
+    html.append('<div style="border:1px solid #C9C9C9;border-bottom:none;background:#FBFBFB;'
+                'padding:4px 6px 0;">')
 
-    def _lvl(lo, hi):
-        if lo is None:
-            return "—"
-        return f"Lvl {lo}" if lo == hi else f"Lvl {lo}–{hi}"
+    for f in range(max_floor, min_floor - 1, -1):
+        g = units_by_floor.get(f)
+        is_blocked = f in blocked
+        types = list(g["Type"]) if g is not None else []
+        h = H_TALL if (g is not None and _is_tall(types)) else H_STD
+        # floor-number gutter + the floor slab
+        row = [f'<div style="display:flex;align-items:stretch;height:{h}px;margin:1px 0;">',
+               f'<div style="width:{GUT}px;flex:none;display:flex;align-items:center;justify-content:flex-end;'
+               f'padding-right:7px;font-size:11px;color:#7F7F7F;">{f}</div>',
+               '<div style="flex:1;display:flex;gap:2px;">']
+        if g is not None and len(g):
+            for _, u in g.iterrows():
+                col = BUILDING_COLORS.get(u["Type"], "#808080")
+                sold = u["Status"] == "Sold"
+                if sold:
+                    bg = (f"background:repeating-linear-gradient(45deg,{col},{col} 6px,"
+                          f"rgba(255,255,255,.55) 6px,rgba(255,255,255,.55) 12px);")
+                else:
+                    bg = f"background:{col};"
+                tip = (f"Unit {u['Unit']} · {u['Type']} · {u['Status']} · "
+                       f"AED {u['Price_sqft']:,.0f}/sqft · {aed(u['Price'])}")
+                row.append(
+                    f'<div title="{tip}" style="flex:1;{bg}border-radius:3px;color:#FFFFFF;'
+                    f'font-size:10px;display:flex;align-items:center;justify-content:center;'
+                    f'overflow:hidden;{"opacity:.85;" if sold else ""}">{u["Unit"]}</div>')
+        elif is_blocked:
+            row.append(
+                f'<div title="Amenity / services level — {blocked[f]}" style="flex:1;'
+                f'background:repeating-linear-gradient(45deg,#E7E6E6,#E7E6E6 8px,#D9D9D9 8px,#D9D9D9 16px);'
+                f'border-radius:3px;color:#7F7F7F;font-size:10px;display:flex;align-items:center;'
+                f'justify-content:center;">MEP / Majlis</div>')
+        else:
+            row.append('<div style="flex:1;background:#F4F4F4;border:1px dashed #DDDDDD;'
+                       'border-radius:3px;"></div>')
+        row.append('</div></div>')
+        html.append("".join(row))
 
-    SCALE = 5  # px per floor
-    html = ['<div style="max-width:780px;margin:6px auto;font-family:Calibri,Arial,sans-serif;">']
-    for i, (present, lo, hi) in enumerate(rendered):
-        # amenity gap between this band and the one below it
-        if i + 1 < len(rendered):
-            _, lo2, hi2 = rendered[i + 1]
-            if hi2 is not None and lo is not None:
-                gap = [f for f in sorted(blocked) if hi2 < f < lo]
-                if gap:
-                    g_h = max(len(gap) * SCALE, 18)
-                    g_txt = "MEP / Majlis · " + ", ".join(ordinal(f) for f in gap)
-                    html.append(
-                        f'<div title="Amenity / services levels: {g_txt}" style="height:{g_h}px;'
-                        f'background:repeating-linear-gradient(45deg,#E7E6E6,#E7E6E6 8px,#D9D9D9 8px,#D9D9D9 16px);'
-                        f'border-radius:3px;margin:3px 0;display:flex;align-items:center;justify-content:center;'
-                        f'color:#595959;font-size:10px;">{g_txt}</div>')
-        span = (hi - lo + 1) if (lo is not None and hi is not None) else 4
-        h = max(span * SCALE, 50)
-        html.append(f'<div style="display:flex;gap:3px;height:{h}px;margin:0;">')
-        for t in present:
-            s = _tstats(t); c = BUILDING_COLORS.get(t, "#808080")
-            lvl = _lvl(s["lo"], s["hi"])
-            tip = (f"{t}  |  {lvl}  |  {s['n']} units  |  {s['avail']} available, {s['sold']} sold  "
-                   f"|  Value AED {s['value']:,.0f}")
-            html.append(
-                f'<div title="{tip}" style="flex:1;background:{c};color:#FFFFFF;border-radius:5px;'
-                f'padding:6px 10px;display:flex;flex-direction:column;justify-content:center;overflow:hidden;">'
-                f'<div style="font-weight:700;font-size:13px;line-height:1.15;">{t}</div>'
-                f'<div style="font-size:11px;opacity:.92;">{lvl} · {s["n"]} units · '
-                f'{s["avail"]} avail / {s["sold"]} sold</div></div>')
-        html.append('</div>')
-    html.append('</div>')
+    html.append('</div>')   # close tower body
+    # ── podium / ground ──
+    html.append('<div style="height:16px;background:#595959;border-radius:0 0 7px 7px;"></div>')
+    html.append('<div style="width:118%;margin-left:-9%;height:7px;background:#3F3F3F;border-radius:3px;"></div>')
+    html.append('</div>')   # close container
     st.markdown("".join(html), unsafe_allow_html=True)
 
-    st.divider()
-    present_order = [t for band in bands for t in band if _tstats(t)]
-    if present_order:
-        focus = st.selectbox("Focus a typology — show its units", present_order, key="bv_focus")
-        s = _tstats(focus)
-        f1, f2, f3, f4 = st.columns(4)
-        f1.metric("Units", s["n"])
-        f2.metric("Available", s["avail"])
-        f3.metric("Sold", s["sold"])
-        f4.metric("Value", aed(s["value"]))
-        g = bdf[bdf["Type"] == focus].sort_values("_fn")
-        det = pd.DataFrame({
-            "Floor": g["Floor"].values, "Unit": g["Unit"].values, "Status": g["Status"].values,
-            "Price/sqft": g["Price_sqft"].map(lambda v: f"AED {v:,.0f}").values,
-            "Total Price": g["Price"].map(aed).values,
-        })
-        table_with_export(det, f"{focus.replace(' ', '_')}_units.xlsx", "exp_bv",
-                          title=f"Muraba Veil — {focus}")
+    # ── legend ──
+    chips = "".join(
+        f'<span style="display:inline-flex;align-items:center;margin:2px 12px 2px 0;font-size:12px;">'
+        f'<span style="width:13px;height:13px;background:{BUILDING_COLORS[t]};border-radius:3px;'
+        f'display:inline-block;margin-right:5px;"></span>{t}</span>'
+        for t in BUILDING_COLORS if t in set(df["Type"]))
+    chips += ('<span style="display:inline-flex;align-items:center;margin:2px 12px;font-size:12px;">'
+              '<span style="width:13px;height:13px;border-radius:3px;display:inline-block;margin-right:5px;'
+              'background:repeating-linear-gradient(45deg,#999,#999 4px,rgba(255,255,255,.6) 4px,rgba(255,255,255,.6) 8px);">'
+              '</span>Sold (faded/hatch)</span>')
+    st.markdown(f'<div style="max-width:760px;margin:10px auto;">{chips}</div>', unsafe_allow_html=True)
 
 
 # ── Tab 3: Floor Manager ───────────────────────────────────────────────────────
