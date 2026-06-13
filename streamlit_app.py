@@ -883,9 +883,12 @@ with st.sidebar:
     st.title("Muraba Veil")
     st.caption("Unit Manager")
 
-    if st.button("💾  Save state", use_container_width=True, type="primary"):
+    st.caption("✅ Every edit applies **instantly** across all tabs. "
+               "Saving is **only** to keep your changes after a restart.")
+
+    if st.button("💾  Save for next launch", use_container_width=True, type="primary"):
         save_state()
-        st.session_state["flash"] = ("success", "✅ Working state saved. The app will reopen here.")
+        st.session_state["flash"] = ("success", "✅ State saved — the app will reopen here next time.")
         st.rerun()
 
     if st.button("↩️  Reset to original Excel", use_container_width=True):
@@ -898,13 +901,13 @@ with st.sidebar:
     if has_saved_state():
         import datetime as _dt
         _ts = _dt.datetime.fromtimestamp(os.path.getmtime(STATE_PATH)).strftime("%d %b %Y, %H:%M")
-        st.caption(f"📂 Loaded from saved state · last saved **{_ts}**")
+        st.caption(f"📂 Opened from saved state · last saved **{_ts}**")
     else:
-        st.caption("📄 Loaded from the original Excel (no saved state yet)")
+        st.caption("📄 Opened from the original Excel (no saved state yet)")
 
     st.divider()
-    st.caption("Add / edit / remove floors in the **Floor Manager** tab. "
-               "Click **Save state** to keep your changes for next time.")
+    st.caption("Add / edit / remove floors in the **Floor Manager** tab. Changes show everywhere "
+               "immediately; **Save for next launch** only persists them across restarts.")
     if blocked:
         st.caption("**Blocked floors (MEP / Majlis):** " + ", ".join(str(k) for k in sorted(blocked)))
 
@@ -1557,7 +1560,10 @@ def render_building_view(enhanced=False):
       rows.forEach(function(r){ r.addEventListener('click',function(){ setFocus(r.dataset.ty); }); });
     })();
     </script>"""
-    components.html(css + dyn + js, height=748, scrolling=False)
+    # data signature → the iframe srcdoc changes on any edit, forcing a live refresh
+    sig = (f"{len(df)}|{int(df['Price'].sum())}|{int((df['Status']=='Sold').sum())}|"
+           f"{color_mode}|{int(avail_only)}")
+    components.html(f"<!--bv:{_esc(sig)}-->" + css + dyn + js, height=748, scrolling=False)
 
 
 if tab6 is not None:                 # only when enabled (hidden on the published app)
