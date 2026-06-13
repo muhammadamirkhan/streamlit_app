@@ -1378,9 +1378,13 @@ with tab3:
 
     # Floor totals (the Floors table was removed; grand is still needed for previews below)
     grand = sum(floor_total(fl, params) for fl in floors)
+    res_floor_nums = {fl["floor"] for fl in floors}
+    n_res = len(floors)
+    n_mep = len([f for f in blocked if f not in res_floor_nums])     # MEP/Majlis floors
     mc1, mc2 = st.columns(2)
-    mc1.metric("Floors", len(floors))
+    mc1.metric("Floors", n_res + n_mep)
     mc2.metric("Units",  sum(len(fl["units"]) for fl in floors))
+    mc1.caption(f"{n_res} residential + {n_mep} MEP/Majlis")
 
     st.divider()
     action = st.radio("Action", ["Add a New Floor", "Edit a Floor"], horizontal=True, key="fm_action")
