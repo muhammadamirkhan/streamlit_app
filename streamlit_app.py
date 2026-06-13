@@ -942,13 +942,14 @@ gp[0].metric("Portfolio Value", aed(df["Price"].sum()))
 
 st.divider()
 
-# Building View is hidden on the published app; enable locally via secrets/env
-# (set `show_building_view = true` in .streamlit/secrets.toml, or SHOW_BUILDING_VIEW=1).
+# Both Building View tabs are shown by default (for stakeholders to compare/decide).
+# To hide them later, set `show_building_view = false` in secrets or SHOW_BUILDING_VIEW=0.
 try:
     _bv_secret = st.secrets.get("show_building_view", "")
 except Exception:
     _bv_secret = ""
-SHOW_BV = str(_bv_secret or os.environ.get("SHOW_BUILDING_VIEW", "")).strip().lower() in ("1", "true", "yes", "on")
+_bv_flag = str(_bv_secret or os.environ.get("SHOW_BUILDING_VIEW", "")).strip().lower()
+SHOW_BV = _bv_flag not in ("0", "false", "no", "off")
 
 _labels = ["Unit Register", "Summary by Type", "Topology View"]
 if SHOW_BV:
