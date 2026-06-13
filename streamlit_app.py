@@ -1385,97 +1385,139 @@ with tab3:
 
     # ─────────────────────── ADD A NEW FLOOR ──────────────────────────────────
     if action == "Add a New Floor":
-        st.subheader("Add a New Floor")
-        st.caption("Enter a floor number and choose the unit mix. Each unit is priced from the "
-                   "**highest-priced reference** at/above the last available unit of that type, "
-                   "stepped up by escalation × number of floors to this one.")
+        st.subheader("Add New Floor(s)")
+        st.caption("Pick a floor range (set **From = To** for a single floor) and a unit mix. The same "
+                   "mix is added to every floor in range that isn't blocked or already present. Each "
+                   "unit is priced from the escalation ladder for its own floor (built bottom-up).")
         existing = [fl["floor"] for fl in floors]
-        nf = st.number_input("Floor number", min_value=1, max_value=999,
-                             value=(max(existing)+1 if existing else 59), step=1, key="newfl")
+        ac1, ac2 = st.columns(2)
+        nf_from = ac1.number_input("From floor", min_value=1, max_value=999,
+                                   value=(max(existing)+1 if existing else 59), step=1, key="newfl_from")
+        nf_to = ac2.number_input("To floor", min_value=1, max_value=999,
+                                 value=int(nf_from), step=1, key="newfl_to")
+        lo, hi = int(min(nf_from, nf_to)), int(max(nf_from, nf_to))
+        rng = list(range(lo, hi + 1))
+        valid       = [f for f in rng if f not in blocked and f not in existing]
+        skip_block  = [f for f in rng if f in blocked]
+        skip_exists = [f for f in rng if f in existing]
+        if skip_block:
+            st.warning("Skipping blocked (MEP/Majlis): " + ", ".join(ordinal(f) for f in skip_block))
+        if skip_exists:
+            st.warning("Skipping floors that already exist: " + ", ".join(ordinal(f) for f in skip_exists))
 
-        blocked_hit = nf in blocked
-        exists_hit  = nf in existing
-        if blocked_hit:
-            st.error(f"Floor {ordinal(nf)} is a **{blocked[nf]}** floor (MEP/Majlis) — cannot place residential units here.")
-        elif exists_hit:
-            st.error(f"Floor {ordinal(nf)} already exists. Use **Edit a Floor** to change it.")
-
-        st.markdown("**Unit mix** — pick topology and use **− / +** to set quantity:")
+        st.markdown("**Unit mix** — pick topology and use **− / +** to set quantity (applied to each floor):")
         mix = unit_mix_builder("addmix", [{"type": "3 Bedroom", "qty": 1}, {"type": "2 Bedroom", "qty": 2}])
 
-        if mix:
-            preview, total = [], 0
-            for t, q in mix:
-                rate = new_unit_rate(t, nf, st.session_state.units, params)
-                ref, direction = escalation_reference(t, nf, st.session_state.units)
-                uv   = unit_val(t, rate, params)["total"]
-                total += uv*q
-                if ref:
-                    ref_txt = f"Unit {ref['ref_unit']} (Flr {ordinal(ref['ref_floor'])})"
-                    base_psf = f"AED {ref['ref_psf']:,.0f}"
-                    sign = "+" if direction >= 0 else "−"
-                    step_txt = f"{sign}{escalation_for(t, params):,.0f} × {ref['steps']}"
-                else:
-                    ref_txt, base_psf, step_txt = "—", "—", f"+{escalation_for(t, params):,.0f} × 1"
-                preview.append({"Type": t, "Qty": q,
-                                "Reference": ref_txt,
-                                "Ref Rate/sqft": base_psf,
-                                "Escalation (esc × steps)": step_txt,
-                                "Rate/sqft": f"AED {rate:,.0f}",
-                                "Value each": aed(uv), "Subtotal": aed(uv*q)})
-            excel_table(pd.DataFrame(preview))
+        if mix and not valid:
+            st.error("No valid floors in this range (all are blocked or already exist).")
+        elif mix:
+            per_floor_units = sum(q for _, q in mix)
+            # approximate added value (current-state pricing; actual build escalates floor-by-floor)
+            approx = 0.0
+            for f in valid:
+                for t, q in mix:
+                    approx += unit_val(t, new_unit_rate(t, f, st.session_state.units, params), params)["total"] * q
             m1, m2, m3 = st.columns(3)
-            m1.metric("Units on floor", sum(q for _, q in mix))
-            m2.metric("Floor Total", aed(total))
-            m3.metric("New Portfolio", aed(grand + total), delta=f"+{aed(total)}")
+            m1.metric("Floors to add", len(valid))
+            m2.metric("Units to add", len(valid) * per_floor_units)
+            m3.metric("Added value (≈)", aed(approx))
+            st.caption(f"Floors to add: {', '.join(ordinal(f) for f in valid)}")
 
-            disabled = blocked_hit or exists_hit
-            if st.button(f"Add Floor {ordinal(nf)}", type="primary", disabled=disabled, key="btn_addfl"):
+            label = (f"Add Floor {ordinal(valid[0])}" if len(valid) == 1
+                     else f"Add {len(valid)} floors ({ordinal(lo)}–{ordinal(hi)})")
+            if st.button(label, type="primary", key="btn_addfl"):
                 try:
                     ordered = []
                     for t, q in mix:
-                        ordered += [t]*q
+                        ordered += [t] * q
                     ordered.sort(key=lambda t: (t != "3 Bedroom", t))
-                    nos = gen_unit_nos(nf, ordered)
-                    new_units = [{"unit_no": no, "type": t,
-                                  "rate": new_unit_rate(t, nf, st.session_state.units, params)}
-                                 for no, t in zip(nos, ordered)]
-                    add_units_to_register(new_units, nf, params)
-                    st.session_state.floors.append({"floor": nf, "kind": "Added",
-                                                    "levels": max(TYPE_DEFAULTS[t]["levels"] for t in ordered),
-                                                    "units": new_units})
+                    for f in valid:                       # ascending → each floor escalates off the one below
+                        nos = gen_unit_nos(f, ordered)
+                        new_units = [{"unit_no": no, "type": t,
+                                      "rate": new_unit_rate(t, f, st.session_state.units, params)}
+                                     for no, t in zip(nos, ordered)]
+                        add_units_to_register(new_units, f, params)
+                        st.session_state.floors.append({"floor": f, "kind": "Added",
+                                                        "levels": max(TYPE_DEFAULTS[t]["levels"] for t in ordered),
+                                                        "units": new_units})
                     st.session_state.floors.sort(key=lambda x: x["floor"])
                     clear_builder("addmix")
-                    st.session_state["flash"] = ("success", f"✅ Floor {ordinal(nf)} added with {len(new_units)} unit(s).")
+                    st.session_state["flash"] = ("success",
+                        f"✅ Added {len(valid)} floor(s) ({ordinal(lo)}–{ordinal(hi)}), "
+                        f"{len(valid)*per_floor_units} unit(s).")
                 except Exception as e:
-                    st.session_state["flash"] = ("error", f"❌ Could not add floor {nf}: {e}")
+                    st.session_state["flash"] = ("error", f"❌ Could not add floors: {e}")
                 st.rerun()
 
     # ─────────────────────── EDIT A FLOOR ─────────────────────────────────────
     else:
-        st.subheader("Edit a Floor")
-        st.caption("Pick a floor, then change the **Available** units — add, remove or swap types. "
-                   "Sold units are protected and cannot be changed.")
+        st.subheader("Edit Floor(s)")
+        st.caption("Pick a floor — or a **From → To** range — then set the **Available** unit mix "
+                   "(add, remove or swap types). Sold units are always protected. In range mode the "
+                   "same Available mix is applied to every floor in range that has available units.")
+        floor_nums = [fl["floor"] for fl in floors]
         _fl_labels = {
             fl["floor"]: f"Floor {ordinal(fl['floor'])}  —  " + ", ".join(
-                f"{u['unit_no']} ({TYPE_ABBR.get(u['type'], u['type'])})"
-                for u in fl["units"]
-            )
+                f"{u['unit_no']} ({TYPE_ABBR.get(u['type'], u['type'])})" for u in fl["units"])
             for fl in floors
         }
-        sel = st.selectbox(
-            "Select floor", ["— select —"] + [fl["floor"] for fl in floors],
+        ec1, ec2 = st.columns(2)
+        sel = ec1.selectbox(
+            "From floor", ["— select —"] + floor_nums,
             format_func=lambda x: _fl_labels.get(x, f"Floor {ordinal(x)}") if x != "— select —" else x,
             key="edit_floor_sel",
         )
+        sel_to = sel
+        if sel != "— select —":
+            to_opts = [f for f in floor_nums if f >= sel]
+            sel_to = ec2.selectbox("To floor", to_opts, index=0,
+                                   format_func=lambda x: f"Floor {ordinal(x)}", key="edit_floor_to")
 
         if sel != "— select —":
-            fl = next(f for f in floors if f["floor"] == sel)
-            locked_units, avail_units = split_floor_units(fl)
+            lo, hi = int(sel), int(sel_to)
+            range_floors = [f for f in floor_nums if lo <= f <= hi]
+            is_range = len(range_floors) > 1
             smap = uid_status_map()
 
-            st.markdown(f"**Floor {ordinal(sel)}** ({fl['kind']}, {fl['levels']} level"
-                        f"{'s' if fl['levels']>1 else ''}) — current units:")
+            def apply_mix_to_floor(floor_num, mix):
+                """Replace a floor's Available units with `mix` (keep Sold). Returns (added, removed, locked, skipped)."""
+                fobj = next((f for f in st.session_state.floors if f["floor"] == floor_num), None)
+                if fobj is None:
+                    return (0, 0, 0, True)
+                locked, avail = split_floor_units(fobj)
+                if not avail:
+                    return (0, 0, 0, True)                       # fully sold → skip
+                keep, new_meta = [], []
+                for t, q in mix:
+                    same = [u for u in avail if u["type"] == t]
+                    for j in range(q):
+                        (keep.append(same[j]) if j < len(same) else new_meta.append(t))
+                kept = {u["uid"] for u in keep}
+                removed = [u["uid"] for u in avail if u["uid"] not in kept]
+                if removed:
+                    remove_units_from_register(removed)
+                added = []
+                if new_meta:
+                    new_meta.sort(key=lambda t: (t != "3 Bedroom", t))
+                    nos = gen_unit_nos(floor_num, new_meta)
+                    added = [{"unit_no": no, "type": t,
+                              "rate": new_unit_rate(t, floor_num, st.session_state.units, params)}
+                             for no, t in zip(nos, new_meta)]
+                    add_units_to_register(added, floor_num, params)
+                final = locked + keep + added
+                if final:
+                    fobj["units"] = final
+                    if fobj["kind"] not in ("Pool",):
+                        fobj["kind"] = "Edited"
+                else:
+                    st.session_state.floors = [f for f in st.session_state.floors if f["floor"] != floor_num]
+                return (len(added), len(removed), len(locked), False)
+
+            fl = next(f for f in floors if f["floor"] == sel)
+            locked_units, avail_units = split_floor_units(fl)
+
+            st.markdown(f"**Floor {ordinal(sel)}** ({fl['kind']}) — current units"
+                        + (" *(this floor is the reference for the range)*:" if is_range else ":"))
             cur = [{"Unit": u["unit_no"], "Type": u["type"],
                     "Status": unit_status(u, smap),
                     "Editable": "Yes" if unit_status(u, smap) == "Available" else "🔒 No",
@@ -1483,95 +1525,82 @@ with tab3:
                     "Value": aed(unit_val(u["type"], u["rate"], params)["total"])} for u in fl["units"]]
             excel_table(pd.DataFrame(cur))
 
-            # Block fully-sold / fully-locked floors
             if not avail_units:
-                st.error(f"🔒 Floor {ordinal(sel)} has no Available units — every unit is Sold. "
-                         f"This floor cannot be edited.")
+                st.error(f"🔒 Floor {ordinal(sel)} has no Available units — pick a floor with available units.")
             else:
-                if locked_units:
+                if locked_units and not is_range:
                     st.info(f"{len(locked_units)} unit(s) on this floor are Sold and will be kept "
                             f"unchanged. You are editing the **{len(avail_units)} Available** unit(s) only.")
 
-                # editable composition = available units only
                 comp = {}
                 for u in avail_units:
                     comp[u["type"]] = comp.get(u["type"], 0) + 1
                 default_rows = [{"type": t, "qty": q} for t, q in comp.items()] or [{"type": "2 Bedroom", "qty": 1}]
                 st.markdown("**Editable (Available) unit mix — use − / + to set quantity:**")
-                mix = unit_mix_builder(f"editmix_{sel}", default_rows, qmin=0)
+                mix = unit_mix_builder(f"editmix_{sel}_{sel_to}", default_rows, qmin=0)
 
-                # preview: locked value (fixed) + new available value
-                locked_total = sum(unit_val(u["type"], u["rate"], params)["total"] for u in locked_units)
-                avail_total = 0
-                for t, q in mix:
-                    same = [u for u in avail_units if u["type"] == t]
-                    for j in range(q):
-                        if j < len(same):
-                            avail_total += unit_val(t, same[j]["rate"], params)["total"]
-                        else:
-                            avail_total += unit_val(t, new_unit_rate(t, sel, st.session_state.units, params), params)["total"]
-                new_total  = locked_total + avail_total
-                old_total  = floor_total(fl, params)
-                grand_excl = grand - old_total
+                if is_range:
+                    aff = [f for f in range_floors
+                           if any(unit_status(u, smap) == "Available"
+                                  for u in next(x for x in floors if x["floor"] == f)["units"])]
+                    st.warning(f"**Range mode** — the mix above will be applied to **{len(aff)}** floor(s) "
+                               f"with available units in {ordinal(lo)}–{ordinal(hi)}: "
+                               f"{', '.join(ordinal(f) for f in aff)}. Sold units on each floor are kept.")
+                    if st.button(f"Apply to {len(aff)} floor(s)", type="primary",
+                                 key="btn_edit_apply_rng", disabled=not aff):
+                        try:
+                            tot_add = tot_rem = 0
+                            for f in aff:                       # ascending so escalation builds up
+                                a, r, l, sk = apply_mix_to_floor(f, mix)
+                                tot_add += a; tot_rem += r
+                            st.session_state.floors.sort(key=lambda x: x["floor"])
+                            clear_builder(f"editmix_{sel}_{sel_to}")
+                            st.session_state["flash"] = ("success",
+                                f"✅ Updated {len(aff)} floor(s) {ordinal(lo)}–{ordinal(hi)} — "
+                                f"{tot_add} added, {tot_rem} removed.")
+                        except Exception as e:
+                            st.session_state["flash"] = ("error", f"❌ Could not update range: {e}")
+                        st.rerun()
+                else:
+                    locked_total = sum(unit_val(u["type"], u["rate"], params)["total"] for u in locked_units)
+                    avail_total = 0
+                    for t, q in mix:
+                        same = [u for u in avail_units if u["type"] == t]
+                        for j in range(q):
+                            if j < len(same):
+                                avail_total += unit_val(t, same[j]["rate"], params)["total"]
+                            else:
+                                avail_total += unit_val(t, new_unit_rate(t, sel, st.session_state.units, params), params)["total"]
+                    new_total = locked_total + avail_total
+                    old_total = floor_total(fl, params)
+                    grand_excl = grand - old_total
 
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Units after edit", len(locked_units) + sum(q for _, q in mix))
-                m2.metric("Floor value", aed(new_total), delta=aed(new_total - old_total))
-                m3.metric("New Portfolio", aed(grand_excl + new_total))
+                    m1, m2, m3 = st.columns(3)
+                    m1.metric("Units after edit", len(locked_units) + sum(q for _, q in mix))
+                    m2.metric("Floor value", aed(new_total), delta=aed(new_total - old_total))
+                    m3.metric("New Portfolio", aed(grand_excl + new_total))
 
-                b1, b2 = st.columns(2)
-                if b1.button("Apply Changes", type="primary", key="btn_edit_apply"):
-                    try:
-                        # keep ALL locked units; rebuild available portion from the mix
-                        keep_avail, new_meta = [], []
-                        for t, q in mix:
-                            same = [u for u in avail_units if u["type"] == t]
-                            for j in range(q):
-                                if j < len(same):
-                                    keep_avail.append(same[j])
-                                else:
-                                    new_meta.append(t)
-                        kept_uids = {u["uid"] for u in keep_avail}
-                        removed_uids = [u["uid"] for u in avail_units if u["uid"] not in kept_uids]
-                        if removed_uids:
-                            remove_units_from_register(removed_uids)
-                        added_units = []
-                        if new_meta:
-                            new_meta.sort(key=lambda t: (t != "3 Bedroom", t))
-                            nos = gen_unit_nos(sel, new_meta)
-                            added_units = [{"unit_no": no, "type": t,
-                                            "rate": new_unit_rate(t, sel, st.session_state.units, params)}
-                                           for no, t in zip(nos, new_meta)]
-                            add_units_to_register(added_units, sel, params)
-                        final_units = locked_units + keep_avail + added_units
-                        if final_units:
-                            for f2 in st.session_state.floors:
-                                if f2["floor"] == sel:
-                                    f2["units"] = final_units
-                                    if f2["kind"] not in ("Pool",):
-                                        f2["kind"] = "Edited"
-                                    break
-                        else:
-                            st.session_state.floors = [f2 for f2 in st.session_state.floors if f2["floor"] != sel]
-                        n_add, n_rem = len(added_units), len(removed_uids)
-                        clear_builder(f"editmix_{sel}")
-                        st.session_state["flash"] = ("success",
-                            f"✅ Floor {ordinal(sel)} updated — {n_add} added, {n_rem} removed, "
-                            f"{len(locked_units)} protected unit(s) kept.")
-                    except Exception as e:
-                        st.session_state["flash"] = ("error", f"❌ Could not update floor {sel}: {e}")
-                    st.rerun()
+                    b1, b2 = st.columns(2)
+                    if b1.button("Apply Changes", type="primary", key="btn_edit_apply"):
+                        try:
+                            a, r, l, sk = apply_mix_to_floor(sel, mix)
+                            clear_builder(f"editmix_{sel}_{sel_to}")
+                            st.session_state["flash"] = ("success",
+                                f"✅ Floor {ordinal(sel)} updated — {a} added, {r} removed, "
+                                f"{l} protected unit(s) kept.")
+                        except Exception as e:
+                            st.session_state["flash"] = ("error", f"❌ Could not update floor {sel}: {e}")
+                        st.rerun()
 
-                # Remove entire floor only allowed when nothing is locked
-                if locked_units:
-                    b2.button("Remove Entire Floor", key="btn_edit_remove", disabled=True,
-                              help="Cannot remove a floor that has Sold units.")
-                elif b2.button("Remove Entire Floor", key="btn_edit_remove"):
-                    remove_units_from_register([u["uid"] for u in fl["units"]])
-                    st.session_state.floors = [f2 for f2 in st.session_state.floors if f2["floor"] != sel]
-                    clear_builder(f"editmix_{sel}")
-                    st.session_state["flash"] = ("success", f"✅ Floor {ordinal(sel)} removed entirely.")
-                    st.rerun()
+                    if locked_units:
+                        b2.button("Remove Entire Floor", key="btn_edit_remove", disabled=True,
+                                  help="Cannot remove a floor that has Sold units.")
+                    elif b2.button("Remove Entire Floor", key="btn_edit_remove"):
+                        remove_units_from_register([u["uid"] for u in fl["units"]])
+                        st.session_state.floors = [f2 for f2 in st.session_state.floors if f2["floor"] != sel]
+                        clear_builder(f"editmix_{sel}_{sel_to}")
+                        st.session_state["flash"] = ("success", f"✅ Floor {ordinal(sel)} removed entirely.")
+                        st.rerun()
 
 
 # ── Tab 4: Edit / Remove individual units ──────────────────────────────────────
@@ -1590,14 +1619,38 @@ with tab4:
     if sel_uid != "— select —":
         idx = st.session_state.units[st.session_state.units["uid"] == sel_uid].index[0]
         row = st.session_state.units.loc[idx]
+        drow = df[df["uid"] == sel_uid].iloc[0]                 # recalc'd row (has Sellable/Total)
+        sell = float(drow["Sellable_sqft"]); tot = float(drow["Total_sqft"])
+        cur_psf   = float(row["Price_sqft"])                    # price per sellable sqft (stored rate)
+        cur_total = cur_psf * sell
+
         e1, e2 = st.columns(2)
         ns = e1.selectbox("Status", STATUS_OPTIONS,
                           index=STATUS_OPTIONS.index(row["Status"]) if row["Status"] in STATUS_OPTIONS else 0)
-        npx = e2.number_input("Price/sqft (AED)", min_value=0.0, value=float(row["Price_sqft"]), step=50.0)
+        mode = e2.radio("Set price by", ["Price / sellable sqft", "Total unit price"],
+                        horizontal=True, key="edit_price_mode")
+
+        if mode == "Total unit price":
+            new_total = st.number_input("Unit Price (AED, total)", min_value=0.0,
+                                        value=float(round(cur_total, 0)), step=10000.0, key="edit_total")
+            new_psf = (new_total / sell) if sell else 0.0
+        else:
+            new_psf = st.number_input("Price / sellable area (AED/sqft)", min_value=0.0,
+                                      value=float(round(cur_psf, 2)), step=50.0, key="edit_psf")
+            new_total = new_psf * sell
+
+        psf_total = (new_total / tot) if tot else 0.0
+        st.caption(f"→ **Price / sellable sqft:** AED {new_psf:,.0f}  ·  "
+                   f"**Unit Price (total):** AED {new_total:,.0f}  ·  "
+                   f"**Price / total sqft:** AED {psf_total:,.0f}  "
+                   f"(sellable {sell:,.0f} sqft · total {tot:,.0f} sqft)")
+
         if st.button("Save Changes", type="primary", key="btn_save"):
             st.session_state.units.at[idx, "Status"] = ns
-            st.session_state.units.at[idx, "Price_sqft"] = npx
-            st.success(f"Unit {row['Unit']} updated.")
+            st.session_state.units.at[idx, "Price_sqft"] = new_psf
+            st.session_state["flash"] = ("success",
+                f"✅ Unit {row['Unit']} updated — AED {new_psf:,.0f}/sellable sqft "
+                f"(total AED {new_total:,.0f}).")
             st.rerun()
 
     st.divider()
