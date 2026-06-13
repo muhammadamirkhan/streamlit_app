@@ -1402,16 +1402,15 @@ with tab3:
             for fl in floors}
         DEFAULT_ADD_MIX = [{"type": "3 Bedroom", "qty": 1}, {"type": "2 Bedroom", "qty": 2}]
         def _add_label(f):
-            if f in existing_units:
-                return f"Floor {ordinal(f)} — {existing_units[f]} (exists)"
-            # new/addable → preview the unit numbers/types from the default mix
-            ordered = []
+            if f in existing_units:                                # existing floor → its real units
+                return f"Floor {ordinal(f)}  —  {existing_units[f]}"
+            ordered = []                                           # new floor → projected default mix
             for r in DEFAULT_ADD_MIX:
                 ordered += [r["type"]] * r["qty"]
             ordered.sort(key=lambda t: (t != "3 Bedroom", t))     # 3BR first → ends in 01
             items = sorted((f * 100 + i + 1, t) for i, t in enumerate(ordered))
             parts = ", ".join(f"{no} ({TYPE_ABBR.get(t, t)})" for no, t in items)
-            return f"Floor {ordinal(f)} — {parts}"
+            return f"Floor {ordinal(f)}  —  {parts}"
         # default the From box to the first addable floor (not an existing/blocked one)
         first_add = next((f for f in cand if f not in existing and f not in blocked), cand[0])
         ac1, ac2 = st.columns(2)
