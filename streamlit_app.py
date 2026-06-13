@@ -466,8 +466,9 @@ def load_params() -> dict:
     esc["3 Bedroom - New"] = esc["2 Bedroom"]   # new type mirrors 2 Bedroom escalation
     area = {t: {"internal": TYPE_DEFAULTS[t]["internal"], "external": TYPE_DEFAULTS[t]["external"]}
             for t in UNIT_TYPES}
+    parking = {t: TYPE_DEFAULTS[t]["parking"] for t in UNIT_TYPES}
     return {"escalation": esc, "terrace": terrace, "duplex_premium": duplex_premium, "area": area,
-            "base": {}}
+            "parking": parking, "base": {}}
 
 
 def load_blocked_floors() -> dict:
@@ -733,12 +734,15 @@ def floor_total(fl, params):
 
 def recalc(df, params):
     df = df.copy()
+    pk = params.get("parking", {})
     for t in df["Type"].unique():
         internal, external = area_for(t, params)
         m = df["Type"] == t
         df.loc[m, "Internal_sqft"] = internal
         df.loc[m, "External_sqft"] = external
         df.loc[m, "Terrace_Rate"]  = terrace_for(t, params)
+        if t in pk:
+            df.loc[m, "Parking"] = int(pk[t])     # configurable parking per typology (cascades)
     # per-unit terrace overrides win over the type default (set by the floor-range tool)
     if "Terrace_Override" in df.columns:
         ov = df["Terrace_Override"].notna()
@@ -922,14 +926,16 @@ if _flash:
 ALLOWABLE_SELLABLE = 818186.683338944          # fixed design cap; shown rounded as 818,187
 _tot_area = df["Total_sqft"].sum()
 _variance = _tot_area - ALLOWABLE_SELLABLE
-g1, g2, g3, g4, g5, g6 = st.columns(6)
+g1, g2, g3, g4, g5 = st.columns(5)
 g1.metric("Units shown", len(df))
 g2.metric("Total Area (sqft)", f"{_tot_area:,.0f}")
 g3.metric("Total Allowable Sellable (sqft)", f"{ALLOWABLE_SELLABLE:,.0f}")
 g4.metric("Variance: Total − Allowable (sqft)", f"{_variance:,.0f}",
           delta=f"{_variance:,.0f}", delta_color="inverse")
 g5.metric("Total Price/sqft", aed(df["Price"].sum()/_tot_area) if _tot_area else "—")
-g6.metric("Portfolio Value", aed(df["Price"].sum()))
+# Portfolio Value on its own line below the rest
+gp = st.columns(6)
+gp[0].metric("Portfolio Value", aed(df["Price"].sum()))
 
 st.divider()
 
@@ -1528,23 +1534,29 @@ with tab3:
         table_with_export(_ref_df, "Escalation_Terrace_Settings.xlsx", "exp_settings",
                           title="Escalation & Terrace Settings")
 
-    with st.expander("📐  Area Settings (Internal & External sqft per topology — cascades to all units of that type)", expanded=False):
-        st.caption("Change a topology's area and every unit of that type updates — sellable area, price and all stats recompute.")
+    with st.expander("📐  Area & Parking Settings (Internal/External sqft & parking per topology — cascades to all units of that type)", expanded=False):
+        st.caption("Change a topology's area or parking and every unit of that type updates — sellable area, price, parking and all stats recompute.")
         cur_area = params.get("area", {})
-        new_area = {}
-        ah1, ah2, ah3 = st.columns([2, 1.5, 1.5])
-        ah1.markdown("**Topology**"); ah2.markdown("**Internal (sqft)**"); ah3.markdown("**External (sqft)**")
+        cur_park = params.get("parking", {})
+        new_area, new_park = {}, {}
+        ah1, ah2, ah3, ah4 = st.columns([2, 1.4, 1.4, 1.1])
+        ah1.markdown("**Topology**"); ah2.markdown("**Internal (sqft)**")
+        ah3.markdown("**External (sqft)**"); ah4.markdown("**Parking**")
         for t in UNIT_TYPES:
             a = cur_area.get(t, {"internal": TYPE_DEFAULTS[t]["internal"], "external": TYPE_DEFAULTS[t]["external"]})
-            r1, r2, r3 = st.columns([2, 1.5, 1.5])
+            p = int(cur_park.get(t, TYPE_DEFAULTS[t]["parking"]))
+            r1, r2, r3, r4 = st.columns([2, 1.4, 1.4, 1.1])
             r1.markdown(f"<div style='padding-top:6px'>{t}</div>", unsafe_allow_html=True)
             ni = r2.number_input("int", min_value=0.0, step=10.0, value=float(a["internal"]),
                                  key=f"area_int_{t}", label_visibility="collapsed")
             ne = r3.number_input("ext", min_value=0.0, step=10.0, value=float(a["external"]),
                                  key=f"area_ext_{t}", label_visibility="collapsed")
+            np_ = r4.number_input("park", min_value=0, step=1, value=p,
+                                  key=f"area_park_{t}", label_visibility="collapsed")
             new_area[t] = {"internal": ni, "external": ne}
-        if new_area != params.get("area", {}):
-            st.session_state.fm_params = {**st.session_state.fm_params, "area": new_area}
+            new_park[t] = int(np_)
+        if new_area != params.get("area", {}) or new_park != params.get("parking", {}):
+            st.session_state.fm_params = {**st.session_state.fm_params, "area": new_area, "parking": new_park}
             st.rerun()
 
     with st.expander("📈  Bulk Update by Typology & Floor Range (escalation + terrace %)", expanded=False):
@@ -1656,12 +1668,10 @@ with tab3:
     # ─────────────────────── ADD A NEW FLOOR ──────────────────────────────────
     if action == "Add a New Floor":
         st.subheader("Add New Floor(s)")
-        st.caption("Pick a floor range (set **From = To** for a single floor). For a range, **each floor "
-                   "is configured on its own** below. Units are priced from the escalation ladder for "
-                   "their floor (built bottom-up). Blocked / existing floors are skipped.")
+        st.caption("Pick a floor range (set **From = To** for a single floor) and one unit mix — the "
+                   "**same mix** is added to every floor in the range. Units are priced from the escalation "
+                   "ladder for their floor (built bottom-up). Blocked / existing floors are skipped.")
         existing = [fl["floor"] for fl in floors]
-        DEFAULT_ADD_MIX = [{"type": "3 Bedroom", "qty": 1}, {"type": "2 Bedroom", "qty": 2}]
-        # New floors don't exist yet → type the floor number(s). Set From = To for a single floor.
         ac1, ac2 = st.columns(2)
         nf_from = ac1.number_input("From floor", min_value=1, max_value=999,
                                    value=(max(existing)+1 if existing else 59), step=1, key="newfl_from")
@@ -1680,40 +1690,29 @@ with tab3:
         if not valid:
             st.error("No valid floors in this range (all are blocked or already exist).")
         else:
-            default_rows = [dict(r) for r in DEFAULT_ADD_MIX]
-            floor_mixes = {}
-            if len(valid) == 1:
-                f = valid[0]
-                st.markdown("**Unit mix** — pick topology and use **− / +** to set quantity:")
-                floor_mixes[f] = unit_mix_builder(f"addmix_{f}", default_rows)
-            else:
-                st.markdown(f"**Configure each of the {len(valid)} floors** "
-                            f"({ordinal(lo)}–{ordinal(hi)}) — set its own unit mix:")
-                for f in valid:
-                    with st.expander(f"Floor {ordinal(f)}", expanded=(f == valid[0])):
-                        floor_mixes[f] = unit_mix_builder(f"addmix_{f}", default_rows)
-
-            total_units = sum(sum(q for _, q in floor_mixes[f]) for f in valid)
+            st.markdown("**Unit mix** — pick topology and use **− / +** to set quantity (applied to each floor):")
+            mix = unit_mix_builder("addmix", [{"type": "3 Bedroom", "qty": 1}, {"type": "2 Bedroom", "qty": 2}])
+            per_floor = sum(q for _, q in mix)
+            total_units = per_floor * len(valid)
             approx = 0.0
             for f in valid:
-                for t, q in floor_mixes[f]:
+                for t, q in mix:
                     approx += unit_val(t, new_unit_rate(t, f, st.session_state.units, params), params)["total"] * q
             m1, m2, m3 = st.columns(3)
             m1.metric("Floors to add", len(valid))
             m2.metric("Units to add", total_units)
             m3.metric("Added value (≈)", aed(approx))
+            st.caption(f"Floors to add: {', '.join(ordinal(f) for f in valid)}")
 
             label = (f"Add Floor {ordinal(valid[0])}" if len(valid) == 1
                      else f"Add {len(valid)} floors ({ordinal(lo)}–{ordinal(hi)})")
-            if st.button(label, type="primary", key="btn_addfl", disabled=(total_units == 0)):
+            if st.button(label, type="primary", key="btn_addfl", disabled=(per_floor == 0)):
                 try:
+                    ordered = []
+                    for t, q in mix:
+                        ordered += [t] * q
+                    ordered.sort(key=lambda t: (t != "3 Bedroom", t))
                     for f in valid:                       # ascending → each floor escalates off the one below
-                        ordered = []
-                        for t, q in floor_mixes[f]:
-                            ordered += [t] * q
-                        if not ordered:
-                            continue
-                        ordered.sort(key=lambda t: (t != "3 Bedroom", t))
                         nos = gen_unit_nos(f, ordered)
                         new_units = [{"unit_no": no, "type": t,
                                       "rate": new_unit_rate(t, f, st.session_state.units, params)}
@@ -1723,8 +1722,7 @@ with tab3:
                                                         "levels": max(TYPE_DEFAULTS[t]["levels"] for t in ordered),
                                                         "units": new_units})
                     st.session_state.floors.sort(key=lambda x: x["floor"])
-                    for f in valid:
-                        clear_builder(f"addmix_{f}")
+                    clear_builder("addmix")
                     st.session_state["flash"] = ("success",
                         f"✅ Added {len(valid)} floor(s) ({ordinal(lo)}–{ordinal(hi)}), {total_units} unit(s).")
                 except Exception as e:
@@ -1909,9 +1907,8 @@ with tab4:
         return f"Unit {r['Unit']} - {r['Type']} (Floor {r['Floor']}) - {r['Status']}"
 
     st.subheader("Edit a Unit")
-    st.caption("Only **Available** units are editable — Sold units are protected.")
-    avail_uids = df[df["Status"] == "Available"]["uid"].tolist()
-    sel_uid = st.selectbox("Select unit", ["— select —"] + avail_uids,
+    st.caption("All units are editable — including Sold (a unit can be marked back to Available here).")
+    sel_uid = st.selectbox("Select unit", ["— select —"] + df["uid"].tolist(),
                            format_func=lambda x: uid_label(x, df) if x != "— select —" else x, key="edit_sel")
     if sel_uid != "— select —":
         idx = st.session_state.units[st.session_state.units["uid"] == sel_uid].index[0]
