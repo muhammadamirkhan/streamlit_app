@@ -949,12 +949,13 @@ SHOW_BV = str(_bv_secret or os.environ.get("SHOW_BUILDING_VIEW", "")).strip().lo
 
 _labels = ["Unit Register", "Summary by Type", "Topology View"]
 if SHOW_BV:
-    _labels.append("Building View")
+    _labels += ["Building View", "Building View ✦"]
 _labels += ["Floor Manager", "Edit / Remove Units"]
 _tmap = dict(zip(_labels, st.tabs(_labels)))
 tab1 = _tmap["Unit Register"]; tab2 = _tmap["Summary by Type"]; tab5 = _tmap["Topology View"]
 tab3 = _tmap["Floor Manager"]; tab4 = _tmap["Edit / Remove Units"]
 tab6 = _tmap.get("Building View")
+tab6b = _tmap.get("Building View ✦")
 
 
 # ── Tab 1: Unit Register ───────────────────────────────────────────────────────
@@ -1251,12 +1252,31 @@ BUILDING_COLORS = {
 def _esc(s):
     return (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;"))
 
-def render_building_view():
-    st.subheader("Building View — Muraba Veil")
+def _heat(v, lo, hi):
+    """Map a value to a low→high price heatmap colour (blue → amber → red)."""
+    t = 0.5 if hi <= lo else max(0.0, min(1.0, (v - lo) / (hi - lo)))
+    stops = [(0.0, (60, 120, 216)), (0.5, (242, 166, 90)), (1.0, (220, 70, 70))]
+    for i in range(len(stops) - 1):
+        a, ca = stops[i]; b, cb = stops[i + 1]
+        if t <= b:
+            f = (t - a) / (b - a) if b > a else 0
+            r, g, bl = (int(ca[j] + (cb[j] - ca[j]) * f) for j in range(3))
+            return f"#{r:02X}{g:02X}{bl:02X}"
+    return "#DC4646"
+
+def render_building_view(enhanced=False):
+    st.subheader("Building View — Muraba Veil" + (" ✦ Enhanced" if enhanced else ""))
     st.caption("A live elevation of the tower beside a typology dashboard. Lit blocks are available, "
                "dim outlined blocks are sold; hover for instant details. **Click a unit (or a typology in "
                "the panel) to highlight all units of that type** — click again to clear. Scroll the tower; "
                "the KPIs and typology panel track counts, availability and value live.")
+
+    color_mode, avail_only = "Typology", False
+    if enhanced:
+        cc1, cc2 = st.columns([1.5, 1])
+        color_mode = cc1.radio("Colour the tower by", ["Typology", "Price / sqft"],
+                               horizontal=True, key="bv2_color")
+        avail_only = cc2.toggle("Show available only", value=False, key="bv2_avail")
 
     bdf = df.copy()
     bdf["_fn"] = pd.to_numeric(bdf["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True), errors="coerce")
@@ -1264,6 +1284,8 @@ def render_building_view():
     units_by_floor = {int(f): g.sort_values("_un") for f, g in bdf.dropna(subset=["_fn"]).groupby("_fn")}
     floor_nums = [int(f) for f in units_by_floor]
     max_floor = max(floor_nums + list(blocked) + [1]); min_floor = 1
+    _ps = pd.to_numeric(bdf["Price_sqft"], errors="coerce")
+    PLO, PHI = (float(_ps.min()), float(_ps.max())) if len(_ps) else (0.0, 1.0)
 
     # ── geometry (tower SVG) ──
     W, TW, TX = 820, 520, 200
@@ -1301,8 +1323,13 @@ def render_building_view():
             n = len(g); cw = (TW - (n - 1) * MULL) / n
             for i, (_, u) in enumerate(g.iterrows()):
                 xi = TX + i * (cw + MULL)
-                col = BUILDING_COLORS.get(u["Type"], "#7f8c9b")
                 sold = u["Status"] == "Sold"
+                col = (_heat(float(u["Price_sqft"]), PLO, PHI)
+                       if color_mode == "Price / sqft" else BUILDING_COLORS.get(u["Type"], "#7f8c9b"))
+                if avail_only and sold:                       # show available only → ghost the sold cells
+                    body.append(f'<rect x="{xi:.1f}" y="{y+1:.0f}" width="{cw:.1f}" height="{h-2}" rx="2.5" '
+                                f'fill="#0e1d36" stroke="#16263f"/>')
+                    continue
                 gattr = (f'class="u" data-u="{_esc(str(u["Unit"]))}" data-ty="{_esc(u["Type"])}" '
                          f'data-fl="{_esc(str(u["Floor"]))}" data-st="{u["Status"]}" '
                          f'data-pr="{_esc(aed(u["Price"]))}" data-ps="{u["Price_sqft"]:,.0f}" '
@@ -1400,13 +1427,44 @@ def render_building_view():
     for t in present:
         s = _stat(t); col = BUILDING_COLORS.get(t, "#7f8c9b")
         avpct = (s["av"] / s["n"] * 100) if s["n"] else 0
+        soldpct = (s["so"] / s["n"] * 100) if s["n"] else 0
+        rag = "#5AD18B" if soldpct >= 66 else ("#F0CE78" if soldpct >= 33 else "#F08C8C")
+        rag_dot = f'<span class="rag" style="background:{rag}"></span>' if enhanced else ""
+        sold_txt = f' &middot; {soldpct:.0f}% sold' if enhanced else ""
         rows.append(
             f'<div class="lg" data-ty="{_esc(t)}"><span class="sw" style="background:{col}"></span>'
-            f'<div class="lgm"><div class="lgt">{_esc(t)}</div>'
-            f'<div class="lgs">{s["n"]} units &middot; {s["av"]} avail &middot; {s["so"]} sold</div>'
+            f'<div class="lgm"><div class="lgt">{rag_dot}{_esc(t)}</div>'
+            f'<div class="lgs">{s["n"]} units &middot; {s["av"]} avail &middot; {s["so"]} sold{sold_txt}</div>'
             f'<div class="bar"><span style="width:{avpct:.0f}%;background:{col}"></span></div></div>'
             f'<div class="lgv">{aed(s["val"])}<div class="lgv2">{aed(s["psf"])}/sqft</div></div></div>')
     legend_html = "".join(rows)
+
+    # ── enhanced extras: revenue hero + trophies + price scale ──
+    hero_html, scale_html = "", ""
+    if enhanced:
+        SOLDV = VAL - AVAL
+        cap = (SOLDV / VAL * 100) if VAL else 0
+        av_df = df[df["Status"] == "Available"]
+        if len(av_df):
+            top = av_df.loc[av_df["Price"].idxmax()]
+            top_txt = f'{_esc(str(top["Unit"]))} · {_esc(top["Type"])} · {aed(top["Price"])}'
+        else:
+            top_txt = "—"
+        ph = df[df["Type"] == "5 Bedroom Duplex"]
+        ph_txt = ph.iloc[0]["Status"] if len(ph) else "—"
+        ph_col = "#5AD18B" if ph_txt == "Available" else ("#F08C8C" if ph_txt == "Sold" else "#9fb3d0")
+        hero_html = (
+            '<div class="hero">'
+            '<div class="ht">Revenue captured vs. remaining</div>'
+            f'<div class="hbar"><div class="hb-f" style="width:{cap:.1f}%"></div>'
+            f'<div class="hb-r" style="width:{100-cap:.1f}%"></div></div>'
+            f'<div class="hl"><span><b style="color:#5AD18B">{aed(SOLDV)}</b> sold · {cap:.0f}%</span>'
+            f'<span><b style="color:#F0CE78">{aed(AVAL)}</b> available · {100-cap:.0f}%</span></div>'
+            f'<div class="htro">🏆 Top available: <b>{top_txt}</b><br>👑 Penthouse: '
+            f'<b style="color:{ph_col}">{ph_txt}</b></div></div>')
+        if color_mode == "Price / sqft":
+            scale_html = (f'<div class="scale"><span>AED {PLO:,.0f}</span>'
+                          f'<span class="grad"></span><span>AED {PHI:,.0f}</span></div>')
 
     css = """<style>
     *{box-sizing:border-box;}
@@ -1446,10 +1504,21 @@ def render_building_view():
     #bvtip .h{font-size:13px;font-weight:700;margin-bottom:3px;}
     #bvtip .p{color:#F0CE78;font-weight:700;margin-top:4px;}
     #bvtip .a{color:#9fb3d0;margin-top:3px;font-size:11px;}
+    .rag{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle;}
+    .hero{background:#0d1b30;border:1px solid #1e3357;border-radius:10px;padding:10px 12px;}
+    .ht{font-size:11px;color:#9fb3d0;margin-bottom:6px;letter-spacing:.3px;}
+    .hbar{display:flex;height:13px;border-radius:7px;overflow:hidden;background:#16263f;}
+    .hb-f{background:linear-gradient(90deg,#2f8f5d,#5AD18B);}
+    .hb-r{background:linear-gradient(90deg,#3a5078,#24395c);}
+    .hl{display:flex;justify-content:space-between;font-size:11.5px;margin-top:6px;color:#cdd6e2;}
+    .htro{font-size:11px;color:#9fb3d0;margin-top:7px;line-height:1.6;}
+    .scale{display:flex;align-items:center;gap:8px;font-size:10px;color:#9fb3d0;margin:-2px 2px 0;}
+    .scale .grad{flex:1;height:8px;border-radius:4px;background:linear-gradient(90deg,#3C78D8,#F2A65A,#DC4646);}
     </style>"""
     dyn = (f'<div class="bv"><div class="tower">{svg}</div>'
-           f'<div class="side"><div class="kpis">{kpis}</div>'
+           f'<div class="side">{hero_html}<div class="kpis">{kpis}</div>'
            f'<div class="sh">By Typology <span>&nbsp;live counts &amp; value</span></div>'
+           f'{scale_html}'
            f'<div class="legend">{legend_html}</div></div></div><div id="bvtip"></div>')
     js = """<script>
     (function(){
@@ -1493,7 +1562,10 @@ def render_building_view():
 
 if tab6 is not None:                 # only when enabled (hidden on the published app)
     with tab6:
-        render_building_view()
+        render_building_view(enhanced=False)
+if tab6b is not None:
+    with tab6b:
+        render_building_view(enhanced=True)
 
 
 # ── Tab 3: Floor Manager ───────────────────────────────────────────────────────
