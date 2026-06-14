@@ -393,6 +393,7 @@ def load_unit_data() -> pd.DataFrame:
 
     df["Terrace_Override"] = pd.NA                                     # per-unit terrace-rate override (set by bulk tool)
     df["Sellable_Override"] = pd.NA                                    # per-unit sellable-area override (set in Edit Units)
+    df["Dup_Up"] = pd.NA                                               # loaded duplexes span DOWN; added ones span UP
     cmts = load_comments_file()                                       # free-text notes per unit, persisted to JSON
     df["Comment"] = [cmts.get(comment_key(u, t, fl), "")
                      for u, t, fl in zip(df["Unit"], df["Type"], df["Floor"])]
@@ -850,7 +851,10 @@ def add_units_to_register(unit_list, floor_num, params):
             "Type": u["type"], "Status": "Available", "Unit": u["unit_no"], "Floor": ordinal(floor_num),
             "Parking": d["parking"], "Internal_sqft": internal, "External_sqft": external,
             "Terrace_Rate": terrace_for(u["type"], params), "Price_sqft": u["rate"],
-            "Terrace_Override": pd.NA, "Sellable_Override": pd.NA, "Comment": "", "uid": uid,
+            "Terrace_Override": pd.NA, "Sellable_Override": pd.NA,
+            # a duplex added here is ONE unit that occupies its floor + the floor ABOVE (roof shifts up)
+            "Dup_Up": (True if "Duplex" in u["type"] else pd.NA),
+            "Comment": "", "uid": uid,
         }])], ignore_index=True)
 
 def remove_units_from_register(uids):
@@ -1715,7 +1719,17 @@ def render_building_view_brochure():
     bdf["_un"] = pd.to_numeric(bdf["Unit"].astype(str).str.replace(r"[^0-9]", "", regex=True), errors="coerce")
     units_by_floor = {int(f): g.sort_values("_un") for f, g in bdf.dropna(subset=["_fn"]).groupby("_fn")}
     floor_nums = [int(f) for f in units_by_floor]
-    max_floor = max(floor_nums + list(blocked) + [1]); min_floor = 1
+
+    def _is_up(u):                                      # an ADDED duplex occupies its floor + the one ABOVE
+        v = u.get("Dup_Up")
+        return bool(v) if pd.notna(v) else False
+
+    # added (upward) duplexes also occupy the floor above → counts toward building height
+    up_tops = [int(f) + 1 for f, g in units_by_floor.items()
+               for _, u in g.iterrows() if "Duplex" in str(u["Type"]) and _is_up(u)]
+    max_floor = max(floor_nums + list(blocked) + up_tops + [1]); min_floor = 1
+    ROOF_N = 4                                          # the top 4 floors are always ROOF POOL, RESTAURANT
+    roof_floors = [max_floor + i for i in range(ROOF_N, 0, -1)]   # e.g. 69 -> [73,72,71,70]
 
     # ── brochure palette ──
     PAGE, INK, SUB = "#B4A48D", "#33302A", "#6E6657"
@@ -1731,13 +1745,14 @@ def render_building_view_brochure():
             '<rect width="5" height="10" fill="#94866F"/></pattern></defs>')
 
     body, y, floor_y, floor_h = [], PAD_TOP + CROWN_H, {}, {}
-    # static roof amenity band (levels 70–73)
-    roof_h = len(ROOF_FLOORS) * H_STD + (len(ROOF_FLOORS) - 1) * GAP
+    # the top ROOF_N floors are always the roof amenity band (moves up as floors are added)
+    roof_h = len(roof_floors) * H_STD + (len(roof_floors) - 1) * GAP
     roof_bottom = y + roof_h                        # bottom edge of the roof band (y here = its top)
     body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{roof_h:.0f}" rx="2" fill="url(#amenP)"/>')
-    body.append(f'<text x="{cx:.0f}" y="{y+roof_h/2+4:.0f}" text-anchor="middle" font-size="12" '
-                f'pointer-events="none" fill="{INK}" letter-spacing="2" font-family="Calibri,Arial">{ROOF_TEXT}</text>')
-    for j, rf in enumerate(ROOF_FLOORS):
+    body.append(f'<text x="{cx:.0f}" y="{y+roof_h/2+4.5:.0f}" text-anchor="middle" font-size="13" '
+                f'font-weight="bold" pointer-events="none" fill="{INK}" letter-spacing="2.5" '
+                f'font-family="Calibri,Arial">{ROOF_TEXT}</text>')
+    for j, rf in enumerate(roof_floors):
         ry = y + j * (H_STD + GAP) + H_STD / 2
         floor_y[rf] = ry; floor_h[rf] = H_STD
         body.append(f'<text x="{TX+TW+8:.0f}" y="{ry+3.5:.0f}" text-anchor="start" font-size="10" '
@@ -1775,10 +1790,15 @@ def render_building_view_brochure():
                             f'font-family="Calibri,Arial">{aed(u["Price"])}</text>')
 
     for f in range(max_floor, min_floor - 1, -1):
-        if f in ROOF_FLOORS:
+        if f in roof_floors:
             continue
         g = units_by_floor.get(f)
         is_blocked = f in blocked
+        has_units = g is not None and len(g) > 0
+        # a floor with nothing on it (e.g. one that was added then removed) is not drawn at all,
+        # so the tower stays contiguous and floors above sit straight on top — no empty gap
+        if not has_units and not is_blocked and f != 2 and f not in up_tops:
+            continue
         types = list(g["Type"]) if g is not None else []
         tall = g is not None and any(("Pool" in t or "Duplex" in t) for t in types)
         h = H_TALL if tall else H_STD
@@ -1801,12 +1821,14 @@ def render_building_view_brochure():
         elif is_blocked:
             lbl = "MAJLIS" if f == 31 else "MEP"
             body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="2" fill="url(#amenP)"/>'
-                        f'<text x="{cx:.0f}" y="{y+h/2+3.2:.0f}" text-anchor="middle" font-size="9" '
-                        f'pointer-events="none" fill="{SUB}" letter-spacing="2" font-family="Calibri,Arial">{lbl}</text>')
+                        f'<text x="{cx:.0f}" y="{y+h/2+4:.0f}" text-anchor="middle" font-size="12" '
+                        f'font-weight="bold" pointer-events="none" fill="{INK}" letter-spacing="3" '
+                        f'font-family="Calibri,Arial">{lbl}</text>')
         elif f == 2:
             body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="2" fill="url(#amenP)"/>'
-                        f'<text x="{cx:.0f}" y="{y+h/2+3.2:.0f}" text-anchor="middle" font-size="9" '
-                        f'pointer-events="none" fill="{SUB}" letter-spacing="2" font-family="Calibri,Arial">AMENITIES</text>')
+                        f'<text x="{cx:.0f}" y="{y+h/2+4:.0f}" text-anchor="middle" font-size="12" '
+                        f'font-weight="bold" pointer-events="none" fill="{INK}" letter-spacing="3" '
+                        f'font-family="Calibri,Arial">AMENITIES</text>')
         else:
             body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="2" fill="none" '
                         f'stroke="{SLABLN}" stroke-dasharray="3 3"/>')
@@ -1814,14 +1836,11 @@ def render_building_view_brochure():
 
     tower_bottom = y - GAP
 
-    # duplexes: one unit spanning two floor levels — up into the floor above, or down
-    # when the floor above is the roof (e.g. the 5BR penthouse spans 68–69)
+    # duplexes: one unit two floors tall. Loaded duplexes span DOWN (recorded on the upper floor,
+    # e.g. 5BR on 69 → 68–69); duplexes ADDED via Floor Manager span UP (their floor + the one above,
+    # pushing the roof up) so adding one never disturbs the floors below it.
     for (f, xi, cw, sold, col, u) in dup_units:
-        fa = f + 1
-        if (fa in floor_y) and (fa not in ROOF_FLOORS):
-            lo, hi = f, fa
-        else:
-            lo, hi = f - 1, f
+        lo, hi = (f, f + 1) if _is_up(u) else (f - 1, f)
         top = (floor_y[hi] - floor_h[hi] / 2) if hi in floor_y else (floor_y[lo] - floor_h[lo] / 2 - GAP - H_STD)
         bot = (floor_y[lo] + floor_h[lo] / 2) if lo in floor_y else (floor_y[hi] + floor_h[hi] / 2 + GAP + H_STD)
         top = max(top, roof_bottom + 1)
@@ -1886,7 +1905,7 @@ def render_building_view_brochure():
     SOLDVAL = VAL - AVAL
     sv_pct = (SOLDVAL / VAL * 100) if VAL else 0.0
     avv_pct = (AVAL / VAL * 100) if VAL else 0.0
-    SELL = float(df["Sellable_sqft"].sum())
+    ALLOW = float(df["Total_sqft"].sum())            # live total sellable footprint (grows with floors)
 
     def _m(v):                                       # compact AED for the split-bar labels
         return (f"AED {v/1e9:.2f}B" if v >= 1e9 else
@@ -1917,7 +1936,7 @@ def render_building_view_brochure():
         _kpi("Available Stock Value", aed(AVAL)),
         _kpi("Total Sold Value", aed(SOLDVAL)),
         _kpi("Avg Price/sqft", aed(PSF), "on total area"),
-        _kpi("Total Sellable Area (sqft)", f"{SELL:,.0f}"),
+        _kpi("Total Allowable Sellable (sqft)", f"{ALLOW:,.0f}"),
         split_units, split_value])
     rows = []
     for t in present:
@@ -1938,7 +1957,7 @@ def render_building_view_brochure():
     .tower svg{display:block;margin:0 auto;width:100%;height:auto;max-width:920px;}
     .tower::-webkit-scrollbar,.legend::-webkit-scrollbar{width:8px;height:8px;}
     .tower::-webkit-scrollbar-thumb,.legend::-webkit-scrollbar-thumb{background:#8C7E66;border-radius:5px;}
-    .side{flex:1 1 250px;min-width:230px;max-width:360px;display:flex;flex-direction:column;gap:12px;color:#33302A;}
+    .side{flex:1 1 280px;min-width:240px;max-width:420px;display:flex;flex-direction:column;gap:12px;color:#33302A;}
     /* narrow screens: stack the panel under the tower so nothing is clipped */
     @media (max-width:900px){
       .bv{flex-direction:column;height:auto;}
@@ -1947,11 +1966,12 @@ def render_building_view_brochure():
     }
     .kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
     .kpi{background:linear-gradient(180deg,#CCC0AB,#C2B49C);border:1px solid #9C8E76;border-radius:11px;
-         padding:11px 13px;display:flex;flex-direction:column;justify-content:center;min-height:76px;
-         box-shadow:0 1px 2px rgba(60,50,30,.10);}
-    .kl{font-size:10.5px;color:#6E6657;letter-spacing:.4px;text-transform:uppercase;font-weight:600;}
-    .kv{font-size:21px;font-weight:800;color:#2E2B25;margin-top:4px;line-height:1.1;}
-    .ks{font-size:10.5px;color:#7d735f;margin-top:2px;}
+         padding:11px 13px;display:flex;flex-direction:column;justify-content:flex-start;gap:3px;
+         min-height:80px;box-shadow:0 1px 2px rgba(60,50,30,.10);}
+    .kl{font-size:10px;color:#6E6657;letter-spacing:.5px;text-transform:uppercase;font-weight:700;
+        line-height:1.25;min-height:25px;}
+    .kv{font-size:17px;font-weight:800;color:#2E2B25;line-height:1.15;white-space:nowrap;letter-spacing:-.2px;}
+    .ks{font-size:10px;color:#7d735f;}
     .split{display:flex;height:12px;border-radius:6px;overflow:hidden;margin:9px 0 8px;background:#A2937B;}
     .split .seg{height:100%;}
     .split .seg.so{background:#B5532F;}
@@ -2302,63 +2322,105 @@ with tab3:
         st.caption("Pick a floor range (set **From = To** for a single floor) and one unit mix — the "
                    "**same mix** is added to every floor in the range. Units are priced from the escalation "
                    "ladder for their floor (built bottom-up). Blocked / existing floors are skipped.")
+        st.caption("🔼 A **Duplex** is one unit that occupies the floor you add it on **plus the floor above** "
+                   "(the roof shifts up automatically) — so add a duplex on a **single floor**; it counts as "
+                   "**1 unit** even though it shows as two levels in the Building View.")
         existing = [fl["floor"] for fl in floors]
+        # an ADDED (upward) duplex physically occupies its floor + the one ABOVE, so that upper
+        # level is taken too and must not be offered as a new floor
+        u_all = st.session_state.units
+        dup_up_tops = set()
+        if "Dup_Up" in u_all.columns:
+            u_fn = pd.to_numeric(u_all["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True),
+                                 errors="coerce")
+            upmask = (u_all["Type"].astype(str).str.contains("Duplex") &
+                      u_all["Dup_Up"].apply(lambda v: pd.notna(v) and bool(v)))
+            dup_up_tops = set((u_fn[upmask].dropna().astype(int) + 1).tolist())
+        occupied = set(existing) | dup_up_tops
         ac1, ac2 = st.columns(2)
         nf_from = ac1.number_input("From floor", min_value=1, max_value=999,
-                                   value=(max(existing)+1 if existing else 59), step=1, key="newfl_from")
+                                   value=(max(occupied)+1 if occupied else 59), step=1, key="newfl_from")
         nf_to = ac2.number_input("To floor", min_value=1, max_value=999,
                                  value=int(nf_from), step=1, key="newfl_to")
         lo, hi = int(min(nf_from, nf_to)), int(max(nf_from, nf_to))
-        rng = list(range(lo, hi + 1))
-        valid       = [f for f in rng if f not in blocked and f not in existing]
-        skip_block  = [f for f in rng if f in blocked]
-        skip_exists = [f for f in rng if f in existing]
-        if skip_block:
-            st.warning("Skipping blocked (MEP/Majlis): " + ", ".join(ordinal(f) for f in skip_block))
-        if skip_exists:
-            st.warning("Skipping floors that already exist: " + ", ".join(ordinal(f) for f in skip_exists))
 
-        if not valid:
-            st.error("No valid floors in this range (all are blocked or already exist).")
+        st.markdown("**Unit mix** — pick topology and use **− / +** to set quantity (applied to each floor):")
+        mix = unit_mix_builder("addmix", [{"type": "3 Bedroom", "qty": 1}, {"type": "2 Bedroom", "qty": 2}])
+        mix = [(t, (1 if "Duplex" in t else q)) for t, q in mix]      # a duplex is always 1 unit per floor
+        has_duplex = any(("Duplex" in t) and q > 0 for t, q in mix)
+
+        if has_duplex:
+            # a duplex ALWAYS occupies From + (From+1) as a single unit — the "To floor" is ignored
+            base, upper = lo, lo + 1
+            st.info(f"🔼 Duplex selected → it will occupy **{ordinal(base)}–{ordinal(upper)}** as **one** unit "
+                    f"(the *To floor* is ignored; a duplex is always exactly two levels, max one per floor).")
+            conflict = [f for f in (base, upper) if f in blocked or f in occupied]
+            if conflict:
+                st.error("Cannot place the duplex — these level(s) are blocked or already occupied: "
+                         + ", ".join(ordinal(f) for f in conflict))
+                place_floors = []
+            else:
+                place_floors = [base]                    # one record floor; the upper level is auto-reserved
+            total_units = sum(q for _, q in mix)
+            approx = sum(unit_val(t, new_unit_rate(t, base, st.session_state.units, params), params)["total"] * q
+                         for t, q in mix)
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Levels occupied", f"{base}–{upper}" if place_floors else "—")
+            m2.metric("Units to add", total_units)
+            m3.metric("Added value (≈)", aed(approx))
+            add_label = f"Add Duplex on {ordinal(base)} (occupies {ordinal(base)}–{ordinal(upper)})"
         else:
-            st.markdown("**Unit mix** — pick topology and use **− / +** to set quantity (applied to each floor):")
-            mix = unit_mix_builder("addmix", [{"type": "3 Bedroom", "qty": 1}, {"type": "2 Bedroom", "qty": 2}])
+            rng = list(range(lo, hi + 1))
+            place_floors = [f for f in rng if f not in blocked and f not in occupied]
+            skip_block   = [f for f in rng if f in blocked]
+            skip_exists  = [f for f in rng if f in occupied]
+            if skip_block:
+                st.warning("Skipping blocked (MEP/Majlis): " + ", ".join(ordinal(f) for f in skip_block))
+            if skip_exists:
+                st.warning("Skipping floors already occupied (incl. the upper level of a duplex): "
+                           + ", ".join(ordinal(f) for f in skip_exists))
+            if not place_floors:
+                st.error("No valid floors in this range (all are blocked or already occupied).")
             per_floor = sum(q for _, q in mix)
-            total_units = per_floor * len(valid)
+            total_units = per_floor * len(place_floors)
             approx = 0.0
-            for f in valid:
+            for f in place_floors:
                 for t, q in mix:
                     approx += unit_val(t, new_unit_rate(t, f, st.session_state.units, params), params)["total"] * q
             m1, m2, m3 = st.columns(3)
-            m1.metric("Floors to add", len(valid))
+            m1.metric("Floors to add", len(place_floors))
             m2.metric("Units to add", total_units)
             m3.metric("Added value (≈)", aed(approx))
-            st.caption(f"Floors to add: {', '.join(ordinal(f) for f in valid)}")
+            if place_floors:
+                st.caption(f"Floors to add: {', '.join(ordinal(f) for f in place_floors)}")
+            add_label = ((f"Add Floor {ordinal(place_floors[0])}" if len(place_floors) == 1
+                          else f"Add {len(place_floors)} floors "
+                               f"({ordinal(min(place_floors))}–{ordinal(max(place_floors))})")
+                         if place_floors else "Add")
 
-            label = (f"Add Floor {ordinal(valid[0])}" if len(valid) == 1
-                     else f"Add {len(valid)} floors ({ordinal(lo)}–{ordinal(hi)})")
-            if st.button(label, type="primary", key="btn_addfl", disabled=(per_floor == 0)):
-                try:
-                    ordered = []
-                    for t, q in mix:
-                        ordered += [t] * q
-                    ordered.sort(key=lambda t: (t != "3 Bedroom", t))
-                    for f in valid:                       # ascending → each floor escalates off the one below
-                        nos = gen_unit_nos(f, ordered)
-                        new_units = [{"unit_no": no, "type": t,
-                                      "rate": new_unit_rate(t, f, st.session_state.units, params)}
-                                     for no, t in zip(nos, ordered)]
-                        add_units_to_register(new_units, f, params)
-                        st.session_state.floors.append({"floor": f, "kind": "Added",
-                                                        "levels": max(TYPE_DEFAULTS[t]["levels"] for t in ordered),
-                                                        "units": new_units})
-                    st.session_state.floors.sort(key=lambda x: x["floor"])
-                    clear_builder("addmix")
-                    st.session_state["flash"] = ("success",
-                        f"✅ Added {len(valid)} floor(s) ({ordinal(lo)}–{ordinal(hi)}), {total_units} unit(s).")
-                except Exception as e:
-                    st.session_state["flash"] = ("error", f"❌ Could not add floors: {e}")
-                st.rerun()
+        can_add = len(place_floors) > 0 and sum(q for _, q in mix) > 0
+        if st.button(add_label, type="primary", key="btn_addfl", disabled=not can_add):
+            try:
+                ordered = []
+                for t, q in mix:
+                    ordered += [t] * q
+                ordered.sort(key=lambda t: (t != "3 Bedroom", t))
+                for f in place_floors:                    # ascending → each floor escalates off the one below
+                    nos = gen_unit_nos(f, ordered)
+                    new_units = [{"unit_no": no, "type": t,
+                                  "rate": new_unit_rate(t, f, st.session_state.units, params)}
+                                 for no, t in zip(nos, ordered)]
+                    add_units_to_register(new_units, f, params)
+                    st.session_state.floors.append({"floor": f, "kind": "Added",
+                                                    "levels": max(TYPE_DEFAULTS[t]["levels"] for t in ordered),
+                                                    "units": new_units})
+                st.session_state.floors.sort(key=lambda x: x["floor"])
+                clear_builder("addmix")
+                st.session_state["flash"] = ("success",
+                    f"✅ Added {len(place_floors)} floor record(s), {total_units} unit(s).")
+            except Exception as e:
+                st.session_state["flash"] = ("error", f"❌ Could not add floors: {e}")
+            st.rerun()
 
     # ─────────────────────── EDIT A FLOOR ─────────────────────────────────────
     else:
@@ -2554,16 +2616,16 @@ with tab4:
         n_sel = len(range_uids)
         st.caption(f"**{n_sel} unit(s) selected** — {uid_label(range_uids[0], df)}"
                    + (f"  →  {uid_label(range_uids[-1], df)}" if n_sel > 1 else ""))
-        st.caption("Edit **each unit individually** below — change its Status, Price / sellable sqft, "
-                   "Sellable sqft and/or **Total Value** per row, then **Save Changes**. Editing Total "
-                   "Value recomputes price / sellable sqft automatically; an edited Sellable sqft is "
-                   "kept as a per-unit override.")
+        st.caption("Edit **each unit individually** below. Entering a **Total Value** instantly "
+                   "updates that row's **Price / sellable sqft** in the table (and editing Price or "
+                   "Sellable updates Total) — but nothing is written until you press **Save Changes**. "
+                   "An edited Sellable sqft is kept as a per-unit override.")
 
-        # one editable row per selected unit, in range order
+        # `base` = current (saved) snapshot — used to detect what actually changed on Save
         rng = df[df["uid"].isin(range_uids)].copy()
         rng["uid"] = pd.Categorical(rng["uid"], categories=range_uids, ordered=True)
         rng = rng.sort_values("uid")
-        editor_df = pd.DataFrame({
+        base = pd.DataFrame({
             "Unit":  rng["Unit"].astype(str).values,
             "Type":  rng["Type"].astype(str).values,
             "Floor": rng["Floor"].astype(str).values,
@@ -2573,9 +2635,30 @@ with tab4:
             "Total Value": rng["Price"].round(0).astype(float).values,
             "_uid":  rng["uid"].astype(str).values,
         })
-        edited = st.data_editor(
-            editor_df, hide_index=True, use_container_width=True,
-            key=f"edit_range_editor_{range_uids[0]}_{range_uids[-1]}",
+        rngkey   = f"{range_uids[0]}_{range_uids[-1]}"
+        work_key = f"ed_work_{rngkey}"          # live preview copy (not yet persisted)
+        ekey     = f"ed_editor_{rngkey}"
+        if work_key not in st.session_state:
+            st.session_state[work_key] = base.copy()
+
+        def _recompute_edit():
+            wdf = st.session_state[work_key]
+            delta = st.session_state[ekey].get("edited_rows", {})
+            for ridx, chg in delta.items():
+                ridx = int(ridx)
+                for col, val in chg.items():
+                    wdf.at[ridx, col] = val
+                sell = float(wdf.at[ridx, "Sellable sqft"] or 0)
+                if "Total Value" in chg:                       # Total entered → recompute price/sellable
+                    wdf.at[ridx, "Price/sellable sqft"] = float(round(wdf.at[ridx, "Total Value"] / sell)) if sell else 0.0
+                elif "Sellable sqft" in chg or "Price/sellable sqft" in chg:   # either → recompute Total
+                    wdf.at[ridx, "Total Value"] = float(round(wdf.at[ridx, "Price/sellable sqft"] * sell))
+            st.session_state[work_key] = wdf.copy()            # new identity → editor re-reads recomputed values
+            st.session_state[ekey]["edited_rows"] = {}         # consume delta so the table shows recomputed values
+
+        st.data_editor(
+            st.session_state[work_key], hide_index=True, use_container_width=True,
+            key=ekey, on_change=_recompute_edit,
             column_config={
                 "Unit":  st.column_config.TextColumn("Unit", disabled=True),
                 "Type":  st.column_config.TextColumn("Type", disabled=True),
@@ -2592,36 +2675,28 @@ with tab4:
         )
 
         if st.button("Save Changes", type="primary", key="btn_save"):
+            wdf = st.session_state[work_key]
             u = st.session_state.units
             if "Sellable_Override" not in u.columns:        # safety for older saved state
                 u["Sellable_Override"] = pd.NA
             u_uid_str = u["uid"].astype(str)
-            orig_sell = dict(zip(editor_df["_uid"], editor_df["Sellable sqft"]))
-            orig_psf  = dict(zip(editor_df["_uid"], editor_df["Price/sellable sqft"]))
-            orig_tot  = dict(zip(editor_df["_uid"], editor_df["Total Value"]))
+            orig_sell = dict(zip(base["_uid"], base["Sellable sqft"]))
             done = 0
-            for _, er in edited.iterrows():
-                ix = u.index[u_uid_str == str(er["_uid"])]
+            for idx in wdf.index:
+                uidk = str(wdf.at[idx, "_uid"])
+                ix = u.index[u_uid_str == uidk]
                 if len(ix) == 0:
                     continue
-                i = ix[0]; uidk = str(er["_uid"])
-                u.at[i, "Status"] = er["Status"]
+                i = ix[0]
+                u.at[i, "Status"] = wdf.at[idx, "Status"]
                 # sellable: override only when the user actually changed it (else stay dynamic)
-                new_sell = float(er["Sellable sqft"])
-                sell_changed = abs(new_sell - float(orig_sell.get(uidk, new_sell))) > 0.5
-                eff_sell = new_sell if sell_changed else float(orig_sell.get(uidk, new_sell))
-                if sell_changed:
+                new_sell = float(wdf.at[idx, "Sellable sqft"])
+                if abs(new_sell - float(orig_sell.get(uidk, new_sell))) > 0.5:
                     u.at[i, "Sellable_Override"] = new_sell
-                # price: editing Total Value wins (recomputes price/sellable); else use price field
-                new_tot = float(er["Total Value"])
-                tot_changed = abs(new_tot - float(orig_tot.get(uidk, new_tot))) > 1.0
-                new_psf = float(er["Price/sellable sqft"])
-                psf_changed = abs(new_psf - float(orig_psf.get(uidk, new_psf))) > 0.5
-                if tot_changed:
-                    u.at[i, "Price_sqft"] = (new_tot / eff_sell) if eff_sell else 0.0
-                elif psf_changed:
-                    u.at[i, "Price_sqft"] = new_psf
+                # price/sellable sqft already reflects any Total Value edit (live recompute above)
+                u.at[i, "Price_sqft"] = float(wdf.at[idx, "Price/sellable sqft"])
                 done += 1
+            st.session_state.pop(work_key, None)            # refresh preview from saved values next render
             # No st.rerun() — stay on this page; the user navigates when ready.
             st.success(f"✅ Saved per-unit changes to {done} unit(s). "
                        "Use the tabs above to navigate when ready.")
