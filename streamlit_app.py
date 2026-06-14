@@ -57,6 +57,9 @@ def load_state():
         if "Terrace_Override" in units.columns:
             units["Terrace_Override"] = units["Terrace_Override"].where(
                 units["Terrace_Override"].notna(), pd.NA)
+        if "Sellable_Override" in units.columns:
+            units["Sellable_Override"] = units["Sellable_Override"].where(
+                units["Sellable_Override"].notna(), pd.NA)
         if "Comment" in units.columns:
             units["Comment"] = units["Comment"].fillna("").astype(str)
         return units, state["floors"], state["params"], int(state.get("uid_counter", len(units)))
@@ -207,6 +210,7 @@ def df_to_styled_xlsx(df: pd.DataFrame, sheet_name="Sheet1", title=None):
         head_fill, data_fill, total_fill = (PatternFill("solid", fgColor=HEAD),
                                             PatternFill("solid", fgColor=DATA),
                                             PatternFill("solid", fgColor=TOTAL))
+        white_fill = PatternFill("solid", fgColor=WHITE)
         center = Alignment(horizontal="center", vertical="center")
         left   = Alignment(horizontal="left", vertical="center")
 
@@ -233,7 +237,7 @@ def df_to_styled_xlsx(df: pd.DataFrame, sheet_name="Sheet1", title=None):
                     cell.font = Font(bold=True, color=DARK)
                     cell.border = top_med
                 else:
-                    cell.fill = data_fill
+                    cell.fill = data_fill if (r - first_data) % 2 == 0 else white_fill
                     cell.font = Font(color=DARK)
                     cell.border = border
         for ci in range(1, ncols + 1):
@@ -362,6 +366,7 @@ def load_unit_data() -> pd.DataFrame:
         df["Price_sqft"] = df["Price_sqft"].fillna(0.0)        # last-resort guard
 
     df["Terrace_Override"] = pd.NA                                     # per-unit terrace-rate override (set by bulk tool)
+    df["Sellable_Override"] = pd.NA                                    # per-unit sellable-area override (set in Edit Units)
     cmts = load_comments_file()                                       # free-text notes per unit, persisted to JSON
     df["Comment"] = [cmts.get(comment_key(u, t, fl), "")
                      for u, t, fl in zip(df["Unit"], df["Type"], df["Floor"])]
@@ -756,6 +761,10 @@ def recalc(df, params):
         df.loc[ov, "Terrace_Rate"] = pd.to_numeric(df.loc[ov, "Terrace_Override"], errors="coerce")
     df["Sellable_sqft"] = df["Internal_sqft"] + df["Terrace_Rate"]*df["External_sqft"]
     df["Total_sqft"]    = df["Internal_sqft"] + df["External_sqft"]
+    # per-unit sellable-area override (set in Edit Units) wins over the derived value
+    if "Sellable_Override" in df.columns:
+        so = df["Sellable_Override"].notna()
+        df.loc[so, "Sellable_sqft"] = pd.to_numeric(df.loc[so, "Sellable_Override"], errors="coerce")
     df["Price"]         = df["Price_sqft"] * df["Sellable_sqft"]
     return df
 
@@ -815,7 +824,7 @@ def add_units_to_register(unit_list, floor_num, params):
             "Type": u["type"], "Status": "Available", "Unit": u["unit_no"], "Floor": ordinal(floor_num),
             "Parking": d["parking"], "Internal_sqft": internal, "External_sqft": external,
             "Terrace_Rate": terrace_for(u["type"], params), "Price_sqft": u["rate"],
-            "Terrace_Override": pd.NA, "Comment": "", "uid": uid,
+            "Terrace_Override": pd.NA, "Sellable_Override": pd.NA, "Comment": "", "uid": uid,
         }])], ignore_index=True)
 
 def remove_units_from_register(uids):
@@ -932,6 +941,19 @@ _flash = st.session_state.pop("flash", None)
 if _flash:
     getattr(st, _flash[0])(_flash[1])
 
+# Let metric labels & values wrap / scale instead of truncating with an ellipsis on
+# narrow windows (otherwise long values like "AED 5,161,…" get cut off).
+st.markdown(
+    """<style>
+    [data-testid="stMetricValue"], [data-testid="stMetricValue"] > div,
+    [data-testid="stMetricLabel"], [data-testid="stMetricLabel"] p,
+    [data-testid="stMetricLabel"] > div{
+        white-space:normal; overflow:visible; text-overflow:clip;}
+    [data-testid="stMetricValue"]{font-size:clamp(1.05rem,2.1vw,1.9rem); line-height:1.2;}
+    </style>""",
+    unsafe_allow_html=True,
+)
+
 # Global scorecards (full building) — shown on top of every page, no per-tab duplication
 ALLOWABLE_SELLABLE = 818186.683338944          # fixed design cap; shown rounded as 818,187
 _tot_area = df["Total_sqft"].sum()
@@ -943,8 +965,8 @@ g3.metric("Total Allowable Sellable (sqft)", f"{ALLOWABLE_SELLABLE:,.0f}")
 g4.metric("Variance: Total − Allowable (sqft)", f"{_variance:,.0f}",
           delta=f"{_variance:,.0f}", delta_color="inverse")
 g5.metric("Total Price/sqft", aed(df["Price"].sum()/_tot_area) if _tot_area else "—")
-# Portfolio Value on its own line below the rest
-gp = st.columns(6)
+# Portfolio Value on its own line below the rest (wider column so the full AED value fits)
+gp = st.columns([2, 1, 1, 1])
 gp[0].metric("Portfolio Value", aed(df["Price"].sum()))
 
 st.divider()
@@ -960,14 +982,14 @@ SHOW_BV = _bv_flag not in ("0", "false", "no", "off")
 
 _labels = ["Unit Register", "Summary by Type", "Topology View"]
 if SHOW_BV:
-    _labels += ["Building View", "Building View ✦", "Building View (Plan)"]
+    _labels += ["Muraba Veil - Building View"]
 _labels += ["Floor Manager", "Edit / Remove Units"]
 _tmap = dict(zip(_labels, st.tabs(_labels)))
 tab1 = _tmap["Unit Register"]; tab2 = _tmap["Summary by Type"]; tab5 = _tmap["Topology View"]
 tab3 = _tmap["Floor Manager"]; tab4 = _tmap["Edit / Remove Units"]
-tab6 = _tmap.get("Building View")
-tab6b = _tmap.get("Building View ✦")
-tab6c = _tmap.get("Building View (Plan)")
+tab6 = None                          # legacy dark Building View — hidden
+tab6b = None                         # legacy enhanced (✦) Building View — hidden
+tab6c = _tmap.get("Muraba Veil - Building View")
 
 
 # ── Tab 1: Unit Register ───────────────────────────────────────────────────────
@@ -1380,14 +1402,17 @@ def render_building_view(enhanced=False):
                     body.append(f'<g {gattr}><rect x="{xi:.1f}" y="{y+1:.0f}" width="{cw:.1f}" height="{h-2}" rx="2.5" fill="{col}"/>'
                                 f'<rect x="{xi:.1f}" y="{y+1:.0f}" width="{cw:.1f}" height="{hl:.0f}" rx="2.5" '
                                 f'fill="#ffffff" fill-opacity="0.16"/></g>')
+                if cw > 30:
+                    uabbr = TYPE_ABBR.get(u["Type"], u["Type"])
+                    face = f'{_esc(str(u["Unit"]))} &middot; {_esc(uabbr)}'
                 if cw > 30 and sold:
-                    body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2+3:.0f}" text-anchor="middle" font-size="8.5" '
+                    body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2+3:.0f}" text-anchor="middle" font-size="8" '
                                 f'pointer-events="none" fill="#ffffff" fill-opacity="0.7" '
-                                f'font-family="Calibri,Arial">{_esc(str(u["Unit"]))}</text>')
+                                f'font-family="Calibri,Arial">{face}</text>')
                 elif cw > 30:
-                    body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2-2:.0f}" text-anchor="middle" font-size="8.5" '
+                    body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2-2:.0f}" text-anchor="middle" font-size="8" '
                                 f'pointer-events="none" fill="#ffffff" fill-opacity="0.95" '
-                                f'font-family="Calibri,Arial">{_esc(str(u["Unit"]))}</text>')
+                                f'font-family="Calibri,Arial">{face}</text>')
                     body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2+10:.0f}" text-anchor="middle" font-size="9.5" '
                                 f'font-weight="bold" pointer-events="none" fill="#FCE9B0" '
                                 f'font-family="Calibri,Arial">{aed(u["Price"])}</text>')
@@ -1465,7 +1490,8 @@ def render_building_view(enhanced=False):
         _kpi("Sold", f"{SO}", f"{STp:.0f}% sold"),
         _kpi("Portfolio Value", aed(VAL)),
         _kpi("Available Value", aed(AVAL)),
-        _kpi("Avg Price/sqft", aed(PSF)),
+        _kpi("Total Sold Value", aed(VAL - AVAL)),
+        _kpi("Avg Price/sqft", aed(PSF), "on total area"),
     ])
     rows = []
     for t in present:
@@ -1614,8 +1640,7 @@ BROCHURE_COLORS = {
 }
 
 def render_building_view_brochure():
-    st.subheader("Building View — Plan (brochure theme)")
-    st.caption("The same live tower in the brochure's warm architectural palette — tan page, sepia "
+    st.caption("The live tower in the brochure's warm architectural palette — tan page, sepia "
                "line-work, muted earth tones. Filled units are available, hollow units are sold; hover "
                "for details, click a unit or typology to focus. Level leader-lines as in the plan.")
 
@@ -1682,12 +1707,18 @@ def render_building_view_brochure():
                 else:
                     body.append(f'<g {gattr}><rect x="{xi:.1f}" y="{y+1:.0f}" width="{cw:.1f}" height="{h-2}" '
                                 f'rx="2" fill="{col}" stroke="{INK}" stroke-width="0.5"/></g>')
+                if cw > 30:
+                    uabbr = TYPE_ABBR.get(u["Type"], u["Type"])
+                    face = f'{_esc(str(u["Unit"]))} &middot; {_esc(uabbr)}'
                 if cw > 30 and sold:
-                    body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2+3:.0f}" text-anchor="middle" font-size="8.5" '
-                                f'pointer-events="none" fill="{SUB}" font-family="Calibri,Arial">{_esc(str(u["Unit"]))}</text>')
+                    body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2-2:.0f}" text-anchor="middle" font-size="8" '
+                                f'pointer-events="none" fill="{SUB}" font-family="Calibri,Arial">{face}</text>')
+                    body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2+10:.0f}" text-anchor="middle" font-size="9" '
+                                f'font-weight="bold" pointer-events="none" fill="{SOLDS}" letter-spacing="1.5" '
+                                f'font-family="Calibri,Arial">SOLD</text>')
                 elif cw > 30:
-                    body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2-2:.0f}" text-anchor="middle" font-size="8.5" '
-                                f'pointer-events="none" fill="#EDE6D7" font-family="Calibri,Arial">{_esc(str(u["Unit"]))}</text>')
+                    body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2-2:.0f}" text-anchor="middle" font-size="8" '
+                                f'pointer-events="none" fill="#EDE6D7" font-family="Calibri,Arial">{face}</text>')
                     body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2+10:.0f}" text-anchor="middle" font-size="9.5" '
                                 f'font-weight="bold" pointer-events="none" fill="#FBF3DF" '
                                 f'font-family="Calibri,Arial">{aed(u["Price"])}</text>')
@@ -1735,9 +1766,10 @@ def render_building_view_brochure():
         ann.append(f'<polyline points="{LX+8},{slot:.0f} {(LX+TX)/2:.0f},{slot:.0f} {TX:.0f},{inf["mid"]:.0f}" '
                    f'fill="none" stroke="{INK}" stroke-width="0.8"/>')
         ann.append(f'<circle cx="{TX:.0f}" cy="{inf["mid"]:.0f}" r="3.2" fill="#FBF7EF" stroke="{INK}" stroke-width="0.8"/>')
+    ann = "".join(ann)
 
     svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{total_h:.0f}" '
-           f'viewBox="0 0 {W} {total_h:.0f}">{defs}{bg}{crown}{"".join(body)}{"".join(ann)}{base}</svg>')
+           f'viewBox="0 0 {W} {total_h:.0f}">{defs}{bg}{crown}{"".join(body)}{ann}{base}</svg>')
 
     def _stat(t):
         gg = bdf[bdf["Type"] == t]; ta = float(gg["Total_sqft"].sum())
@@ -1753,14 +1785,25 @@ def render_building_view_brochure():
     def _kpi(label, val, sub=None):
         s = f'<div class="ks">{sub}</div>' if sub else ""
         return f'<div class="kpi"><div class="kl">{label}</div><div class="kv">{val}</div>{s}</div>'
+    av_pct = (AV / TU * 100) if TU else 0.0
+    so_pct = (SO / TU * 100) if TU else 0.0
+    split_card = (
+        '<div class="kpi">'
+        '<div class="kl">Sold vs Available</div>'
+        f'<div class="split"><div class="seg so" style="width:{so_pct:.0f}%"></div>'
+        f'<div class="seg av" style="width:{av_pct:.0f}%"></div></div>'
+        '<div class="splitlbl">'
+        f'<span><span class="dot so"></span><b>{SO}</b> sold &middot; {so_pct:.0f}%</span>'
+        f'<span><b>{AV}</b> avail &middot; {av_pct:.0f}%<span class="dot av"></span></span>'
+        '</div></div>')
     kpis = "".join([
         _kpi("Total Units", f"{TU}"), _kpi("Available", f"{AV}", f"{(AV/TU*100):.0f}% of stock" if TU else ""),
         _kpi("Sold", f"{SO}", f"{STp:.0f}% sold"), _kpi("Portfolio Value", aed(VAL)),
-        _kpi("Available Value", aed(AVAL)), _kpi("Avg Price/sqft", aed(PSF))])
+        _kpi("Available Value", aed(AVAL)), _kpi("Total Sold Value", aed(VAL - AVAL)),
+        _kpi("Avg Price/sqft", aed(PSF), "on total area"), split_card])
     rows = []
     for t in present:
         s = _stat(t); col = BROCHURE_COLORS.get(t, "#7d7461")
-        avpct = (s["av"] / s["n"] * 100) if s["n"] else 0
         rows.append(
             f'<div class="lg" data-ty="{_esc(t)}"><span class="sw" style="background:{col}"></span>'
             f'<div class="lgm"><div class="lgt">{_esc(t)}</div>'
@@ -1773,16 +1816,31 @@ def render_building_view_brochure():
     *{box-sizing:border-box;}
     .bv{display:flex;gap:14px;height:720px;background:#B4A48D;border-radius:12px;padding:12px;
         font-family:Calibri,Arial,sans-serif;}
-    .tower{flex:0 0 920px;overflow-y:auto;border-radius:10px;}
-    .tower svg{display:block;margin:0 auto;}
-    .tower::-webkit-scrollbar,.legend::-webkit-scrollbar{width:8px;}
+    .tower{flex:1 1 560px;min-width:0;overflow:auto;border-radius:10px;}
+    .tower svg{display:block;margin:0 auto;width:100%;height:auto;max-width:920px;}
+    .tower::-webkit-scrollbar,.legend::-webkit-scrollbar{width:8px;height:8px;}
     .tower::-webkit-scrollbar-thumb,.legend::-webkit-scrollbar-thumb{background:#8C7E66;border-radius:5px;}
-    .side{flex:1;min-width:230px;max-width:360px;display:flex;flex-direction:column;gap:12px;color:#33302A;}
+    .side{flex:1 1 250px;min-width:230px;max-width:360px;display:flex;flex-direction:column;gap:12px;color:#33302A;}
+    /* narrow screens: stack the panel under the tower so nothing is clipped */
+    @media (max-width:900px){
+      .bv{flex-direction:column;height:auto;}
+      .tower{flex:1 1 auto;}
+      .side{max-width:none;}
+    }
     .kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
     .kpi{background:#C6B9A4;border:1px solid #9C8E76;border-radius:9px;padding:9px 11px;}
     .kl{font-size:11px;color:#6E6657;}
     .kv{font-size:17px;font-weight:700;margin-top:2px;}
     .ks{font-size:10px;color:#7d735f;margin-top:1px;}
+    .split{display:flex;height:12px;border-radius:6px;overflow:hidden;margin:7px 0 6px;background:#A2937B;}
+    .split .seg{height:100%;}
+    .split .seg.so{background:#B5532F;}
+    .split .seg.av{background:#3E7A4E;}
+    .splitlbl{display:flex;justify-content:space-between;gap:6px;font-size:10.5px;color:#5b5346;}
+    .splitlbl b{color:#33302A;font-size:13px;}
+    .dot{display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:middle;margin:0 4px;}
+    .dot.so{background:#B5532F;}
+    .dot.av{background:#3E7A4E;}
     .sh{font-size:13px;font-weight:700;color:#33302A;letter-spacing:.4px;}
     .sh span{font-weight:400;color:#7d735f;font-size:11px;}
     .legend{overflow-y:auto;display:flex;flex-direction:column;gap:7px;padding-right:5px;}
@@ -1792,9 +1850,7 @@ def render_building_view_brochure():
     .sw{width:14px;height:14px;border-radius:4px;flex:none;}
     .lgm{flex:1;min-width:0;}
     .lgt{font-size:13px;font-weight:600;}
-    .lgs{font-size:11px;color:#6E6657;margin:1px 0 5px;}
-    .bar{height:5px;background:#A2937B;border-radius:3px;overflow:hidden;}
-    .bar span{display:block;height:100%;border-radius:3px;}
+    .lgs{font-size:11px;color:#6E6657;margin-top:1px;}
     .lgv{text-align:right;font-size:13px;font-weight:700;color:#5C4A28;white-space:nowrap;}
     .lgv2{font-size:10px;color:#7d735f;font-weight:400;}
     .u{cursor:pointer;}
@@ -1845,7 +1901,7 @@ def render_building_view_brochure():
     })();
     </script>"""
     sig = f"{len(df)}|{int(df['Price'].sum())}|{int((df['Status']=='Sold').sum())}|plan"
-    components.html(f"<!--bvp:{_esc(sig)}-->" + css + dyn + js, height=748, scrolling=False)
+    components.html(f"<!--bvp:{_esc(sig)}-->" + css + dyn + js, height=748, scrolling=True)
 
 
 if tab6 is not None:                 # only when enabled (hidden on the published app)
@@ -2353,52 +2409,83 @@ with tab4:
         r = r.iloc[0]
         return f"Unit {r['Unit']} - {r['Type']} (Floor {r['Floor']}) - {r['Status']}"
 
-    st.subheader("Edit a Unit")
-    st.caption("All units are editable — including Sold (a unit can be marked back to Available here).")
-    sel_uid = st.selectbox("Select unit", ["— select —"] + df["uid"].tolist(),
-                           format_func=lambda x: uid_label(x, df) if x != "— select —" else x, key="edit_sel")
-    if sel_uid != "— select —":
-        idx = st.session_state.units[st.session_state.units["uid"] == sel_uid].index[0]
-        row = st.session_state.units.loc[idx]
-        drow = df[df["uid"] == sel_uid].iloc[0]                 # recalc'd row (has Sellable/Total)
-        sell = float(drow["Sellable_sqft"]); tot = float(drow["Total_sqft"])
-        cur_psf   = float(row["Price_sqft"])                    # price per sellable sqft (stored rate)
-        cur_total = cur_psf * sell
+    st.subheader("Edit Unit(s)")
+    st.caption("Pick a **unit range** — From → To (set To = From to edit a single unit). The chosen "
+               "changes apply to **every unit in the range**. Saving stays on this page — navigate "
+               "wherever you like afterwards. All units are editable, including Sold.")
 
-        # Two linked, both-editable fields: edit either one and the other updates.
-        psf_key, tot_key = f"u_psf_{sel_uid}", f"u_tot_{sel_uid}"
-        if psf_key not in st.session_state:
-            st.session_state[psf_key] = float(round(cur_psf, 2))
-            st.session_state[tot_key] = float(round(cur_total, 0))
+    uids = df["uid"].tolist()
+    eu1, eu2 = st.columns(2)
+    from_uid = eu1.selectbox("From unit", ["— select —"] + uids,
+                             format_func=lambda x: uid_label(x, df) if x != "— select —" else x,
+                             key="edit_from")
+    range_uids = []
+    if from_uid != "— select —":
+        fi = uids.index(from_uid)
+        to_opts = uids[fi:]                                    # To must be at/after From
+        to_uid = eu2.selectbox("To unit", to_opts, index=0,
+                               format_func=lambda x: uid_label(x, df), key="edit_to")
+        range_uids = uids[fi:uids.index(to_uid) + 1]
 
-        def _sync_total():
-            st.session_state[tot_key] = st.session_state[psf_key] * sell
+    if range_uids:
+        n_sel = len(range_uids)
+        st.caption(f"**{n_sel} unit(s) selected** — {uid_label(range_uids[0], df)}"
+                   + (f"  →  {uid_label(range_uids[-1], df)}" if n_sel > 1 else ""))
+        st.caption("Edit **each unit individually** below — change its Status, Price / sellable sqft "
+                   "and/or Sellable sqft per row, then **Save Changes** (price = price/sellable × "
+                   "sellable). An edited Sellable sqft is kept as a per-unit override.")
 
-        def _sync_psf():
-            st.session_state[psf_key] = (st.session_state[tot_key] / sell) if sell else 0.0
-
-        ns = st.selectbox("Status", STATUS_OPTIONS,
-                          index=STATUS_OPTIONS.index(row["Status"]) if row["Status"] in STATUS_OPTIONS else 0)
-        e1, e2 = st.columns(2)
-        e1.number_input("Price / sellable sqft (AED)", min_value=0.0, step=50.0,
-                        key=psf_key, on_change=_sync_total)
-        e2.number_input("Total unit price (AED)", min_value=0.0, step=10000.0,
-                        key=tot_key, on_change=_sync_psf)
-
-        new_psf   = float(st.session_state[psf_key])
-        new_total = float(st.session_state[tot_key])
-        psf_total = (new_total / tot) if tot else 0.0
-        st.caption(f"Edit either field — the other updates automatically.  "
-                   f"**Price / total sqft:** AED {psf_total:,.0f}  "
-                   f"(sellable {sell:,.0f} sqft · total {tot:,.0f} sqft)")
+        # one editable row per selected unit, in range order
+        rng = df[df["uid"].isin(range_uids)].copy()
+        rng["uid"] = pd.Categorical(rng["uid"], categories=range_uids, ordered=True)
+        rng = rng.sort_values("uid")
+        editor_df = pd.DataFrame({
+            "Unit":  rng["Unit"].astype(str).values,
+            "Type":  rng["Type"].astype(str).values,
+            "Floor": rng["Floor"].astype(str).values,
+            "Status": rng["Status"].astype(str).values,
+            "Price/sellable sqft": rng["Price_sqft"].round(0).astype(float).values,
+            "Sellable sqft": rng["Sellable_sqft"].round(0).astype(float).values,
+            "_uid":  rng["uid"].astype(str).values,
+        })
+        edited = st.data_editor(
+            editor_df, hide_index=True, use_container_width=True,
+            key=f"edit_range_editor_{range_uids[0]}_{range_uids[-1]}",
+            column_config={
+                "Unit":  st.column_config.TextColumn("Unit", disabled=True),
+                "Type":  st.column_config.TextColumn("Type", disabled=True),
+                "Floor": st.column_config.TextColumn("Floor", disabled=True),
+                "Status": st.column_config.SelectboxColumn("Status", options=STATUS_OPTIONS, required=True),
+                "Price/sellable sqft": st.column_config.NumberColumn(
+                    "Price / sellable sqft (AED)", min_value=0.0, step=50.0, format="%.0f"),
+                "Sellable sqft": st.column_config.NumberColumn(
+                    "Sellable sqft", min_value=0.0, step=10.0, format="%.0f"),
+                "_uid": None,                              # hidden key column
+            },
+        )
 
         if st.button("Save Changes", type="primary", key="btn_save"):
-            st.session_state.units.at[idx, "Status"] = ns
-            st.session_state.units.at[idx, "Price_sqft"] = new_psf
-            st.session_state["flash"] = ("success",
-                f"✅ Unit {row['Unit']} updated — AED {new_psf:,.0f}/sellable sqft "
-                f"(total AED {new_total:,.0f}).")
-            st.rerun()
+            u = st.session_state.units
+            if "Sellable_Override" not in u.columns:        # safety for older saved state
+                u["Sellable_Override"] = pd.NA
+            u_uid_str = u["uid"].astype(str)
+            orig_sell = dict(zip(editor_df["_uid"], editor_df["Sellable sqft"]))
+            done = 0
+            for _, er in edited.iterrows():
+                ix = u.index[u_uid_str == str(er["_uid"])]
+                if len(ix) == 0:
+                    continue
+                i = ix[0]
+                u.at[i, "Status"] = er["Status"]
+                u.at[i, "Price_sqft"] = float(er["Price/sellable sqft"])
+                # only override sellable when the user actually changed it (else stay dynamic)
+                new_sell = float(er["Sellable sqft"])
+                if abs(new_sell - float(orig_sell.get(er["_uid"], new_sell))) > 0.5:
+                    u.at[i, "Sellable_Override"] = new_sell
+                done += 1
+            # No st.rerun() — stay on this page; the user navigates when ready.
+            st.success(f"✅ Saved per-unit changes to {done} unit(s). "
+                       "Use the tabs above to navigate when ready.")
 
     st.divider()
     st.subheader("Remove Units")
