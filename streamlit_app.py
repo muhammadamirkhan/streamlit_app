@@ -1132,8 +1132,9 @@ with st.sidebar:
                     st.session_state.floors = floors
                     st.session_state.fm_params = fparams
                     st.session_state.uid_counter = ctr
-                    if blk is not None:
-                        st.session_state.blocked = blk
+                    # older snapshots didn't store the MEP/Majlis list — restore it from the Excel
+                    # so the MEP floors always come back correctly
+                    st.session_state.blocked = blk if blk else load_blocked_floors()
                     st.session_state["bv_load_prompt"] = False
                     st.session_state.pop("bv_load_pwd", None)
                     st.session_state["flash"] = ("success", "📥 Base Version loaded. Use “Save for next "
@@ -1970,8 +1971,12 @@ def render_building_view_brochure():
             continue
         g = units_by_floor.get(f)
         is_blocked = f in blocked
-        # empty (vacant) residential levels are still real floors — draw them as faint bands so the
-        # numbering stays continuous and the floor count is correct (e.g. an unsold/empty floor 62)
+        has_units = g is not None and len(g) > 0
+        # an empty level (no units, not MEP) is the lower half of a duplex that spans onto it, or a
+        # floor that was added-then-removed — don't draw it as its own row; the duplex post-pass
+        # covers it and the tower stays clean (no stray "VACANT" bands)
+        if not has_units and not is_blocked and f != 2 and f not in up_tops:
+            continue
         types = list(g["Type"]) if g is not None else []
         tall = g is not None and any(("Pool" in t or "Duplex" in t) for t in types)
         h = H_TALL if tall else H_STD
@@ -2002,13 +2007,9 @@ def render_building_view_brochure():
                         f'<text x="{cx:.0f}" y="{y+h/2+4:.0f}" text-anchor="middle" font-size="12" '
                         f'font-weight="bold" pointer-events="none" fill="{INK}" letter-spacing="3" '
                         f'font-family="Calibri,Arial">AMENITIES</text>')
-        else:
-            # vacant (empty) residential level — a real floor with no units yet
-            body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="2" '
-                        f'fill="{SLAB}" fill-opacity="0.35" stroke="{SLABLN}" stroke-dasharray="3 3"/>'
-                        f'<text x="{cx:.0f}" y="{y+h/2+3.2:.0f}" text-anchor="middle" font-size="8.5" '
-                        f'pointer-events="none" fill="{SUB}" letter-spacing="2" '
-                        f'font-family="Calibri,Arial">VACANT</text>')
+        else:                                            # an up-duplex's reserved upper level (covered below)
+            body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="2" fill="none" '
+                        f'stroke="{SLABLN}" stroke-dasharray="3 3"/>')
         y += h + GAP
 
     tower_bottom = y - GAP
