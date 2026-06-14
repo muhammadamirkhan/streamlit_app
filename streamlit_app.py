@@ -1363,7 +1363,7 @@ def render_building_view(enhanced=False):
                                 f'font-family="Calibri,Arial">{_esc(str(u["Unit"]))}</text>')
                     body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2+10:.0f}" text-anchor="middle" font-size="9.5" '
                                 f'font-weight="bold" pointer-events="none" fill="{"#FCE9B0" if not sold else "#cdd6e2"}" '
-                                f'fill-opacity="{op}" font-family="Calibri,Arial">AED {_abbr(u["Price"])}</text>')
+                                f'fill-opacity="{op}" font-family="Calibri,Arial">{aed(u["Price"])}</text>')
         elif is_blocked:
             body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="3" fill="url(#amen)"/>'
                         f'<text x="{cx:.0f}" y="{y+h/2+3.2:.0f}" text-anchor="middle" font-size="9" '
@@ -1648,7 +1648,7 @@ def render_building_view_brochure():
                                 f'pointer-events="none" fill="{tnum}" font-family="Calibri,Arial">{_esc(str(u["Unit"]))}</text>')
                     body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2+10:.0f}" text-anchor="middle" font-size="9.5" '
                                 f'font-weight="bold" pointer-events="none" fill="{tprc}" '
-                                f'font-family="Calibri,Arial">AED {_abbr(u["Price"])}</text>')
+                                f'font-family="Calibri,Arial">{aed(u["Price"])}</text>')
         elif is_blocked:
             body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="2" fill="url(#amenP)"/>'
                         f'<text x="{cx:.0f}" y="{y+h/2+3.2:.0f}" text-anchor="middle" font-size="9" '
