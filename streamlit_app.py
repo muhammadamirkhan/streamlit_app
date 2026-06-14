@@ -33,41 +33,56 @@ if not _check_password():
 EXCEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Muraba Veil Unit list.xlsx")
 COMMENTS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "unit_comments.json")
 STATE_PATH    = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app_state.json")
+BASE_PATH     = os.path.join(os.path.dirname(os.path.abspath(__file__)), "base_version.json")
 
 
 # ── Saved working state (explicit Save / Reset) ────────────────────────────────
 
-def save_state():
-    """Snapshot the full working state (register, floors, params) to STATE_PATH."""
+def _write_state(path):
+    """Snapshot the full working state (register, floors, params) to a JSON file."""
     state = {
         "units": json.loads(st.session_state.units.to_json(orient="records")),
         "floors": st.session_state.floors,
         "params": st.session_state.fm_params,
         "uid_counter": int(st.session_state.get("uid_counter", len(st.session_state.units))),
     }
-    with open(STATE_PATH, "w", encoding="utf-8") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
 
-def load_state():
-    """Return (units_df, floors, params, uid_counter) from STATE_PATH, or None on failure."""
+def save_state():
+    """Persist the current working state (shown on every launch)."""
+    _write_state(STATE_PATH)
+
+def save_base():
+    """Persist the current working state as the separate Base Version snapshot."""
+    _write_state(BASE_PATH)
+
+def load_state_from(path):
+    """Return (units_df, floors, params, uid_counter) from a state file, or None on failure."""
     try:
-        with open(STATE_PATH, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8") as f:
             state = json.load(f)
         units = pd.DataFrame(state["units"])
-        if "Terrace_Override" in units.columns:
-            units["Terrace_Override"] = units["Terrace_Override"].where(
-                units["Terrace_Override"].notna(), pd.NA)
-        if "Sellable_Override" in units.columns:
-            units["Sellable_Override"] = units["Sellable_Override"].where(
-                units["Sellable_Override"].notna(), pd.NA)
+        for ovc in ("Terrace_Override", "Sellable_Override"):
+            if ovc in units.columns:
+                units[ovc] = units[ovc].where(units[ovc].notna(), pd.NA)
         if "Comment" in units.columns:
             units["Comment"] = units["Comment"].fillna("").astype(str)
         return units, state["floors"], state["params"], int(state.get("uid_counter", len(units)))
     except Exception:
         return None
 
+def load_state():
+    return load_state_from(STATE_PATH)
+
+def load_base():
+    return load_state_from(BASE_PATH)
+
 def has_saved_state():
     return os.path.exists(STATE_PATH)
+
+def has_base():
+    return os.path.exists(BASE_PATH)
 
 def clear_saved_state():
     try:
@@ -933,6 +948,34 @@ with st.sidebar:
         st.caption("📄 Opened from the original Excel (no saved state yet)")
 
     st.divider()
+    st.caption("**Base Version** — a second, independent snapshot. *Save Base Version* stores the "
+               "current state separately; *Load Base Version* brings that snapshot back into view "
+               "(it does not change the regular saved state shown on launch).")
+    if st.button("📌  Save Base Version", use_container_width=True):
+        save_base()
+        st.session_state["flash"] = ("success", "📌 Base Version saved.")
+        st.rerun()
+    if st.button("📥  Load Base Version", use_container_width=True, disabled=not has_base()):
+        loaded = load_base()
+        if loaded is not None:
+            units, floors, fparams, ctr = loaded
+            st.session_state.units = units
+            st.session_state.floors = floors
+            st.session_state.fm_params = fparams
+            st.session_state.uid_counter = ctr
+            st.session_state["flash"] = ("success", "📥 Base Version loaded. Use “Save for next "
+                                         "launch” if you also want it to open by default.")
+        else:
+            st.session_state["flash"] = ("error", "❌ Could not load Base Version.")
+        st.rerun()
+    if has_base():
+        import datetime as _dt
+        _bts = _dt.datetime.fromtimestamp(os.path.getmtime(BASE_PATH)).strftime("%d %b %Y, %H:%M")
+        st.caption(f"📌 Base Version last saved **{_bts}**")
+    else:
+        st.caption("📌 No Base Version saved yet")
+
+    st.divider()
     st.caption("Add / edit / remove floors in the **Floor Manager** tab. Changes show everywhere "
                "immediately; **Save for next launch** only persists them across restarts.")
     if blocked:
@@ -1760,6 +1803,10 @@ def render_building_view_brochure():
             body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="2" fill="url(#amenP)"/>'
                         f'<text x="{cx:.0f}" y="{y+h/2+3.2:.0f}" text-anchor="middle" font-size="9" '
                         f'pointer-events="none" fill="{SUB}" letter-spacing="2" font-family="Calibri,Arial">{lbl}</text>')
+        elif f == 2:
+            body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="2" fill="url(#amenP)"/>'
+                        f'<text x="{cx:.0f}" y="{y+h/2+3.2:.0f}" text-anchor="middle" font-size="9" '
+                        f'pointer-events="none" fill="{SUB}" letter-spacing="2" font-family="Calibri,Arial">AMENITIES</text>')
         else:
             body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="2" fill="none" '
                         f'stroke="{SLABLN}" stroke-dasharray="3 3"/>')
@@ -1781,14 +1828,6 @@ def render_building_view_brochure():
         ry, rh = top + 1, bot - top - 2
         ty_mid = (top + bot) / 2
         draw_box(xi, cw, ry, rh, ty_mid, sold, col, u, span=f"{lo}–{hi}")
-        seam = (floor_y[lo] - floor_h[lo] / 2 - GAP / 2) if lo in floor_y else ty_mid
-        body.append(f'<line x1="{xi+2:.1f}" y1="{seam:.1f}" x2="{xi+cw-2:.1f}" y2="{seam:.1f}" '
-                    f'stroke="{SOLDS if sold else INK}" stroke-width="0.6" stroke-dasharray="3 2" '
-                    f'opacity="0.55" pointer-events="none"/>')
-        if cw > 30:
-            body.append(f'<text x="{xi+cw/2:.1f}" y="{top+12:.1f}" text-anchor="middle" font-size="7.5" '
-                        f'pointer-events="none" fill="{SUB}" letter-spacing="0.4" '
-                        f'font-family="Calibri,Arial">L{lo}–{hi} DUPLEX</text>')
     total_h = tower_bottom + BASE_H + PAD_BOT
 
     crown = (f'<polygon points="{cx-22:.0f},{PAD_TOP+16} {cx+22:.0f},{PAD_TOP+16} '
@@ -1853,29 +1892,32 @@ def render_building_view_brochure():
         return (f"AED {v/1e9:.2f}B" if v >= 1e9 else
                 f"AED {v/1e6:.0f}M" if v >= 1e6 else aed(v))
 
-    def _split(label, so_txt, sp, av_txt, ap):
-        return ('<div class="kpi"><div class="kl">' + label + '</div>'
-                f'<div class="split"><div class="seg so" style="width:{sp:.0f}%"></div>'
-                f'<div class="seg av" style="width:{ap:.0f}%"></div></div>'
-                '<div class="splitlbl">'
-                f'<span><span class="dot so"></span>{so_txt} &middot; {sp:.0f}%</span>'
-                f'<span>{av_txt} &middot; {ap:.0f}%<span class="dot av"></span></span>'
+    def _split(title, lab1, v1, p1, lab2, v2, p2):
+        return ('<div class="kpi">'
+                f'<div class="kl">{title}</div>'
+                f'<div class="split"><div class="seg so" style="width:{p1:.0f}%"></div>'
+                f'<div class="seg av" style="width:{p2:.0f}%"></div></div>'
+                '<div class="srows">'
+                f'<div class="srow"><span class="dot so"></span><span class="sk">{lab1}</span>'
+                f'<span class="sv">{v1} &middot; {p1:.0f}%</span></div>'
+                f'<div class="srow"><span class="dot av"></span><span class="sk">{lab2}</span>'
+                f'<span class="sv">{v2} &middot; {p2:.0f}%</span></div>'
                 '</div></div>')
 
-    split_units = _split("Sold vs Available (stock)",
-                         f"<b>{SO}</b> sold", so_pct, f"<b>{AV}</b> avail", av_pct)
-    split_value = _split("Sold vs Available (value)",
-                         f"<b>{_m(SOLDVAL)}</b>", sv_pct, f"<b>{_m(AVAL)}</b>", avv_pct)
+    split_units = _split("Sold vs Available (stock)", "Sold", f"<b>{SO}</b>", so_pct,
+                         "Available", f"<b>{AV}</b>", av_pct)
+    split_value = _split("Sold vs Available (value)", "Sold", f"<b>{_m(SOLDVAL)}</b>", sv_pct,
+                         "Available", f"<b>{_m(AVAL)}</b>", avv_pct)
 
     kpis = "".join([
         _kpi("Total Units", f"{TU}"),
-        _kpi("Available Stock", f"{AV}", f"{av_pct:.0f}% of stock" if TU else ""),
-        _kpi("Sold", f"{SO}", f"{STp:.0f}% sold"),
+        _kpi("Available Stock", f"{AV}"),
+        _kpi("Sold", f"{SO}"),
         _kpi("Total Project Value", aed(VAL)),
         _kpi("Available Stock Value", aed(AVAL)),
         _kpi("Total Sold Value", aed(SOLDVAL)),
         _kpi("Avg Price/sqft", aed(PSF), "on total area"),
-        _kpi("Total Sellable Area", f"{SELL:,.0f}", "sqft"),
+        _kpi("Total Sellable Area (sqft)", f"{SELL:,.0f}"),
         split_units, split_value])
     rows = []
     for t in present:
@@ -1903,18 +1945,23 @@ def render_building_view_brochure():
       .tower{flex:1 1 auto;}
       .side{max-width:none;}
     }
-    .kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
-    .kpi{background:#C6B9A4;border:1px solid #9C8E76;border-radius:9px;padding:9px 11px;}
-    .kl{font-size:11px;color:#6E6657;}
-    .kv{font-size:17px;font-weight:700;margin-top:2px;}
-    .ks{font-size:10px;color:#7d735f;margin-top:1px;}
-    .split{display:flex;height:12px;border-radius:6px;overflow:hidden;margin:7px 0 6px;background:#A2937B;}
+    .kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+    .kpi{background:linear-gradient(180deg,#CCC0AB,#C2B49C);border:1px solid #9C8E76;border-radius:11px;
+         padding:11px 13px;display:flex;flex-direction:column;justify-content:center;min-height:76px;
+         box-shadow:0 1px 2px rgba(60,50,30,.10);}
+    .kl{font-size:10.5px;color:#6E6657;letter-spacing:.4px;text-transform:uppercase;font-weight:600;}
+    .kv{font-size:21px;font-weight:800;color:#2E2B25;margin-top:4px;line-height:1.1;}
+    .ks{font-size:10.5px;color:#7d735f;margin-top:2px;}
+    .split{display:flex;height:12px;border-radius:6px;overflow:hidden;margin:9px 0 8px;background:#A2937B;}
     .split .seg{height:100%;}
     .split .seg.so{background:#B5532F;}
     .split .seg.av{background:#3E7A4E;}
-    .splitlbl{display:flex;justify-content:space-between;gap:6px;font-size:10.5px;color:#5b5346;}
-    .splitlbl b{color:#33302A;font-size:13px;}
-    .dot{display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:middle;margin:0 4px;}
+    .srows{display:flex;flex-direction:column;gap:4px;}
+    .srow{display:flex;align-items:center;gap:7px;font-size:11px;color:#5b5346;white-space:nowrap;}
+    .srow .sk{color:#6E6657;}
+    .srow .sv{margin-left:auto;color:#2E2B25;}
+    .srow .sv b{font-size:13px;font-weight:800;}
+    .dot{display:inline-block;width:9px;height:9px;border-radius:50%;flex:none;}
     .dot.so{background:#B5532F;}
     .dot.av{background:#3E7A4E;}
     .sh{font-size:13px;font-weight:700;color:#33302A;letter-spacing:.4px;}
