@@ -899,13 +899,17 @@ def _apply_floor_remap(remap, drop_uids=None):
 
 def insert_floors_between(N, count, ordered_types, params):
     """Insert `count` new residential floors at N. The residential floors at/above N shift UP by
-    `count` non-MEP levels — **MEP / Majlis floors stay fixed** (residential renumbers around them).
-    New floors take the first `count` non-MEP levels from N. Returns (new_floor_numbers, remap)."""
-    fixed = set(st.session_state.blocked.keys()) | {2}        # MEP / Majlis + amenities are FIXED
+    `count` non-MEP levels. **All MEP / Majlis floors stay fixed EXCEPT the top one** (default 67),
+    which floats so it always sits directly beneath the 5BR penthouse. New floors take the first
+    `count` non-MEP levels from N. Returns (new_floor_numbers, remap)."""
+    blk = st.session_state.blocked
+    top_mep = max(blk) if blk else None                       # the only MEP that floats
+    fixed = (set(blk.keys()) - ({top_mep} if top_mep is not None else set())) | {2}
     count = max(1, int(count))
     u = st.session_state.units
     ufn = pd.to_numeric(u["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True), errors="coerce")
-    res_floors = sorted({int(f) for f in ufn.dropna().astype(int).tolist() if int(f) not in fixed})
+    res_floors = sorted({int(f) for f in ufn.dropna().astype(int).tolist() if int(f) not in fixed
+                         and int(f) != top_mep})
     affected = [f for f in res_floors if f >= N]
 
     def kth_above(f, k):
@@ -921,7 +925,16 @@ def insert_floors_between(N, count, ordered_types, params):
         while x in fixed:
             x += 1
         new_nums.append(x); x += 1
-    remap = {f: kth_above(f, count) for f in affected}        # residential only — MEP untouched
+    remap = {f: kth_above(f, count) for f in affected}        # residential above the cut slides up
+    # the top MEP rides up with the penthouse, staying directly beneath the 5BR's two-floor span
+    if top_mep is not None and affected:
+        pent = max(remap.values())                            # 5BR record after the slide
+        new_mep = pent - 2
+        new_res = set(remap.values()) | {f for f in res_floors if f not in affected}
+        while new_mep in new_res and new_mep > 1:
+            new_mep -= 1
+        if new_mep != top_mep:
+            remap[top_mep] = new_mep
     _apply_floor_remap(remap)
 
     for nn in new_nums:
@@ -938,17 +951,22 @@ def insert_floors_between(N, count, ordered_types, params):
 
 def remove_floors_between(From, To):
     """Remove all residential floors in [From, To]. The residential floors above shift DOWN by
-    `count` non-MEP levels — **MEP / Majlis floors stay fixed** (residential renumbers around them).
-    Callers must block this when any unit in range is Sold. Returns (removed_floors, remap)."""
-    fixed = set(st.session_state.blocked.keys()) | {2}        # MEP / Majlis + amenities are FIXED
+    `count` non-MEP levels. **All MEP / Majlis floors stay fixed EXCEPT the top one** (default 67),
+    which floats so it always sits directly beneath the 5BR penthouse. Callers must block this when
+    any unit in range is Sold. Returns (removed_floors, remap)."""
+    blk = st.session_state.blocked
+    top_mep = max(blk) if blk else None                       # the only MEP that floats
+    fixed = (set(blk.keys()) - ({top_mep} if top_mep is not None else set())) | {2}
     u = st.session_state.units
     ufn = pd.to_numeric(u["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True), errors="coerce")
-    res_floors = sorted({int(f) for f in ufn.dropna().astype(int).tolist() if int(f) not in fixed})
+    res_floors = sorted({int(f) for f in ufn.dropna().astype(int).tolist() if int(f) not in fixed
+                         and int(f) != top_mep})
     to_remove = [f for f in res_floors if From <= f <= To]
     above = [f for f in res_floors if f > To]
     if not to_remove:
         return [], {}
     count = len(to_remove)
+    rem = set(to_remove)
 
     def kth_below(f, k):
         x = f
@@ -958,8 +976,16 @@ def remove_floors_between(From, To):
                 k -= 1
         return x
 
-    remap = {f: kth_below(f, count) for f in above}           # residential only — MEP untouched
-    rem = set(to_remove)
+    remap = {f: kth_below(f, count) for f in above}           # residential above the cut slides down
+    # the top MEP rides down with the penthouse, staying directly beneath the 5BR's two-floor span
+    if top_mep is not None and above:
+        pent = max(remap.values())                            # 5BR record after the slide
+        new_mep = pent - 2
+        new_res = set(remap.values()) | {f for f in res_floors if f not in rem and f not in remap}
+        while new_mep in new_res and new_mep > 1:
+            new_mep -= 1
+        if new_mep != top_mep:
+            remap[top_mep] = new_mep
     drop_uids = {u.at[idx, "uid"] for idx in u.index
                  if pd.notna(ufn[idx]) and int(ufn[idx]) in rem}
     _apply_floor_remap(remap, drop_uids)
