@@ -189,14 +189,18 @@ def excel_table(df: pd.DataFrame):
     st.markdown(f'<div style="overflow-x:auto">{sty.to_html()}</div>', unsafe_allow_html=True)
 
 
-def df_to_styled_xlsx(df: pd.DataFrame, sheet_name="Sheet1", title=None):
+def df_to_styled_xlsx(df: pd.DataFrame, sheet_name="Sheet1", title=None, aed_cols=None, sold_mask=None):
     """One formatted sheet matching the client's Excel (Blue Accent-1 theme):
-    medium-blue header, uniform light-blue data rows, bold Total row, dark-blue text."""
+    medium-blue header, banded data rows, bold Total row, dark-blue text. Optionally
+    formats `aed_cols` as AED currency and paints Sold rows (per `sold_mask`) yellow."""
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     from openpyxl.utils import get_column_letter
     # Office "Blue, Accent 1" palette
     HEAD, DATA, TOTAL = "4472C4", "D9E1F2", "B4C6E7"
-    DARK, WHITE = "1F3864", "FFFFFF"
+    DARK, WHITE, SOLD = "1F3864", "FFFFFF", "FFFF00"
+    aed_cols = set(aed_cols or [])
+    aed_idx = {i + 1 for i, c in enumerate(df.columns) if c in aed_cols}     # 1-based Excel cols
+    sold_mask = list(sold_mask) if sold_mask is not None else None
     sheet_name = (sheet_name or "Sheet1")[:31]
     out = BytesIO()
     with pd.ExcelWriter(out, engine="openpyxl") as writer:
@@ -211,6 +215,7 @@ def df_to_styled_xlsx(df: pd.DataFrame, sheet_name="Sheet1", title=None):
                                             PatternFill("solid", fgColor=DATA),
                                             PatternFill("solid", fgColor=TOTAL))
         white_fill = PatternFill("solid", fgColor=WHITE)
+        sold_fill  = PatternFill("solid", fgColor=SOLD)
         center = Alignment(horizontal="center", vertical="center")
         left   = Alignment(horizontal="left", vertical="center")
 
@@ -229,15 +234,20 @@ def df_to_styled_xlsx(df: pd.DataFrame, sheet_name="Sheet1", title=None):
         first_data = hrow + 1
         for r in range(first_data, ws.max_row + 1):
             is_total = _is_total_row(ws.cell(row=r, column=1).value)
+            di = r - first_data
+            is_sold = (sold_mask is not None and not is_total
+                       and di < len(sold_mask) and bool(sold_mask[di]))
             for ci in range(1, ncols + 1):
                 cell = ws.cell(row=r, column=ci)
                 cell.alignment = left if ci == 1 else center
+                if ci in aed_idx:
+                    cell.number_format = '"AED" #,##0'      # numeric AED currency cells
                 if is_total:
                     cell.fill = total_fill
                     cell.font = Font(bold=True, color=DARK)
                     cell.border = top_med
                 else:
-                    cell.fill = data_fill if (r - first_data) % 2 == 0 else white_fill
+                    cell.fill = sold_fill if is_sold else (data_fill if di % 2 == 0 else white_fill)
                     cell.font = Font(color=DARK)
                     cell.border = border
         for ci in range(1, ncols + 1):
@@ -248,8 +258,9 @@ def df_to_styled_xlsx(df: pd.DataFrame, sheet_name="Sheet1", title=None):
     return out.getvalue()
 
 
-def export_button(df: pd.DataFrame, file_name, key, title=None, label="⬇️  Export to Excel"):
-    st.download_button(label, data=df_to_styled_xlsx(df, sheet_name=(title or "Sheet1"), title=title),
+def export_button(df: pd.DataFrame, file_name, key, title=None, label="⬇️  Export to Excel", **xlsx_kwargs):
+    st.download_button(label,
+                       data=df_to_styled_xlsx(df, sheet_name=(title or "Sheet1"), title=title, **xlsx_kwargs),
                        file_name=file_name, key=key,
                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
@@ -1061,8 +1072,20 @@ with tab1:
         return ["background-color:#9DC3E6" if bool(sold_by_idx.loc[row.name]) else "" for _ in row]
     _ur = st.columns([0.74, 0.26])
     with _ur[1]:
-        export_button(vis.reset_index(drop=True), "Unit_Register.xlsx", key="exp_reg",
-                      title="Muraba Veil Unit Register")
+        # export AED columns as real numbers (currency format) + paint Sold rows yellow
+        _reg_raw = {
+            "Price/Sellable sqft": view["Price_sqft"], "Price/Total sqft": view["PSF_total"],
+            "Internal Value (AED)": view["Int_Value"], "Terrace Value (AED)": view["Terr_Value"],
+            "Total Price (AED)": view["Price"], "Escalation vs below (/sqft)": view["Esc_row"],
+            "Floor Wise Variance (AED)": view["Var_row"],
+        }
+        _exp = vis.reset_index(drop=True).copy()
+        _aed_present = [c for c in _exp.columns if c in _reg_raw]
+        for c in _aed_present:
+            _exp[c] = pd.to_numeric(pd.Series(_reg_raw[c]).values, errors="coerce")
+        export_button(_exp, "Unit_Register.xlsx", key="exp_reg",
+                      title="Muraba Veil Unit Register",
+                      aed_cols=_aed_present, sold_mask=(view["Status"] == "Sold").values)
     st.dataframe(vis.style.apply(_hl_sold, axis=1), use_container_width=True,
                  hide_index=True, height=460)
     st.caption(f"Showing {len(view)} of {len(df)} units · Sold units highlighted in blue · "
@@ -1098,7 +1121,7 @@ with tab2:
     SUM_COLS = ["Typology", "Number of Units", "Avg. Price /Sq.ft", "Area (sqft)", "Area (sqm)",
                 "Internal (sqft/unit)", "Terrace (sqft/unit)", "Total Internal (sqft)",
                 "Total Terrace (sqft)", "Total Sellable", "Counted Terraces",
-                "Total Sellable Counted", "Price (per unit)", "Total Sales",
+                "Total Sellable Counted", "Avg Price (per unit)", "Total Sales",
                 "Parking", "Total Parking"]
 
     # build one numeric row per typology, ordered like the master type list
@@ -1130,7 +1153,7 @@ with tab2:
             "Total Sellable": tot_sellable,
             "Counted Terraces": counted_terr,
             "Total Sellable Counted": tot_counted,
-            "Price (per unit)": total_sales / n if n else 0.0,
+            "Avg Price (per unit)": total_sales / n if n else 0.0,
             "Total Sales": total_sales,
             "Parking": int(g["Parking"].mode().iloc[0]) if not g["Parking"].mode().empty else 0,
             "Total Parking": int(g["Parking"].sum()),
@@ -1151,7 +1174,7 @@ with tab2:
         "Total Sellable": nm["Total Sellable"].sum(),
         "Counted Terraces": nm["Counted Terraces"].sum(),
         "Total Sellable Counted": tot_counted_all,
-        "Price (per unit)": None,
+        "Avg Price (per unit)": None,
         "Total Sales": nm["Total Sales"].sum(),
         "Parking": None,
         "Total Parking": int(nm["Total Parking"].sum()),
@@ -1181,7 +1204,7 @@ with tab2:
         "Total Sellable": nm["Total Sellable"].apply(lambda v: _f(v, "areak")),
         "Counted Terraces": nm["Counted Terraces"].apply(lambda v: _f(v, "areak")),
         "Total Sellable Counted": nm["Total Sellable Counted"].apply(lambda v: _f(v, "areak")),
-        "Price (per unit)": nm["Price (per unit)"].apply(lambda v: _f(v, "aed0")),
+        "Avg Price (per unit)": nm["Avg Price (per unit)"].apply(lambda v: _f(v, "aed0")),
         "Total Sales": nm["Total Sales"].apply(lambda v: _f(v, "aed0")),
         "Parking": nm["Parking"].apply(lambda v: _f(v, "int")),
         "Total Parking": nm["Total Parking"].apply(lambda v: _f(v, "int")),
@@ -1664,18 +1687,49 @@ def render_building_view_brochure():
             'patternUnits="userSpaceOnUse"><rect width="10" height="10" fill="#A2937B"/>'
             '<rect width="5" height="10" fill="#94866F"/></pattern></defs>')
 
-    body, y, floor_y = [], PAD_TOP + CROWN_H, {}
+    body, y, floor_y, floor_h = [], PAD_TOP + CROWN_H, {}, {}
     # static roof amenity band (levels 70–73)
     roof_h = len(ROOF_FLOORS) * H_STD + (len(ROOF_FLOORS) - 1) * GAP
+    roof_bottom = y + roof_h                        # bottom edge of the roof band (y here = its top)
     body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{roof_h:.0f}" rx="2" fill="url(#amenP)"/>')
     body.append(f'<text x="{cx:.0f}" y="{y+roof_h/2+4:.0f}" text-anchor="middle" font-size="12" '
                 f'pointer-events="none" fill="{INK}" letter-spacing="2" font-family="Calibri,Arial">{ROOF_TEXT}</text>')
     for j, rf in enumerate(ROOF_FLOORS):
         ry = y + j * (H_STD + GAP) + H_STD / 2
-        floor_y[rf] = ry
+        floor_y[rf] = ry; floor_h[rf] = H_STD
         body.append(f'<text x="{TX+TW+8:.0f}" y="{ry+3.5:.0f}" text-anchor="start" font-size="10" '
                     f'pointer-events="none" fill="{SUB}" font-family="Calibri,Arial">{rf}</text>')
     y += roof_h + GAP
+
+    dup_units = []                      # duplexes drawn after the loop, spanning two floors
+
+    def draw_box(xi, cw, ry, rh, ty_mid, sold, col, u, span=None):
+        gfl = span if span else str(u["Floor"])
+        gattr = (f'class="u" data-u="{_esc(str(u["Unit"]))}" data-ty="{_esc(u["Type"])}" '
+                 f'data-fl="{_esc(gfl)}" data-st="{u["Status"]}" '
+                 f'data-pr="{_esc(aed(u["Price"]))}" data-ps="{u["Price_sqft"]:,.0f}" '
+                 f'data-ai="{u["Internal_sqft"]:,.0f}" data-ae="{u["External_sqft"]:,.0f}" '
+                 f'data-at="{u["Total_sqft"]:,.0f}" data-c="{col}"')
+        if sold:
+            body.append(f'<g {gattr}><rect x="{xi:.1f}" y="{ry:.1f}" width="{cw:.1f}" height="{rh:.1f}" '
+                        f'rx="2" fill="none" stroke="{SOLDS}" stroke-width="1"/></g>')
+        else:
+            body.append(f'<g {gattr}><rect x="{xi:.1f}" y="{ry:.1f}" width="{cw:.1f}" height="{rh:.1f}" '
+                        f'rx="2" fill="{col}" stroke="{INK}" stroke-width="0.5"/></g>')
+        if cw > 30:
+            uabbr = TYPE_ABBR.get(u["Type"], u["Type"])
+            face = f'{_esc(str(u["Unit"]))} &middot; {_esc(uabbr)}'
+            tcol = SUB if sold else "#EDE6D7"
+            body.append(f'<text x="{xi+cw/2:.1f}" y="{ty_mid-2:.1f}" text-anchor="middle" font-size="8" '
+                        f'pointer-events="none" fill="{tcol}" font-family="Calibri,Arial">{face}</text>')
+            if sold:
+                body.append(f'<text x="{xi+cw/2:.1f}" y="{ty_mid+10:.1f}" text-anchor="middle" font-size="9" '
+                            f'font-weight="bold" pointer-events="none" fill="{SOLDS}" letter-spacing="1.5" '
+                            f'font-family="Calibri,Arial">SOLD</text>')
+            else:
+                body.append(f'<text x="{xi+cw/2:.1f}" y="{ty_mid+10:.1f}" text-anchor="middle" font-size="9.5" '
+                            f'font-weight="bold" pointer-events="none" fill="#FBF3DF" '
+                            f'font-family="Calibri,Arial">{aed(u["Price"])}</text>')
 
     for f in range(max_floor, min_floor - 1, -1):
         if f in ROOF_FLOORS:
@@ -1686,6 +1740,7 @@ def render_building_view_brochure():
         tall = g is not None and any(("Pool" in t or "Duplex" in t) for t in types)
         h = H_TALL if tall else H_STD
         floor_y[f] = y + h / 2
+        floor_h[f] = h
         body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="2" '
                     f'fill="{SLAB}" stroke="{SLABLN}" stroke-width="0.5"/>')
         body.append(f'<text x="{TX+TW+8:.0f}" y="{y+h/2+3.5:.0f}" text-anchor="start" font-size="10" '
@@ -1696,42 +1751,44 @@ def render_building_view_brochure():
                 xi = TX + i * (cw + MULL)
                 sold = u["Status"] == "Sold"
                 col = BROCHURE_COLORS.get(u["Type"], "#7d7461")
-                gattr = (f'class="u" data-u="{_esc(str(u["Unit"]))}" data-ty="{_esc(u["Type"])}" '
-                         f'data-fl="{_esc(str(u["Floor"]))}" data-st="{u["Status"]}" '
-                         f'data-pr="{_esc(aed(u["Price"]))}" data-ps="{u["Price_sqft"]:,.0f}" '
-                         f'data-ai="{u["Internal_sqft"]:,.0f}" data-ae="{u["External_sqft"]:,.0f}" '
-                         f'data-at="{u["Total_sqft"]:,.0f}" data-c="{col}"')
-                if sold:
-                    body.append(f'<g {gattr}><rect x="{xi:.1f}" y="{y+1:.0f}" width="{cw:.1f}" height="{h-2}" '
-                                f'rx="2" fill="none" stroke="{SOLDS}" stroke-width="1"/></g>')
-                else:
-                    body.append(f'<g {gattr}><rect x="{xi:.1f}" y="{y+1:.0f}" width="{cw:.1f}" height="{h-2}" '
-                                f'rx="2" fill="{col}" stroke="{INK}" stroke-width="0.5"/></g>')
-                if cw > 30:
-                    uabbr = TYPE_ABBR.get(u["Type"], u["Type"])
-                    face = f'{_esc(str(u["Unit"]))} &middot; {_esc(uabbr)}'
-                if cw > 30 and sold:
-                    body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2-2:.0f}" text-anchor="middle" font-size="8" '
-                                f'pointer-events="none" fill="{SUB}" font-family="Calibri,Arial">{face}</text>')
-                    body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2+10:.0f}" text-anchor="middle" font-size="9" '
-                                f'font-weight="bold" pointer-events="none" fill="{SOLDS}" letter-spacing="1.5" '
-                                f'font-family="Calibri,Arial">SOLD</text>')
-                elif cw > 30:
-                    body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2-2:.0f}" text-anchor="middle" font-size="8" '
-                                f'pointer-events="none" fill="#EDE6D7" font-family="Calibri,Arial">{face}</text>')
-                    body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2+10:.0f}" text-anchor="middle" font-size="9.5" '
-                                f'font-weight="bold" pointer-events="none" fill="#FBF3DF" '
-                                f'font-family="Calibri,Arial">{aed(u["Price"])}</text>')
+                if "Duplex" in str(u["Type"]):          # 2-floor unit → drawn in post-pass below
+                    dup_units.append((f, xi, cw, sold, col, u))
+                    continue
+                draw_box(xi, cw, y + 1, h - 2, y + h / 2, sold, col, u)
         elif is_blocked:
+            lbl = "MAJLIS" if f == 31 else "MEP"
             body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="2" fill="url(#amenP)"/>'
                         f'<text x="{cx:.0f}" y="{y+h/2+3.2:.0f}" text-anchor="middle" font-size="9" '
-                        f'pointer-events="none" fill="{SUB}" letter-spacing="2" font-family="Calibri,Arial">MEP / MAJLIS</text>')
+                        f'pointer-events="none" fill="{SUB}" letter-spacing="2" font-family="Calibri,Arial">{lbl}</text>')
         else:
             body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="2" fill="none" '
                         f'stroke="{SLABLN}" stroke-dasharray="3 3"/>')
         y += h + GAP
 
     tower_bottom = y - GAP
+
+    # duplexes: one unit spanning two floor levels — up into the floor above, or down
+    # when the floor above is the roof (e.g. the 5BR penthouse spans 68–69)
+    for (f, xi, cw, sold, col, u) in dup_units:
+        fa = f + 1
+        if (fa in floor_y) and (fa not in ROOF_FLOORS):
+            lo, hi = f, fa
+        else:
+            lo, hi = f - 1, f
+        top = (floor_y[hi] - floor_h[hi] / 2) if hi in floor_y else (floor_y[lo] - floor_h[lo] / 2 - GAP - H_STD)
+        bot = (floor_y[lo] + floor_h[lo] / 2) if lo in floor_y else (floor_y[hi] + floor_h[hi] / 2 + GAP + H_STD)
+        top = max(top, roof_bottom + 1)
+        ry, rh = top + 1, bot - top - 2
+        ty_mid = (top + bot) / 2
+        draw_box(xi, cw, ry, rh, ty_mid, sold, col, u, span=f"{lo}–{hi}")
+        seam = (floor_y[lo] - floor_h[lo] / 2 - GAP / 2) if lo in floor_y else ty_mid
+        body.append(f'<line x1="{xi+2:.1f}" y1="{seam:.1f}" x2="{xi+cw-2:.1f}" y2="{seam:.1f}" '
+                    f'stroke="{SOLDS if sold else INK}" stroke-width="0.6" stroke-dasharray="3 2" '
+                    f'opacity="0.55" pointer-events="none"/>')
+        if cw > 30:
+            body.append(f'<text x="{xi+cw/2:.1f}" y="{top+12:.1f}" text-anchor="middle" font-size="7.5" '
+                        f'pointer-events="none" fill="{SUB}" letter-spacing="0.4" '
+                        f'font-family="Calibri,Arial">L{lo}–{hi} DUPLEX</text>')
     total_h = tower_bottom + BASE_H + PAD_BOT
 
     crown = (f'<polygon points="{cx-22:.0f},{PAD_TOP+16} {cx+22:.0f},{PAD_TOP+16} '
@@ -1787,20 +1844,39 @@ def render_building_view_brochure():
         return f'<div class="kpi"><div class="kl">{label}</div><div class="kv">{val}</div>{s}</div>'
     av_pct = (AV / TU * 100) if TU else 0.0
     so_pct = (SO / TU * 100) if TU else 0.0
-    split_card = (
-        '<div class="kpi">'
-        '<div class="kl">Sold vs Available</div>'
-        f'<div class="split"><div class="seg so" style="width:{so_pct:.0f}%"></div>'
-        f'<div class="seg av" style="width:{av_pct:.0f}%"></div></div>'
-        '<div class="splitlbl">'
-        f'<span><span class="dot so"></span><b>{SO}</b> sold &middot; {so_pct:.0f}%</span>'
-        f'<span><b>{AV}</b> avail &middot; {av_pct:.0f}%<span class="dot av"></span></span>'
-        '</div></div>')
+    SOLDVAL = VAL - AVAL
+    sv_pct = (SOLDVAL / VAL * 100) if VAL else 0.0
+    avv_pct = (AVAL / VAL * 100) if VAL else 0.0
+    SELL = float(df["Sellable_sqft"].sum())
+
+    def _m(v):                                       # compact AED for the split-bar labels
+        return (f"AED {v/1e9:.2f}B" if v >= 1e9 else
+                f"AED {v/1e6:.0f}M" if v >= 1e6 else aed(v))
+
+    def _split(label, so_txt, sp, av_txt, ap):
+        return ('<div class="kpi"><div class="kl">' + label + '</div>'
+                f'<div class="split"><div class="seg so" style="width:{sp:.0f}%"></div>'
+                f'<div class="seg av" style="width:{ap:.0f}%"></div></div>'
+                '<div class="splitlbl">'
+                f'<span><span class="dot so"></span>{so_txt} &middot; {sp:.0f}%</span>'
+                f'<span>{av_txt} &middot; {ap:.0f}%<span class="dot av"></span></span>'
+                '</div></div>')
+
+    split_units = _split("Sold vs Available (stock)",
+                         f"<b>{SO}</b> sold", so_pct, f"<b>{AV}</b> avail", av_pct)
+    split_value = _split("Sold vs Available (value)",
+                         f"<b>{_m(SOLDVAL)}</b>", sv_pct, f"<b>{_m(AVAL)}</b>", avv_pct)
+
     kpis = "".join([
-        _kpi("Total Units", f"{TU}"), _kpi("Available", f"{AV}", f"{(AV/TU*100):.0f}% of stock" if TU else ""),
-        _kpi("Sold", f"{SO}", f"{STp:.0f}% sold"), _kpi("Portfolio Value", aed(VAL)),
-        _kpi("Available Value", aed(AVAL)), _kpi("Total Sold Value", aed(VAL - AVAL)),
-        _kpi("Avg Price/sqft", aed(PSF), "on total area"), split_card])
+        _kpi("Total Units", f"{TU}"),
+        _kpi("Available Stock", f"{AV}", f"{av_pct:.0f}% of stock" if TU else ""),
+        _kpi("Sold", f"{SO}", f"{STp:.0f}% sold"),
+        _kpi("Total Project Value", aed(VAL)),
+        _kpi("Available Stock Value", aed(AVAL)),
+        _kpi("Total Sold Value", aed(SOLDVAL)),
+        _kpi("Avg Price/sqft", aed(PSF), "on total area"),
+        _kpi("Total Sellable Area", f"{SELL:,.0f}", "sqft"),
+        split_units, split_value])
     rows = []
     for t in present:
         s = _stat(t); col = BROCHURE_COLORS.get(t, "#7d7461")
@@ -2431,9 +2507,10 @@ with tab4:
         n_sel = len(range_uids)
         st.caption(f"**{n_sel} unit(s) selected** — {uid_label(range_uids[0], df)}"
                    + (f"  →  {uid_label(range_uids[-1], df)}" if n_sel > 1 else ""))
-        st.caption("Edit **each unit individually** below — change its Status, Price / sellable sqft "
-                   "and/or Sellable sqft per row, then **Save Changes** (price = price/sellable × "
-                   "sellable). An edited Sellable sqft is kept as a per-unit override.")
+        st.caption("Edit **each unit individually** below — change its Status, Price / sellable sqft, "
+                   "Sellable sqft and/or **Total Value** per row, then **Save Changes**. Editing Total "
+                   "Value recomputes price / sellable sqft automatically; an edited Sellable sqft is "
+                   "kept as a per-unit override.")
 
         # one editable row per selected unit, in range order
         rng = df[df["uid"].isin(range_uids)].copy()
@@ -2446,6 +2523,7 @@ with tab4:
             "Status": rng["Status"].astype(str).values,
             "Price/sellable sqft": rng["Price_sqft"].round(0).astype(float).values,
             "Sellable sqft": rng["Sellable_sqft"].round(0).astype(float).values,
+            "Total Value": rng["Price"].round(0).astype(float).values,
             "_uid":  rng["uid"].astype(str).values,
         })
         edited = st.data_editor(
@@ -2460,6 +2538,8 @@ with tab4:
                     "Price / sellable sqft (AED)", min_value=0.0, step=50.0, format="%.0f"),
                 "Sellable sqft": st.column_config.NumberColumn(
                     "Sellable sqft", min_value=0.0, step=10.0, format="%.0f"),
+                "Total Value": st.column_config.NumberColumn(
+                    "Total Value (AED)", min_value=0.0, step=10000.0, format="%.0f"),
                 "_uid": None,                              # hidden key column
             },
         )
@@ -2470,18 +2550,30 @@ with tab4:
                 u["Sellable_Override"] = pd.NA
             u_uid_str = u["uid"].astype(str)
             orig_sell = dict(zip(editor_df["_uid"], editor_df["Sellable sqft"]))
+            orig_psf  = dict(zip(editor_df["_uid"], editor_df["Price/sellable sqft"]))
+            orig_tot  = dict(zip(editor_df["_uid"], editor_df["Total Value"]))
             done = 0
             for _, er in edited.iterrows():
                 ix = u.index[u_uid_str == str(er["_uid"])]
                 if len(ix) == 0:
                     continue
-                i = ix[0]
+                i = ix[0]; uidk = str(er["_uid"])
                 u.at[i, "Status"] = er["Status"]
-                u.at[i, "Price_sqft"] = float(er["Price/sellable sqft"])
-                # only override sellable when the user actually changed it (else stay dynamic)
+                # sellable: override only when the user actually changed it (else stay dynamic)
                 new_sell = float(er["Sellable sqft"])
-                if abs(new_sell - float(orig_sell.get(er["_uid"], new_sell))) > 0.5:
+                sell_changed = abs(new_sell - float(orig_sell.get(uidk, new_sell))) > 0.5
+                eff_sell = new_sell if sell_changed else float(orig_sell.get(uidk, new_sell))
+                if sell_changed:
                     u.at[i, "Sellable_Override"] = new_sell
+                # price: editing Total Value wins (recomputes price/sellable); else use price field
+                new_tot = float(er["Total Value"])
+                tot_changed = abs(new_tot - float(orig_tot.get(uidk, new_tot))) > 1.0
+                new_psf = float(er["Price/sellable sqft"])
+                psf_changed = abs(new_psf - float(orig_psf.get(uidk, new_psf))) > 0.5
+                if tot_changed:
+                    u.at[i, "Price_sqft"] = (new_tot / eff_sell) if eff_sell else 0.0
+                elif psf_changed:
+                    u.at[i, "Price_sqft"] = new_psf
                 done += 1
             # No st.rerun() — stay on this page; the user navigates when ready.
             st.success(f"✅ Saved per-unit changes to {done} unit(s). "
