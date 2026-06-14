@@ -1257,6 +1257,14 @@ BUILDING_COLORS = {
 def _esc(s):
     return (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;"))
 
+def _abbr(v):
+    """Compact money: 19,939,790 → '19.9M'."""
+    v = float(v)
+    if v >= 1e9: return f"{v/1e9:.2f}B"
+    if v >= 1e6: return f"{v/1e6:.1f}M"
+    if v >= 1e3: return f"{v/1e3:.0f}K"
+    return f"{v:.0f}"
+
 def _heat(v, lo, hi):
     """Map a value to a low→high price heatmap colour (blue → amber → red)."""
     t = 0.5 if hi <= lo else max(0.0, min(1.0, (v - lo) / (hi - lo)))
@@ -1293,9 +1301,9 @@ def render_building_view(enhanced=False):
     PLO, PHI = (float(_ps.min()), float(_ps.max())) if len(_ps) else (0.0, 1.0)
 
     # ── geometry (tower SVG) ──
-    W, TW, TX = 820, 520, 200
+    W, TW, TX = 880, 560, 200
     cx = TX + TW / 2
-    H_STD, H_TALL, GAP, MULL = 20, 34, 3, 3
+    H_STD, H_TALL, GAP, MULL = 26, 42, 3, 3
     PAD_TOP, CROWN_H, BASE_H, PAD_BOT = 18, 50, 32, 18
 
     defs = (
@@ -1349,9 +1357,13 @@ def render_building_view(enhanced=False):
                                 f'<rect x="{xi:.1f}" y="{y+1:.0f}" width="{cw:.1f}" height="{hl:.0f}" rx="2.5" '
                                 f'fill="#ffffff" fill-opacity="0.16"/></g>')
                 if cw > 30:
-                    body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2+3.2:.0f}" text-anchor="middle" font-size="9" '
-                                f'pointer-events="none" fill="#ffffff" fill-opacity="{"0.95" if not sold else "0.8"}" '
+                    op = "0.95" if not sold else "0.75"
+                    body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2-2:.0f}" text-anchor="middle" font-size="8.5" '
+                                f'pointer-events="none" fill="#ffffff" fill-opacity="{op}" '
                                 f'font-family="Calibri,Arial">{_esc(str(u["Unit"]))}</text>')
+                    body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2+10:.0f}" text-anchor="middle" font-size="9.5" '
+                                f'font-weight="bold" pointer-events="none" fill="{"#FCE9B0" if not sold else "#cdd6e2"}" '
+                                f'fill-opacity="{op}" font-family="Calibri,Arial">AED {_abbr(u["Price"])}</text>')
         elif is_blocked:
             body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="3" fill="url(#amen)"/>'
                         f'<text x="{cx:.0f}" y="{y+h/2+3.2:.0f}" text-anchor="middle" font-size="9" '
@@ -1475,7 +1487,7 @@ def render_building_view(enhanced=False):
     *{box-sizing:border-box;}
     .bv{display:flex;gap:14px;height:720px;background:#05080F;border-radius:12px;padding:12px;
         font-family:Calibri,Arial,sans-serif;}
-    .tower{flex:0 0 860px;overflow-y:auto;border-radius:10px;}
+    .tower{flex:0 0 920px;overflow-y:auto;border-radius:10px;}
     .tower svg{display:block;margin:0 auto;}
     .tower::-webkit-scrollbar,.legend::-webkit-scrollbar{width:8px;}
     .tower::-webkit-scrollbar-thumb,.legend::-webkit-scrollbar-thumb{background:#24395c;border-radius:5px;}
@@ -1591,9 +1603,9 @@ def render_building_view_brochure():
     PAGE, INK, SUB = "#B4A48D", "#33302A", "#6E6657"
     SLAB, SLABLN, SOLDS = "#AC9C84", "#9C8E76", "#8C8270"
 
-    W, TW, TX = 820, 520, 200
+    W, TW, TX = 880, 560, 200
     cx = TX + TW / 2
-    H_STD, H_TALL, GAP, MULL = 20, 34, 3, 3
+    H_STD, H_TALL, GAP, MULL = 26, 42, 3, 3
     PAD_TOP, CROWN_H, BASE_H, PAD_BOT = 18, 50, 30, 18
 
     defs = ('<defs><pattern id="amenP" width="10" height="10" patternTransform="rotate(45)" '
@@ -1630,9 +1642,13 @@ def render_building_view_brochure():
                     body.append(f'<g {gattr}><rect x="{xi:.1f}" y="{y+1:.0f}" width="{cw:.1f}" height="{h-2}" '
                                 f'rx="2" fill="{col}" stroke="{INK}" stroke-width="0.5"/></g>')
                 if cw > 30:
-                    tcol = "#EDE6D7" if not sold else SUB
-                    body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2+3.2:.0f}" text-anchor="middle" font-size="9" '
-                                f'pointer-events="none" fill="{tcol}" font-family="Calibri,Arial">{_esc(str(u["Unit"]))}</text>')
+                    tnum = "#EDE6D7" if not sold else SUB
+                    tprc = "#FBF3DF" if not sold else "#5C4A28"
+                    body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2-2:.0f}" text-anchor="middle" font-size="8.5" '
+                                f'pointer-events="none" fill="{tnum}" font-family="Calibri,Arial">{_esc(str(u["Unit"]))}</text>')
+                    body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2+10:.0f}" text-anchor="middle" font-size="9.5" '
+                                f'font-weight="bold" pointer-events="none" fill="{tprc}" '
+                                f'font-family="Calibri,Arial">AED {_abbr(u["Price"])}</text>')
         elif is_blocked:
             body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="2" fill="url(#amenP)"/>'
                         f'<text x="{cx:.0f}" y="{y+h/2+3.2:.0f}" text-anchor="middle" font-size="9" '
@@ -1715,7 +1731,7 @@ def render_building_view_brochure():
     *{box-sizing:border-box;}
     .bv{display:flex;gap:14px;height:720px;background:#B4A48D;border-radius:12px;padding:12px;
         font-family:Calibri,Arial,sans-serif;}
-    .tower{flex:0 0 860px;overflow-y:auto;border-radius:10px;}
+    .tower{flex:0 0 920px;overflow-y:auto;border-radius:10px;}
     .tower svg{display:block;margin:0 auto;}
     .tower::-webkit-scrollbar,.legend::-webkit-scrollbar{width:8px;}
     .tower::-webkit-scrollbar-thumb,.legend::-webkit-scrollbar-thumb{background:#8C7E66;border-radius:5px;}
