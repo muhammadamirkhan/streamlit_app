@@ -177,7 +177,7 @@ def excel_table(df: pd.DataFrame):
                                    "font-family:Calibri,Arial,sans-serif;"},
         {"selector": "thead th", "props": f"background-color:{BLUE_DARK};color:#FFFFFF;font-weight:bold;"
                                            "text-align:center;border:1px solid #9DC3E6;padding:6px 10px;"},
-        {"selector": "tbody td", "props": "border:1px solid #BDD7EE;padding:5px 10px;text-align:center;"},
+        {"selector": "tbody td", "props": "border:1px solid #BDD7EE;padding:5px 10px;text-align:center;white-space:nowrap;"},
         {"selector": "tbody td:first-child", "props": "text-align:left;font-weight:600;white-space:nowrap;"},
         {"selector": "thead th:first-child", "props": "text-align:left;white-space:nowrap;"},
         {"selector": "tbody tr:nth-child(even)", "props": f"background-color:{BLUE_LITE};"},
@@ -187,9 +187,13 @@ def excel_table(df: pd.DataFrame):
 
 
 def df_to_styled_xlsx(df: pd.DataFrame, sheet_name="Sheet1", title=None):
-    """One formatted sheet (bold blue header, banded rows, highlighted Total row, auto widths)."""
+    """One formatted sheet matching the client's Excel (Blue Accent-1 theme):
+    medium-blue header, uniform light-blue data rows, bold Total row, dark-blue text."""
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     from openpyxl.utils import get_column_letter
+    # Office "Blue, Accent 1" palette
+    HEAD, DATA, TOTAL = "4472C4", "D9E1F2", "B4C6E7"
+    DARK, WHITE = "1F3864", "FFFFFF"
     sheet_name = (sheet_name or "Sheet1")[:31]
     out = BytesIO()
     with pd.ExcelWriter(out, engine="openpyxl") as writer:
@@ -197,23 +201,24 @@ def df_to_styled_xlsx(df: pd.DataFrame, sheet_name="Sheet1", title=None):
         df.to_excel(writer, index=False, sheet_name=sheet_name, startrow=startrow)
         ws = writer.book[sheet_name]
         ncols = len(df.columns)
-        thin = Side(style="thin", color="BDD7EE")
-        border = Border(left=thin, right=thin, top=thin, bottom=thin)
-        head_fill  = PatternFill("solid", fgColor="1F4E78")
-        band_fill  = PatternFill("solid", fgColor="DDEBF7")
-        total_fill = PatternFill("solid", fgColor="2E75B6")
+        wbord = Side(style="thin", color="FFFFFF")
+        border = Border(left=wbord, right=wbord, top=wbord, bottom=wbord)
+        top_med = Border(left=wbord, right=wbord, bottom=wbord, top=Side(style="medium", color=HEAD))
+        head_fill, data_fill, total_fill = (PatternFill("solid", fgColor=HEAD),
+                                            PatternFill("solid", fgColor=DATA),
+                                            PatternFill("solid", fgColor=TOTAL))
         center = Alignment(horizontal="center", vertical="center")
         left   = Alignment(horizontal="left", vertical="center")
 
         if title:
             ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols)
             tc = ws.cell(row=1, column=1, value=title)
-            tc.fill = head_fill; tc.font = Font(bold=True, color="FFFFFF", size=13); tc.alignment = left
+            tc.fill = head_fill; tc.font = Font(bold=True, color=WHITE, size=13); tc.alignment = left
             ws.row_dimensions[1].height = 24
 
         hrow = startrow + 1
         for c in ws[hrow]:
-            c.fill, c.font, c.alignment, c.border = head_fill, Font(bold=True, color="FFFFFF"), center, border
+            c.fill, c.font, c.alignment, c.border = head_fill, Font(bold=True, color=WHITE), center, border
         ws.freeze_panes = ws.cell(row=hrow + 1, column=1).coordinate
         ws.row_dimensions[hrow].height = 22
 
@@ -222,13 +227,15 @@ def df_to_styled_xlsx(df: pd.DataFrame, sheet_name="Sheet1", title=None):
             is_total = _is_total_row(ws.cell(row=r, column=1).value)
             for ci in range(1, ncols + 1):
                 cell = ws.cell(row=r, column=ci)
-                cell.border = border
                 cell.alignment = left if ci == 1 else center
                 if is_total:
                     cell.fill = total_fill
-                    cell.font = Font(bold=True, color="FFFFFF")
-                elif (r - first_data) % 2 == 1:
-                    cell.fill = band_fill
+                    cell.font = Font(bold=True, color=DARK)
+                    cell.border = top_med
+                else:
+                    cell.fill = data_fill
+                    cell.font = Font(color=DARK)
+                    cell.border = border
         for ci in range(1, ncols + 1):
             col = get_column_letter(ci)
             maxlen = max((len(str(ws.cell(row=rr, column=ci).value or "")) for rr in range(hrow, ws.max_row + 1)),
@@ -1253,6 +1260,9 @@ BUILDING_COLORS = {
     "3 Bedroom Pool": "#22C1C3", "4 Bedroom Pool": "#0E8C8C", "4 Bedroom XL": "#F2A65A",
     "3 Bedroom Duplex": "#8BC34A", "4 Bedroom Duplex": "#4E8C2F", "5 Bedroom Duplex": "#E6B450",
 }
+# Static crown floors shown at the very top of the tower (amenity, no units)
+ROOF_FLOORS = [73, 72, 71, 70]
+ROOF_TEXT = "ROOF POOL, RESTAURANT"
 
 def _esc(s):
     return (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;"))
@@ -1322,7 +1332,21 @@ def render_building_view(enhanced=False):
         '</defs>')
 
     body, y, floor_y = [], PAD_TOP + CROWN_H, {}
+    # static roof amenity band (levels 70–73)
+    roof_h = len(ROOF_FLOORS) * H_STD + (len(ROOF_FLOORS) - 1) * GAP
+    body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{roof_h:.0f}" rx="3" fill="url(#amen)"/>')
+    body.append(f'<text x="{cx:.0f}" y="{y+roof_h/2+4:.0f}" text-anchor="middle" font-size="12" '
+                f'pointer-events="none" fill="#cdd6e2" letter-spacing="2" font-family="Calibri,Arial">{ROOF_TEXT}</text>')
+    for j, rf in enumerate(ROOF_FLOORS):
+        ry = y + j * (H_STD + GAP) + H_STD / 2
+        floor_y[rf] = ry
+        body.append(f'<text x="{TX+TW+8:.0f}" y="{ry+3.5:.0f}" text-anchor="start" font-size="10" '
+                    f'pointer-events="none" fill="#8aa0bd" font-family="Calibri,Arial">{rf}</text>')
+    y += roof_h + GAP
+
     for f in range(max_floor, min_floor - 1, -1):
+        if f in ROOF_FLOORS:
+            continue
         g = units_by_floor.get(f)
         is_blocked = f in blocked
         types = list(g["Type"]) if g is not None else []
@@ -1356,14 +1380,17 @@ def render_building_view(enhanced=False):
                     body.append(f'<g {gattr}><rect x="{xi:.1f}" y="{y+1:.0f}" width="{cw:.1f}" height="{h-2}" rx="2.5" fill="{col}"/>'
                                 f'<rect x="{xi:.1f}" y="{y+1:.0f}" width="{cw:.1f}" height="{hl:.0f}" rx="2.5" '
                                 f'fill="#ffffff" fill-opacity="0.16"/></g>')
-                if cw > 30:
-                    op = "0.95" if not sold else "0.75"
+                if cw > 30 and sold:
+                    body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2+3:.0f}" text-anchor="middle" font-size="8.5" '
+                                f'pointer-events="none" fill="#ffffff" fill-opacity="0.7" '
+                                f'font-family="Calibri,Arial">{_esc(str(u["Unit"]))}</text>')
+                elif cw > 30:
                     body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2-2:.0f}" text-anchor="middle" font-size="8.5" '
-                                f'pointer-events="none" fill="#ffffff" fill-opacity="{op}" '
+                                f'pointer-events="none" fill="#ffffff" fill-opacity="0.95" '
                                 f'font-family="Calibri,Arial">{_esc(str(u["Unit"]))}</text>')
                     body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2+10:.0f}" text-anchor="middle" font-size="9.5" '
-                                f'font-weight="bold" pointer-events="none" fill="{"#FCE9B0" if not sold else "#cdd6e2"}" '
-                                f'fill-opacity="{op}" font-family="Calibri,Arial">{aed(u["Price"])}</text>')
+                                f'font-weight="bold" pointer-events="none" fill="#FCE9B0" '
+                                f'font-family="Calibri,Arial">{aed(u["Price"])}</text>')
         elif is_blocked:
             body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="3" fill="url(#amen)"/>'
                         f'<text x="{cx:.0f}" y="{y+h/2+3.2:.0f}" text-anchor="middle" font-size="9" '
@@ -1452,8 +1479,8 @@ def render_building_view(enhanced=False):
             f'<div class="lg" data-ty="{_esc(t)}"><span class="sw" style="background:{col}"></span>'
             f'<div class="lgm"><div class="lgt">{rag_dot}{_esc(t)}</div>'
             f'<div class="lgs">{s["n"]} units &middot; {s["av"]} avail &middot; {s["so"]} sold{sold_txt}</div>'
-            f'<div class="bar"><span style="width:{avpct:.0f}%;background:{col}"></span></div></div>'
-            f'<div class="lgv">{aed(s["val"])}<div class="lgv2">{aed(s["psf"])}/sqft</div></div></div>')
+            f'</div>'
+            f'<div class="lgv">{aed(s["val"])}<div class="lgv2">{aed(s["psf"])} / total sqft</div></div></div>')
     legend_html = "".join(rows)
 
     # ── enhanced extras: revenue hero + trophies + price scale ──
@@ -1613,7 +1640,21 @@ def render_building_view_brochure():
             '<rect width="5" height="10" fill="#94866F"/></pattern></defs>')
 
     body, y, floor_y = [], PAD_TOP + CROWN_H, {}
+    # static roof amenity band (levels 70–73)
+    roof_h = len(ROOF_FLOORS) * H_STD + (len(ROOF_FLOORS) - 1) * GAP
+    body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{roof_h:.0f}" rx="2" fill="url(#amenP)"/>')
+    body.append(f'<text x="{cx:.0f}" y="{y+roof_h/2+4:.0f}" text-anchor="middle" font-size="12" '
+                f'pointer-events="none" fill="{INK}" letter-spacing="2" font-family="Calibri,Arial">{ROOF_TEXT}</text>')
+    for j, rf in enumerate(ROOF_FLOORS):
+        ry = y + j * (H_STD + GAP) + H_STD / 2
+        floor_y[rf] = ry
+        body.append(f'<text x="{TX+TW+8:.0f}" y="{ry+3.5:.0f}" text-anchor="start" font-size="10" '
+                    f'pointer-events="none" fill="{SUB}" font-family="Calibri,Arial">{rf}</text>')
+    y += roof_h + GAP
+
     for f in range(max_floor, min_floor - 1, -1):
+        if f in ROOF_FLOORS:
+            continue
         g = units_by_floor.get(f)
         is_blocked = f in blocked
         types = list(g["Type"]) if g is not None else []
@@ -1641,13 +1682,14 @@ def render_building_view_brochure():
                 else:
                     body.append(f'<g {gattr}><rect x="{xi:.1f}" y="{y+1:.0f}" width="{cw:.1f}" height="{h-2}" '
                                 f'rx="2" fill="{col}" stroke="{INK}" stroke-width="0.5"/></g>')
-                if cw > 30:
-                    tnum = "#EDE6D7" if not sold else SUB
-                    tprc = "#FBF3DF" if not sold else "#5C4A28"
+                if cw > 30 and sold:
+                    body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2+3:.0f}" text-anchor="middle" font-size="8.5" '
+                                f'pointer-events="none" fill="{SUB}" font-family="Calibri,Arial">{_esc(str(u["Unit"]))}</text>')
+                elif cw > 30:
                     body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2-2:.0f}" text-anchor="middle" font-size="8.5" '
-                                f'pointer-events="none" fill="{tnum}" font-family="Calibri,Arial">{_esc(str(u["Unit"]))}</text>')
+                                f'pointer-events="none" fill="#EDE6D7" font-family="Calibri,Arial">{_esc(str(u["Unit"]))}</text>')
                     body.append(f'<text x="{xi+cw/2:.1f}" y="{y+h/2+10:.0f}" text-anchor="middle" font-size="9.5" '
-                                f'font-weight="bold" pointer-events="none" fill="{tprc}" '
+                                f'font-weight="bold" pointer-events="none" fill="#FBF3DF" '
                                 f'font-family="Calibri,Arial">{aed(u["Price"])}</text>')
         elif is_blocked:
             body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="2" fill="url(#amenP)"/>'
@@ -1723,8 +1765,8 @@ def render_building_view_brochure():
             f'<div class="lg" data-ty="{_esc(t)}"><span class="sw" style="background:{col}"></span>'
             f'<div class="lgm"><div class="lgt">{_esc(t)}</div>'
             f'<div class="lgs">{s["n"]} units &middot; {s["av"]} avail &middot; {s["so"]} sold</div>'
-            f'<div class="bar"><span style="width:{avpct:.0f}%;background:{col}"></span></div></div>'
-            f'<div class="lgv">{aed(s["val"])}<div class="lgv2">{aed(s["psf"])}/sqft</div></div></div>')
+            f'</div>'
+            f'<div class="lgv">{aed(s["val"])}<div class="lgv2">{aed(s["psf"])} / total sqft</div></div></div>')
     legend_html = "".join(rows)
 
     css = """<style>
@@ -2226,29 +2268,24 @@ with tab3:
                 return unit_mix_builder(f"editmix_{key_suffix}", drows, qmin=0), True
 
             if is_range:
-                st.markdown(f"**Configure each floor in {ordinal(lo)}–{ordinal(hi)} on its own.** "
-                            "Sold units on every floor are kept; fully-sold floors are skipped.")
-                floor_mixes = {}
-                aff = []
-                for f in range_floors:
-                    fobj = next(x for x in floors if x["floor"] == f)
-                    has_av = any(unit_status(u, smap) == "Available" for u in fobj["units"])
-                    with st.expander(f"Floor {ordinal(f)} ({fobj['kind']})", expanded=(f == range_floors[0])):
-                        m, ok = floor_mix_editor(f, f"{f}")
-                        if ok:
-                            floor_mixes[f] = m
-                            aff.append(f)
-                st.divider()
-                if st.button(f"Apply to {len(aff)} floor(s)", type="primary",
-                             key="btn_edit_apply_rng", disabled=not aff):
+                aff = [f for f in range_floors
+                       if any(unit_status(u, smap) == "Available"
+                              for u in next(x for x in floors if x["floor"] == f)["units"])]
+                st.markdown(f"**Editing floors {ordinal(lo)}–{ordinal(hi)} together** — set **one** "
+                            f"Available unit mix below and it's applied to **every floor in range** that "
+                            f"has available units ({len(aff)} floor(s)). Sold units on each floor are kept.")
+                st.markdown("**Available unit mix — use − / + to set quantity (applied to each floor):**")
+                mix = unit_mix_builder(f"editmix_rng_{lo}_{hi}", [{"type": "2 Bedroom", "qty": 1}], qmin=0)
+                if not aff:
+                    st.error("No floors with available units in this range.")
+                elif st.button(f"Apply to {len(aff)} floor(s)", type="primary", key="btn_edit_apply_rng"):
                     try:
                         tot_add = tot_rem = 0
                         for f in aff:                          # ascending so escalation builds up
-                            a, r, l, sk = apply_mix_to_floor(f, floor_mixes[f])
+                            a, r, l, sk = apply_mix_to_floor(f, mix)
                             tot_add += a; tot_rem += r
                         st.session_state.floors.sort(key=lambda x: x["floor"])
-                        for f in aff:
-                            clear_builder(f"editmix_{f}")
+                        clear_builder(f"editmix_rng_{lo}_{hi}")
                         st.session_state["flash"] = ("success",
                             f"✅ Updated {len(aff)} floor(s) {ordinal(lo)}–{ordinal(hi)} — "
                             f"{tot_add} added, {tot_rem} removed.")
