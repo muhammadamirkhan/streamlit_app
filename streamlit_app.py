@@ -868,33 +868,16 @@ def _digits(s):
     d = "".join(ch for ch in str(s) if ch.isdigit())
     return int(d) if d else None
 
-def renumber_contiguous_all():
-    """MEP-MOVES model: re-pack ALL floors (residential, MEP / Majlis, amenities) into one
-    contiguous stack from the bottom, preserving order. Renumbers floor + unit numbers AND the
-    MEP / Majlis floor numbers (the `blocked` map), closing any empty-level gaps so the tower is
-    always contiguously numbered. An added (upward) duplex keeps the empty level above it reserved.
-    Returns {old_floor: new_floor}."""
+def _apply_floor_remap(remap, drop_uids=None):
+    """Drop the given unit uids, then renumber every remaining floor per `remap` (old→new) across the
+    register (Floor + Unit number), the floors list, and the MEP/Majlis map. Keyed by row so it never
+    collides. `remap` shifts floors WITHOUT closing empty levels — empty floors are preserved."""
+    drop_uids = drop_uids or set()
+    if drop_uids:
+        st.session_state.units = st.session_state.units[
+            ~st.session_state.units["uid"].isin(drop_uids)].reset_index(drop=True)
     u = st.session_state.units
-    blocked = st.session_state.blocked
     ufn = pd.to_numeric(u["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True), errors="coerce")
-    res = {int(f) for f in ufn.dropna().astype(int).tolist()}
-    all_levels = sorted(res | set(blocked.keys()) | {2})
-    if not all_levels:
-        return {}
-    up_floors = set()
-    if "Dup_Up" in u.columns:
-        for idx in u.index:
-            v = u.at[idx, "Dup_Up"]
-            if "Duplex" in str(u.at[idx, "Type"]) and pd.notna(v) and bool(v) and pd.notna(ufn[idx]):
-                up_floors.add(int(ufn[idx]))
-
-    nextn, remap = all_levels[0], {}
-    for f in all_levels:
-        remap[f] = nextn; nextn += 1
-        if f in up_floors:
-            nextn += 1                      # up-duplex also occupies the level above → keep it free
-
-    # register units (Floor + Unit number)
     for idx in u.index:
         fv = ufn[idx]
         if pd.isna(fv):
@@ -904,7 +887,6 @@ def renumber_contiguous_all():
             nf = remap[of]; suf = (_digits(u.at[idx, "Unit"]) or 0) % 100
             u.at[idx, "Floor"] = ordinal(nf)
             u.at[idx, "Unit"] = str(nf * 100 + suf)
-    # floors list
     for fl in st.session_state.floors:
         of = fl["floor"]
         if of in remap and remap[of] != of:
@@ -913,37 +895,36 @@ def renumber_contiguous_all():
                 suf = (_digits(un.get("unit_no")) or 0) % 100
                 un["unit_no"] = str(nf * 100 + suf)
     st.session_state.floors.sort(key=lambda x: x["floor"])
-    # MEP / Majlis floor numbers move with everything else
-    st.session_state.blocked = {remap.get(k, k): v for k, v in blocked.items()}
-    return remap
+    st.session_state.blocked = {remap.get(k, k): v for k, v in st.session_state.blocked.items()}
 
 def insert_floors_between(N, count, ordered_types, params):
-    """Insert `count` new residential floors at N. The floor at N and everything above it — INCLUDING
-    MEP / Majlis — shift up, then the whole stack is re-packed contiguously. Returns (new_floors, remap)."""
+    """Insert `count` new residential floors at N. The residential floors at/above N shift UP by
+    `count` non-MEP levels — **MEP / Majlis floors stay fixed** (residential renumbers around them).
+    New floors take the first `count` non-MEP levels from N. Returns (new_floor_numbers, remap)."""
+    fixed = set(st.session_state.blocked.keys()) | {2}        # MEP / Majlis + amenities are FIXED
     count = max(1, int(count))
-    BUMP = 100000
     u = st.session_state.units
     ufn = pd.to_numeric(u["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True), errors="coerce")
+    res_floors = sorted({int(f) for f in ufn.dropna().astype(int).tolist() if int(f) not in fixed})
+    affected = [f for f in res_floors if f >= N]
 
-    # bump everything at/above N out of the way (units, floors list, and MEP/Majlis), preserving order
-    for idx in u.index:
-        fv = ufn[idx]
-        if pd.notna(fv) and int(fv) >= N:
-            of = int(fv); suf = (_digits(u.at[idx, "Unit"]) or 0) % 100
-            u.at[idx, "Floor"] = ordinal(of + BUMP)
-            u.at[idx, "Unit"] = str((of + BUMP) * 100 + suf)
-    for fl in st.session_state.floors:
-        if fl["floor"] >= N:
-            of = fl["floor"]; fl["floor"] = of + BUMP
-            for un in fl["units"]:
-                suf = (_digits(un.get("unit_no")) or 0) % 100
-                un["unit_no"] = str((of + BUMP) * 100 + suf)
-    st.session_state.blocked = {(k + BUMP if k >= N else k): v
-                                for k, v in st.session_state.blocked.items()}
+    def kth_above(f, k):
+        x = f
+        while k > 0:
+            x += 1
+            if x not in fixed:
+                k -= 1
+        return x
 
-    # add the new floors at N, N+1, … (contiguous; escalation builds bottom-up)
-    new_temp = list(range(N, N + count))
-    for nn in new_temp:
+    new_nums, x = [], N
+    while len(new_nums) < count:
+        while x in fixed:
+            x += 1
+        new_nums.append(x); x += 1
+    remap = {f: kth_above(f, count) for f in affected}        # residential only — MEP untouched
+    _apply_floor_remap(remap)
+
+    for nn in new_nums:
         nos = gen_unit_nos(nn, ordered_types)
         new_units = [{"unit_no": no, "type": t,
                       "rate": new_unit_rate(t, nn, st.session_state.units, params)}
@@ -952,26 +933,36 @@ def insert_floors_between(N, count, ordered_types, params):
         st.session_state.floors.append({"floor": nn, "kind": "Inserted",
                                         "levels": max(TYPE_DEFAULTS[t]["levels"] for t in ordered_types),
                                         "units": new_units})
-    remap = renumber_contiguous_all()        # below N unchanged, new floors, then the bumped old block
-    new_nums = sorted(remap.get(n, n) for n in new_temp)
+    st.session_state.floors.sort(key=lambda x: x["floor"])
     return new_nums, remap
 
 def remove_floors_between(From, To):
-    """Remove all residential floors in [From, To], then re-pack the whole stack contiguously so
-    everything above (residential AND MEP / Majlis) cascades down. Callers must block this when any
-    unit in range is Sold. Returns (removed_floors, remap)."""
+    """Remove all residential floors in [From, To]. The residential floors above shift DOWN by
+    `count` non-MEP levels — **MEP / Majlis floors stay fixed** (residential renumbers around them).
+    Callers must block this when any unit in range is Sold. Returns (removed_floors, remap)."""
+    fixed = set(st.session_state.blocked.keys()) | {2}        # MEP / Majlis + amenities are FIXED
     u = st.session_state.units
     ufn = pd.to_numeric(u["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True), errors="coerce")
-    res_floors = sorted({int(f) for f in ufn.dropna().astype(int).tolist()
-                         if int(f) not in st.session_state.blocked and int(f) != 2})
+    res_floors = sorted({int(f) for f in ufn.dropna().astype(int).tolist() if int(f) not in fixed})
     to_remove = [f for f in res_floors if From <= f <= To]
+    above = [f for f in res_floors if f > To]
     if not to_remove:
         return [], {}
-    remove_uids = {u.at[idx, "uid"] for idx in u.index
-                   if pd.notna(ufn[idx]) and int(ufn[idx]) in to_remove}
-    st.session_state.units = u[~u["uid"].isin(remove_uids)].reset_index(drop=True)
-    st.session_state.floors = [fl for fl in st.session_state.floors if fl["floor"] not in to_remove]
-    remap = renumber_contiguous_all()        # cascade everything (incl MEP) down, contiguous numbering
+    count = len(to_remove)
+
+    def kth_below(f, k):
+        x = f
+        while k > 0:
+            x -= 1
+            if x not in fixed:
+                k -= 1
+        return x
+
+    remap = {f: kth_below(f, count) for f in above}           # residential only — MEP untouched
+    rem = set(to_remove)
+    drop_uids = {u.at[idx, "uid"] for idx in u.index
+                 if pd.notna(ufn[idx]) and int(ufn[idx]) in rem}
+    _apply_floor_remap(remap, drop_uids)
     return to_remove, remap
 
 def remove_units_from_register(uids):
@@ -1038,15 +1029,6 @@ def unit_mix_builder(state_key, default_rows, qmin=1):
         st.session_state[sk_ctr] += 1
         st.rerun()
     return [(r["type"], int(r["qty"])) for r in st.session_state[sk_rows]]
-
-
-# One-time tidy on load: re-pack to a clean contiguous tower (MEP-moves model), closing any
-# legacy empty-level gaps so floor numbering is contiguous from the start.
-if not st.session_state.get("_mep_moves_tidied"):
-    renumber_contiguous_all()
-    st.session_state["_mep_moves_tidied"] = True
-    blocked = st.session_state.blocked
-    df = recalc(st.session_state.units, params)
 
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
@@ -1962,11 +1944,8 @@ def render_building_view_brochure():
             continue
         g = units_by_floor.get(f)
         is_blocked = f in blocked
-        has_units = g is not None and len(g) > 0
-        # a floor with nothing on it (e.g. one that was added then removed) is not drawn at all,
-        # so the tower stays contiguous and floors above sit straight on top — no empty gap
-        if not has_units and not is_blocked and f != 2 and f not in up_tops:
-            continue
+        # empty (vacant) residential levels are still real floors — draw them as faint bands so the
+        # numbering stays continuous and the floor count is correct (e.g. an unsold/empty floor 62)
         types = list(g["Type"]) if g is not None else []
         tall = g is not None and any(("Pool" in t or "Duplex" in t) for t in types)
         h = H_TALL if tall else H_STD
@@ -1998,8 +1977,12 @@ def render_building_view_brochure():
                         f'font-weight="bold" pointer-events="none" fill="{INK}" letter-spacing="3" '
                         f'font-family="Calibri,Arial">AMENITIES</text>')
         else:
-            body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="2" fill="none" '
-                        f'stroke="{SLABLN}" stroke-dasharray="3 3"/>')
+            # vacant (empty) residential level — a real floor with no units yet
+            body.append(f'<rect x="{TX:.0f}" y="{y:.0f}" width="{TW}" height="{h}" rx="2" '
+                        f'fill="{SLAB}" fill-opacity="0.35" stroke="{SLABLN}" stroke-dasharray="3 3"/>'
+                        f'<text x="{cx:.0f}" y="{y+h/2+3.2:.0f}" text-anchor="middle" font-size="8.5" '
+                        f'pointer-events="none" fill="{SUB}" letter-spacing="2" '
+                        f'font-family="Calibri,Arial">VACANT</text>')
         y += h + GAP
 
     tower_bottom = y - GAP
