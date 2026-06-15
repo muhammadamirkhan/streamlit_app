@@ -1019,58 +1019,96 @@ def remove_floors_between(From, To):
     return to_remove, remap
 
 def normalize_mep_layout():
-    """On load, keep every MEP floor visible:
-      (1) if any unit/duplex sits on or spans a FIXED MEP floor, lift the tower above that MEP by one
-          level so the MEP stays clear (a duplex needs its own two floors and can't share the MEP);
-      (2) park the top (floating) MEP directly below the 5BR penthouse.
-    Idempotent: a tower that already satisfies this is left completely untouched (0 lifts)."""
-    blk = st.session_state.get("blocked") or {}
+    """Rebuild the tower into one clean, contiguous stack from the current register — generic, not
+    tied to any particular saved state. The model is a stack of *slabs*:
+      • a regular floor          → 1 slab, 1 level
+      • a duplex                 → 1 slab, 2 levels (it OWNS its companion floor, incl. any pools
+                                   that sit under it)
+      • each MEP / Majlis floor  → 1 slab, 1 level
+      • the amenity floor (2)    → 1 slab, 1 level
+    We keep each slab's vertical ORDER, drop every bare gap, re-pack contiguously from the bottom,
+    and move the single TOP MEP to sit directly beneath the 5BR penthouse. Fully idempotent: a tower
+    that's already clean re-packs to the exact same numbers."""
     u = st.session_state.units
-    if not blk or u.empty:
+    blk = dict(st.session_state.get("blocked") or {})
+    if u.empty:
         return
-    top_mep = max(blk)
-    fixed = sorted(set(blk) - {top_mep})
-
-    def _spanned():
-        ufn = pd.to_numeric(u["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True), errors="coerce")
-        sp = set()
-        for idx in u.index:
-            fv = ufn[idx]
-            if pd.isna(fv):
-                continue
-            f = int(fv); sp.add(f)
-            if "Duplex" in str(u.at[idx, "Type"]):
-                dv = u.at[idx, "Dup_Up"] if "Dup_Up" in u.columns else None
-                up = bool(dv) if pd.notna(dv) else False
-                sp.add(f + 1 if up else f - 1)
-        return sp
-
-    for _ in range(30):                                  # clear fixed MEPs, lowest first
-        covered = [m for m in fixed if m in _spanned()]
-        if not covered:
-            break
-        m = covered[0]
-        ufn = pd.to_numeric(u["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True), errors="coerce")
-        for idx in u.index:                              # lift everything above the MEP by one level
-            fv = ufn[idx]
-            if pd.notna(fv) and int(fv) > m:
-                of = int(fv); suf = (_digits(u.at[idx, "Unit"]) or 0) % 100
-                u.at[idx, "Floor"] = ordinal(of + 1); u.at[idx, "Unit"] = str((of + 1) * 100 + suf)
-        for fl in st.session_state.floors:
-            if fl["floor"] > m:
-                of = fl["floor"]; fl["floor"] = of + 1
-                for un in fl["units"]:
-                    suf = (_digits(un.get("unit_no")) or 0) % 100
-                    un["unit_no"] = str((of + 1) * 100 + suf)
-    st.session_state.floors.sort(key=lambda x: x["floor"])
+    if not blk:
+        blk = load_blocked_floors()                      # never lose the MEP set
+    AMEN = 2
 
     ufn = pd.to_numeric(u["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True), errors="coerce")
-    pent = max((int(ufn[idx]) for idx in u.index
-                if pd.notna(ufn[idx]) and "5 Bedroom" in str(u.at[idx, "Type"])), default=None)
-    new_blk = {m: blk.get(m, "MEP") for m in fixed}
-    if pent is not None:
-        new_blk[pent - 2] = blk.get(top_mep, "MEP")      # top MEP sits directly below the 5BR span
+    by_floor = {}                                        # floor -> [row indices]
+    for idx in u.index:
+        if pd.notna(ufn[idx]):
+            by_floor.setdefault(int(ufn[idx]), []).append(idx)
+    by_floor.pop(AMEN, None)                             # floor 2 is the amenity band
+
+    def _is_dup(idx):
+        return "Duplex" in str(u.at[idx, "Type"])
+    def _up(idx):
+        dv = u.at[idx, "Dup_Up"] if "Dup_Up" in u.columns else None
+        return bool(dv) if pd.notna(dv) else False
+
+    dup_dir = {}                                         # record floor -> 'up'/'down'
+    for f, idxs in by_floor.items():
+        for i in idxs:
+            if _is_dup(i):
+                dup_dir[f] = "up" if _up(i) else "down"
+                break
+    owned = {(f + 1 if d == "up" else f - 1): f for f, d in dup_dir.items()}   # companion -> record
+
+    slabs, used = [], set()
+    for f in sorted(by_floor):
+        if f in used:
+            continue
+        if f in dup_dir:                                 # duplex slab owns its 2 levels
+            comp = f + 1 if dup_dir[f] == "up" else f - 1
+            lo, hi = min(f, comp), max(f, comp)
+            slabs.append({"kind": "dup", "floor": f, "h": 2,
+                          "upper": by_floor.get(hi, []), "lower": by_floor.get(lo, [])})
+            used.add(f); used.add(comp)
+        elif f in owned:                                 # a duplex's companion floor (already taken)
+            continue
+        else:
+            slabs.append({"kind": "res", "floor": f, "h": 1, "upper": by_floor[f], "lower": []})
+            used.add(f)
+    for f, desc in blk.items():
+        slabs.append({"kind": "mep", "floor": f, "h": 1, "desc": desc})
+    slabs.append({"kind": "amen", "floor": AMEN, "h": 1})
+    slabs.sort(key=lambda s: s["floor"])
+
+    pent = None                                          # the 5BR penthouse slab (highest such)
+    for s in slabs:
+        if s["kind"] == "dup" and any("5 Bedroom" in str(u.at[i, "Type"]) for i in s["upper"]):
+            pent = s
+    meps = [s for s in slabs if s["kind"] == "mep"]
+    top_mep = meps[-1] if meps else None
+    if pent is not None and top_mep is not None:         # top MEP rides directly below the penthouse
+        slabs.remove(top_mep)
+        slabs.insert(slabs.index(pent), top_mep)
+
+    def _set(idxs, flo):
+        for i in idxs:
+            suf = (_digits(u.at[i, "Unit"]) or 0) % 100
+            u.at[i, "Floor"] = ordinal(flo); u.at[i, "Unit"] = str(flo * 100 + suf)
+
+    new_blk, n = {}, 1
+    for s in slabs:
+        if s["kind"] == "mep":
+            new_blk[n] = s.get("desc", "MEP"); n += 1
+        elif s["kind"] == "amen":
+            n += 1                                       # reserve floor 2 for amenities (no units)
+        elif s["kind"] == "res":
+            _set(s["upper"], n); n += 1
+        else:                                            # duplex: lower level, then record on top
+            _set(s["lower"], n); _set(s["upper"], n + 1)
+            for i in s["upper"]:
+                if _is_dup(i) and "Dup_Up" in u.columns:
+                    u.at[i, "Dup_Up"] = pd.NA            # standardise to a down-duplex
+            n += 2
     st.session_state.blocked = new_blk
+    st.session_state.floors = build_floor_list(st.session_state.units)
 
 def remove_units_from_register(uids):
     st.session_state.units = st.session_state.units[
@@ -2743,6 +2781,7 @@ with tab3:
                                                     "levels": max(TYPE_DEFAULTS[t]["levels"] for t in ordered),
                                                     "units": new_units})
                 st.session_state.floors.sort(key=lambda x: x["floor"])
+                st.session_state.pop("_mep_normalized", None)   # re-clean the whole tower next run
                 clear_builder("addmix")
                 for _k in ("newfl_from", "newfl_to"):
                     st.session_state.pop(_k, None)
@@ -2801,6 +2840,7 @@ with tab3:
                         ordered += [t] * q
                     ordered.sort(key=lambda t: (t != "3 Bedroom", t))
                     new_nums, remap = insert_floors_between(int(ins_from), int(n_floors), ordered, params)
+                    st.session_state.pop("_mep_normalized", None)   # re-clean the whole tower next run
                     clear_builder("insmix")
                     for _k in ("ins_from", "ins_count"):
                         st.session_state.pop(_k, None)
@@ -2866,6 +2906,7 @@ with tab3:
                          type="primary", key="btn_rmfl", disabled=not can_rm):
                 try:
                     removed, remap = remove_floors_between(lo, hi)
+                    st.session_state.pop("_mep_normalized", None)   # re-clean the whole tower next run
                     for _k in ("rm_from", "rm_to"):
                         st.session_state.pop(_k, None)
                     st.session_state["flash"] = ("success",
@@ -3032,6 +3073,7 @@ with tab3:
                     elif b2.button("Remove Entire Floor", key="btn_edit_remove"):
                         remove_units_from_register([u["uid"] for u in fl["units"]])
                         st.session_state.floors = [f2 for f2 in st.session_state.floors if f2["floor"] != sel]
+                        st.session_state.pop("_mep_normalized", None)   # re-clean the whole tower next run
                         clear_builder(f"editmix_{sel}")
                         st.session_state["flash"] = ("success", f"✅ Floor {ordinal(sel)} removed entirely.")
                         st.rerun()
