@@ -69,11 +69,17 @@ def save_base():
 def _parse_state(state):
     """Turn a state dict into (units_df, floors, params, uid_counter, blocked)."""
     units = pd.DataFrame(state["units"])
+    # backfill columns older snapshots may not have, so all downstream code is safe
+    for col in ("Dup_Up", "Terrace_Override", "Sellable_Override"):
+        if col not in units.columns:
+            units[col] = pd.NA
+    if "Comment" not in units.columns:
+        units["Comment"] = ""
+    if "uid" not in units.columns:
+        units["uid"] = [f"u{i}" for i in range(len(units))]
     for ovc in ("Terrace_Override", "Sellable_Override"):
-        if ovc in units.columns:
-            units[ovc] = units[ovc].where(units[ovc].notna(), pd.NA)
-    if "Comment" in units.columns:
-        units["Comment"] = units["Comment"].fillna("").astype(str)
+        units[ovc] = units[ovc].where(units[ovc].notna(), pd.NA)
+    units["Comment"] = units["Comment"].fillna("").astype(str)
     blk = state.get("blocked")
     blk = {int(k): v for k, v in blk.items()} if blk else None
     return units, state["floors"], state["params"], int(state.get("uid_counter", len(units))), blk
@@ -92,6 +98,14 @@ def load_state():
 
 def load_base():
     return load_state_from(BASE_PATH)
+
+def base_unit_count():
+    """Number of units in the saved Base Version (for the 'Additional from base' card), or None."""
+    try:
+        with open(BASE_PATH, "r", encoding="utf-8") as f:
+            return len(json.load(f).get("units", []))
+    except Exception:
+        return None
 
 def has_saved_state():
     return os.path.exists(STATE_PATH)
@@ -816,8 +830,11 @@ def recalc(df, params):
 def _init():
     _loaded_blocked = None
     if "units" not in st.session_state:
+        # last live session state (ephemeral) → committed Base Version (permanent) → original Excel
         loaded = load_state() if has_saved_state() else None
-        if loaded is not None:                       # resume from last saved state
+        if loaded is None and has_base():
+            loaded = load_base()                     # survives Cloud redeploys/reboots (it's in the repo)
+        if loaded is not None:
             units, floors, fparams, ctr, _loaded_blocked = loaded
             st.session_state.units = units
             st.session_state.floors = floors
@@ -1023,7 +1040,8 @@ def normalize_mep_layout():
                 continue
             f = int(fv); sp.add(f)
             if "Duplex" in str(u.at[idx, "Type"]):
-                up = bool(u.at[idx, "Dup_Up"]) if pd.notna(u.at[idx, "Dup_Up"]) else False
+                dv = u.at[idx, "Dup_Up"] if "Dup_Up" in u.columns else None
+                up = bool(dv) if pd.notna(dv) else False
                 sp.add(f + 1 if up else f - 1)
         return sp
 
@@ -2192,7 +2210,8 @@ def render_building_view_brochure():
     SOLDVAL = VAL - AVAL
     sv_pct = (SOLDVAL / VAL * 100) if VAL else 0.0
     avv_pct = (AVAL / VAL * 100) if VAL else 0.0
-    ALLOW = float(df["Total_sqft"].sum())            # live total sellable footprint (grows with floors)
+    ALLOW = float(df["Sellable_sqft"].sum())         # live total SELLABLE area (internal + terrace share)
+    BASE_N = base_unit_count()                        # units in the saved Base Version (for the delta card)
 
     def _m(v):                                       # compact AED for the split-bar labels
         return (f"AED {v/1e9:.2f}B" if v >= 1e9 else
@@ -2215,6 +2234,7 @@ def render_building_view_brochure():
     split_value = _split("Sold vs Available (value)", "Sold", f"<b>{_m(SOLDVAL)}</b>", sv_pct,
                          "Available", f"<b>{_m(AVAL)}</b>", avv_pct)
 
+    add_card = _kpi("Additional from base", f"{TU - BASE_N:+d}", f"base = {BASE_N} units") if BASE_N else ""
     kpis = "".join([
         _kpi("Total Units", f"{TU}"),
         _kpi("Available Stock", f"{AV}"),
@@ -2223,7 +2243,9 @@ def render_building_view_brochure():
         _kpi("Available Stock Value", aed(AVAL)),
         _kpi("Total Sold Value", aed(SOLDVAL)),
         _kpi("Avg Price/sqft", aed(PSF), "on total area"),
+        _kpi("Total Area (sqft)", f"{TA:,.0f}"),
         _kpi("Total Allowable Sellable (sqft)", f"{ALLOW:,.0f}"),
+        add_card,
         split_units, split_value])
     rows = []
     for t in present:
@@ -2292,9 +2314,26 @@ def render_building_view_brochure():
     #bvtip2 .h{font-size:13px;font-weight:700;margin-bottom:3px;}
     #bvtip2 .p{color:#5C4A28;font-weight:700;margin-top:4px;}
     #bvtip2 .a{color:#6E6657;margin-top:3px;font-size:11px;}
+    #printbtn{background:#8A6D3B;color:#F3ECDD;border:none;border-radius:9px;padding:10px 12px;
+        font:700 12px Calibri,Arial;cursor:pointer;letter-spacing:.5px;width:100%;}
+    #printbtn:hover{background:#755C32;}
+    /* Print / Save-as-PDF: lay the whole view out on a single A3 sheet incl. the right-side stats */
+    @media print{
+      @page{size:A3 landscape;margin:6mm;}
+      html,body{background:#fff !important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+      #printbtn{display:none !important;}
+      .bv{height:auto !important;border-radius:0;}
+      .tower{overflow:visible !important;}
+      .tower svg{width:100% !important;height:auto !important;max-width:none !important;}
+      .side{max-width:none !important;}
+      .legend{overflow:visible !important;max-height:none !important;}
+      #bvtip2{display:none !important;}
+    }
     </style>"""
     dyn = (f'<div class="bv"><div class="tower">{svg}</div>'
-           f'<div class="side"><div class="kpis">{kpis}</div>'
+           f'<div class="side"><button id="printbtn" onclick="window.print()">'
+           f'&#128424;&nbsp; Print / Save as PDF (A3)</button>'
+           f'<div class="kpis">{kpis}</div>'
            f'<div class="sh">By Typology <span>&nbsp;live counts &amp; value</span></div>'
            f'<div class="legend">{legend_html}</div></div></div><div id="bvtip2"></div>')
     js = """<script>
@@ -2784,16 +2823,25 @@ with tab3:
         if not res_floors:
             st.info("No residential floors to remove.")
         else:
-            rc1, rc2 = st.columns(2)
-            rm_from = rc1.selectbox("From floor", res_floors, format_func=ordinal, key="rm_from")
-            to_opts = [f for f in res_floors if f >= rm_from]
-            rm_to = rc2.selectbox("To floor", to_opts, index=0, format_func=ordinal, key="rm_to")
-            lo, hi = int(rm_from), int(rm_to)
-            in_range = [f for f in res_floors if lo <= f <= hi]
-
             u_all = st.session_state.units
             u_fn = pd.to_numeric(u_all["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True),
                                  errors="coerce")
+            floor_units = {}
+            for _i in u_all.index:
+                _f = u_fn[_i]
+                if pd.notna(_f):
+                    floor_units.setdefault(int(_f), []).append(str(u_all.at[_i, "Unit"]))
+            def _fmt_floor(f):
+                us = floor_units.get(f, [])
+                return f"{ordinal(f)}  ·  {', '.join(us)}" if us else ordinal(f)
+
+            rc1, rc2 = st.columns(2)
+            rm_from = rc1.selectbox("From floor", res_floors, format_func=_fmt_floor, key="rm_from")
+            to_opts = [f for f in res_floors if f >= rm_from]
+            rm_to = rc2.selectbox("To floor", to_opts, index=0, format_func=_fmt_floor, key="rm_to")
+            lo, hi = int(rm_from), int(rm_to)
+            in_range = [f for f in res_floors if lo <= f <= hi]
+
             rng_units = u_all[u_fn.isin(in_range)]
             sold = rng_units[rng_units["Status"] == "Sold"]
             n_above = len([f for f in res_floors if f > hi])
