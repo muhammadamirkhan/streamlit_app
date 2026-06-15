@@ -1001,6 +1001,59 @@ def remove_floors_between(From, To):
     _apply_floor_remap(remap, drop_uids)
     return to_remove, remap
 
+def normalize_mep_layout():
+    """On load, keep every MEP floor visible:
+      (1) if any unit/duplex sits on or spans a FIXED MEP floor, lift the tower above that MEP by one
+          level so the MEP stays clear (a duplex needs its own two floors and can't share the MEP);
+      (2) park the top (floating) MEP directly below the 5BR penthouse.
+    Idempotent: a tower that already satisfies this is left completely untouched (0 lifts)."""
+    blk = st.session_state.get("blocked") or {}
+    u = st.session_state.units
+    if not blk or u.empty:
+        return
+    top_mep = max(blk)
+    fixed = sorted(set(blk) - {top_mep})
+
+    def _spanned():
+        ufn = pd.to_numeric(u["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True), errors="coerce")
+        sp = set()
+        for idx in u.index:
+            fv = ufn[idx]
+            if pd.isna(fv):
+                continue
+            f = int(fv); sp.add(f)
+            if "Duplex" in str(u.at[idx, "Type"]):
+                up = bool(u.at[idx, "Dup_Up"]) if pd.notna(u.at[idx, "Dup_Up"]) else False
+                sp.add(f + 1 if up else f - 1)
+        return sp
+
+    for _ in range(30):                                  # clear fixed MEPs, lowest first
+        covered = [m for m in fixed if m in _spanned()]
+        if not covered:
+            break
+        m = covered[0]
+        ufn = pd.to_numeric(u["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True), errors="coerce")
+        for idx in u.index:                              # lift everything above the MEP by one level
+            fv = ufn[idx]
+            if pd.notna(fv) and int(fv) > m:
+                of = int(fv); suf = (_digits(u.at[idx, "Unit"]) or 0) % 100
+                u.at[idx, "Floor"] = ordinal(of + 1); u.at[idx, "Unit"] = str((of + 1) * 100 + suf)
+        for fl in st.session_state.floors:
+            if fl["floor"] > m:
+                of = fl["floor"]; fl["floor"] = of + 1
+                for un in fl["units"]:
+                    suf = (_digits(un.get("unit_no")) or 0) % 100
+                    un["unit_no"] = str((of + 1) * 100 + suf)
+    st.session_state.floors.sort(key=lambda x: x["floor"])
+
+    ufn = pd.to_numeric(u["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True), errors="coerce")
+    pent = max((int(ufn[idx]) for idx in u.index
+                if pd.notna(ufn[idx]) and "5 Bedroom" in str(u.at[idx, "Type"])), default=None)
+    new_blk = {m: blk.get(m, "MEP") for m in fixed}
+    if pent is not None:
+        new_blk[pent - 2] = blk.get(top_mep, "MEP")      # top MEP sits directly below the 5BR span
+    st.session_state.blocked = new_blk
+
 def remove_units_from_register(uids):
     st.session_state.units = st.session_state.units[
         ~st.session_state.units["uid"].isin(uids)].reset_index(drop=True)
@@ -1065,6 +1118,15 @@ def unit_mix_builder(state_key, default_rows, qmin=1):
         st.session_state[sk_ctr] += 1
         st.rerun()
     return [(r["type"], int(r["qty"])) for r in st.session_state[sk_rows]]
+
+
+# One-time on load: keep MEP floors visible (clear any MEP buried under a duplex; park the top MEP
+# directly below the 5BR penthouse). Idempotent — a clean tower is untouched.
+if not st.session_state.get("_mep_normalized"):
+    normalize_mep_layout()
+    st.session_state["_mep_normalized"] = True
+    blocked = st.session_state.blocked
+    df = recalc(st.session_state.units, params)
 
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
@@ -1145,6 +1207,7 @@ with st.sidebar:
                     # older snapshots didn't store the MEP/Majlis list — restore it from the Excel
                     # so the MEP floors always come back correctly
                     st.session_state.blocked = blk if blk else load_blocked_floors()
+                    normalize_mep_layout()              # keep MEP floors visible / below the 5BR
                     st.session_state["bv_load_prompt"] = False
                     st.session_state.pop("bv_load_pwd", None)
                     st.session_state["flash"] = ("success", "📥 Base Version loaded. Use “Save for next "
@@ -1196,6 +1259,7 @@ with st.sidebar:
                         st.session_state.fm_params = _fp
                         st.session_state.uid_counter = _ctr
                         st.session_state.blocked = _blk if _blk else load_blocked_floors()
+                        normalize_mep_layout()          # keep MEP floors visible / below the 5BR
                         st.session_state["flash"] = ("success", "♻️ Snapshot restored. Use “Save for "
                                                      "next launch” to persist it across restarts.")
                     except Exception as _e:
@@ -2019,12 +2083,9 @@ def render_building_view_brochure():
             continue
         g = units_by_floor.get(f)
         is_blocked = f in blocked
-        has_units = g is not None and len(g) > 0
-        # an empty level (no units, not MEP) is the lower half of a duplex that spans onto it, or a
-        # floor that was added-then-removed — don't draw it as its own row; the duplex post-pass
-        # covers it and the tower stays clean (no stray "VACANT" bands)
-        if not has_units and not is_blocked and f != 2 and f not in up_tops:
-            continue
+        # draw EVERY level so the floor numbering stays continuous. An empty level is either the
+        # lower half of a duplex that spans onto it (the duplex box in the post-pass covers it) or a
+        # genuinely vacant floor — both render as a plain slab carrying their own floor number.
         types = list(g["Type"]) if g is not None else []
         tall = g is not None and any(("Pool" in t or "Duplex" in t) for t in types)
         h = H_TALL if tall else H_STD
