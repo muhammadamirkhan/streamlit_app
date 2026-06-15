@@ -2389,19 +2389,20 @@ def render_building_view_brochure():
     #printbtn{background:#8A6D3B;color:#F3ECDD;border:none;border-radius:9px;padding:10px 12px;
         font:700 12px Calibri,Arial;cursor:pointer;letter-spacing:.5px;width:100%;}
     #printbtn:hover{background:#755C32;}
-    /* Print / Save-as-PDF: the whole view on ONE A1 sheet — the building tower (sized to fit the
-       page height) on the left, all the stats beside it on the right. Building starts on page 1. */
+    /* Print / Save-as-PDF: the on-screen side-by-side view (tower + stats) on ONE A1 sheet.
+       Deterministic: the .bv is a FIXED width and the tower SVG keeps its natural size (capped so it
+       can't blow up), so the layout doesn't depend on the iframe width and never paginates. */
     @media print{
-      @page{size:A1 portrait;margin:8mm;}
+      @page{size:A1 portrait;margin:9mm;}
       html,body{background:#fff !important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
       #printbtn{display:none !important;}
       .bv{display:flex !important;flex-direction:row !important;align-items:flex-start !important;
-          height:auto !important;border-radius:0 !important;padding:0 !important;gap:8mm !important;}
-      .tower{flex:0 0 auto !important;overflow:visible !important;width:260mm !important;}
-      /* fixed, modest tower width (height follows the floor count) so it renders predictably and
-         leaves room for the stats beside it; tall towers simply run onto a 2nd page, building first */
-      .tower svg{width:260mm !important;height:auto !important;max-width:260mm !important;max-height:none !important;}
-      .side{flex:1 1 auto !important;max-width:none !important;overflow:visible !important;}
+          width:560mm !important;max-width:560mm !important;margin:0 auto !important;height:auto !important;
+          overflow:visible !important;gap:7mm !important;padding:6mm !important;border-radius:0 !important;
+          page-break-inside:avoid;break-inside:avoid;}
+      .tower{flex:0 0 auto !important;overflow:visible !important;}
+      .tower svg{width:auto !important;height:auto !important;max-width:250mm !important;max-height:775mm !important;}
+      .side{flex:1 1 auto !important;min-width:0 !important;max-width:none !important;overflow:visible !important;}
       .kpiwrap,.legend{flex:none !important;height:auto !important;max-height:none !important;overflow:visible !important;}
       .kpis{grid-template-columns:repeat(2,1fr) !important;}
       #bvtip2{display:none !important;}
