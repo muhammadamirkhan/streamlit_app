@@ -38,9 +38,9 @@ BASE_PATH     = os.path.join(os.path.dirname(os.path.abspath(__file__)), "base_v
 
 # ── Saved working state (explicit Save / Reset) ────────────────────────────────
 
-def _write_state(path):
-    """Snapshot the full working state (register, floors, params) to a JSON file."""
-    state = {
+def _state_dict():
+    """The full working state (register, floors, params, MEP map) as a plain dict."""
+    return {
         "units": json.loads(st.session_state.units.to_json(orient="records")),
         "floors": st.session_state.floors,
         "params": st.session_state.fm_params,
@@ -48,8 +48,15 @@ def _write_state(path):
         # MEP / Majlis floors can be renumbered (MEP-moves), so persist them with the state
         "blocked": {str(k): v for k, v in st.session_state.get("blocked", {}).items()},
     }
+
+def _write_state(path):
+    """Snapshot the full working state to a JSON file."""
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(state, f, ensure_ascii=False, indent=2)
+        json.dump(_state_dict(), f, ensure_ascii=False, indent=2)
+
+def state_json_bytes():
+    """The current working state as downloadable JSON bytes."""
+    return json.dumps(_state_dict(), ensure_ascii=False, indent=2).encode("utf-8")
 
 def save_state():
     """Persist the current working state (shown on every launch)."""
@@ -59,21 +66,24 @@ def save_base():
     """Persist the current working state as the separate Base Version snapshot."""
     _write_state(BASE_PATH)
 
+def _parse_state(state):
+    """Turn a state dict into (units_df, floors, params, uid_counter, blocked)."""
+    units = pd.DataFrame(state["units"])
+    for ovc in ("Terrace_Override", "Sellable_Override"):
+        if ovc in units.columns:
+            units[ovc] = units[ovc].where(units[ovc].notna(), pd.NA)
+    if "Comment" in units.columns:
+        units["Comment"] = units["Comment"].fillna("").astype(str)
+    blk = state.get("blocked")
+    blk = {int(k): v for k, v in blk.items()} if blk else None
+    return units, state["floors"], state["params"], int(state.get("uid_counter", len(units))), blk
+
 def load_state_from(path):
     """Return (units_df, floors, params, uid_counter, blocked) from a state file, or None on failure.
     `blocked` is the persisted MEP/Majlis map (or None if the file predates MEP-moves)."""
     try:
         with open(path, "r", encoding="utf-8") as f:
-            state = json.load(f)
-        units = pd.DataFrame(state["units"])
-        for ovc in ("Terrace_Override", "Sellable_Override"):
-            if ovc in units.columns:
-                units[ovc] = units[ovc].where(units[ovc].notna(), pd.NA)
-        if "Comment" in units.columns:
-            units["Comment"] = units["Comment"].fillna("").astype(str)
-        blk = state.get("blocked")
-        blk = {int(k): v for k, v in blk.items()} if blk else None
-        return units, state["floors"], state["params"], int(state.get("uid_counter", len(units))), blk
+            return _parse_state(json.load(f))
     except Exception:
         return None
 
@@ -1155,6 +1165,44 @@ with st.sidebar:
         st.caption(f"📌 Base Version last saved **{_bts}**")
     else:
         st.caption("📌 No Base Version saved yet")
+
+    # ── Backup / transfer: download the state as a file, or restore from one ───────
+    # Cloud storage is temporary — these let you keep a real backup and move a snapshot
+    # between the live app and a local copy (the only way to get the live state off the server).
+    with st.expander("⬇️ Download / Upload snapshot (backup & transfer)", expanded=False):
+        import datetime as _dt3
+        _stamp = _dt3.datetime.now().strftime("%Y%m%d-%H%M")
+        st.caption("Cloud storage is temporary. Download a snapshot to back it up or move it to another "
+                   "copy of the app; upload one to restore it.")
+        st.download_button("⬇️  Download current state", data=state_json_bytes(),
+                           file_name=f"muraba_state_{_stamp}.json", mime="application/json",
+                           use_container_width=True, key="dl_state")
+        if has_base():
+            with open(BASE_PATH, "rb") as _bf:
+                _base_bytes = _bf.read()
+            st.download_button("⬇️  Download Base Version", data=_base_bytes,
+                               file_name=f"muraba_base_version_{_stamp}.json", mime="application/json",
+                               use_container_width=True, key="dl_base")
+        st.markdown("—")
+        _up = st.file_uploader("⬆️  Restore from a snapshot (.json)", type=["json"], key="state_upload")
+        if _up is not None:
+            _upw = st.text_input("Enter app password to confirm restore", type="password", key="up_pwd")
+            if st.button("♻️  Restore this snapshot", use_container_width=True, key="up_restore"):
+                if _upw == _app_pwd:
+                    try:
+                        _u, _fl, _fp, _ctr, _blk = _parse_state(json.loads(_up.getvalue().decode("utf-8")))
+                        st.session_state.units = _u
+                        st.session_state.floors = _fl
+                        st.session_state.fm_params = _fp
+                        st.session_state.uid_counter = _ctr
+                        st.session_state.blocked = _blk if _blk else load_blocked_floors()
+                        st.session_state["flash"] = ("success", "♻️ Snapshot restored. Use “Save for "
+                                                     "next launch” to persist it across restarts.")
+                    except Exception as _e:
+                        st.session_state["flash"] = ("error", f"❌ Could not read that file: {_e}")
+                    st.rerun()
+                else:
+                    st.error("Incorrect password.")
 
     st.divider()
     st.caption("Add / edit / remove floors in the **Floor Manager** tab. Changes show everywhere "
