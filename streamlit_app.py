@@ -2389,9 +2389,9 @@ def render_building_view_brochure():
     #printbtn{background:#8A6D3B;color:#F3ECDD;border:none;border-radius:9px;padding:10px 12px;
         font:700 12px Calibri,Arial;cursor:pointer;letter-spacing:.5px;width:100%;}
     #printbtn:hover{background:#755C32;}
-    /* Print / Save-as-PDF: lay the whole view out on a single A3 sheet incl. the right-side stats */
+    /* Print / Save-as-PDF: lay the whole view out on a single A1 sheet incl. the right-side stats */
     @media print{
-      @page{size:A3 landscape;margin:6mm;}
+      @page{size:A1 landscape;margin:8mm;}
       html,body{background:#fff !important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
       #printbtn{display:none !important;}
       .bv{height:auto !important;border-radius:0;}
@@ -2404,7 +2404,7 @@ def render_building_view_brochure():
     </style>"""
     dyn = (f'<div class="bv"><div class="tower">{svg}</div>'
            f'<div class="side"><button id="printbtn" onclick="window.print()">'
-           f'&#128424;&nbsp; Print / Save as PDF (A3)</button>'
+           f'&#128424;&nbsp; Print / Save as PDF (A1)</button>'
            f'<div class="kpiwrap"><div class="kpis">{kpis}</div></div>'
            f'<div class="sh">By Typology <span>&nbsp;live counts &amp; value</span></div>'
            f'<div class="legend">{legend_html}</div></div></div><div id="bvtip2"></div>')
