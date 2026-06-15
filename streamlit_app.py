@@ -1478,8 +1478,14 @@ with tab1:
         export_button(_exp, "Unit_Register.xlsx", key="exp_reg",
                       title="Muraba Veil Unit Register",
                       aed_cols=_aed_present, sold_mask=(view["Status"] == "Sold").values)
+    # size the Comment column to its longest text so full comments are readable (the table scrolls
+    # horizontally for the overflow); other columns keep their natural width
+    _colcfg = None
+    if "Comment" in vis.columns and len(vis):
+        _ml = int(vis["Comment"].astype(str).map(len).max())
+        _colcfg = {"Comment": st.column_config.TextColumn("Comment", width=max(180, min(720, _ml * 7 + 24)))}
     st.dataframe(vis.style.apply(_hl_sold, axis=1), use_container_width=True,
-                 hide_index=True, height=460)
+                 hide_index=True, height=460, column_config=_colcfg)
     st.caption(f"Showing {len(view)} of {len(df)} units · Sold units highlighted in blue · "
                f"“vs below” compares each unit to the one a floor lower in the same typology")
 
