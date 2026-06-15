@@ -2204,26 +2204,51 @@ def render_building_view_brochure():
             f'<rect x="{TX-50:.0f}" y="{tower_bottom+BASE_H-4:.0f}" width="{TW+100}" height="4" rx="2" fill="{INK}"/>')
     bg = f'<rect x="0" y="0" width="{W}" height="{total_h:.0f}" fill="{PAGE}"/>'
 
+    def _type_variance(t):
+        """|price step| between two AVAILABLE units of type t that sit directly one above the other
+        (consecutive levels — a duplex steps by 2). None if no such adjacent-available pair exists."""
+        step = 2 if "Duplex" in str(t) else 1
+        fp = {}
+        for _, r in bdf[bdf["Type"] == t].iterrows():
+            fv = r["_fn"]
+            if pd.notna(fv) and r["Status"] == "Available":
+                fp[int(fv)] = float(r["Price"])
+        for a in sorted(fp):
+            if a + step in fp:
+                return abs(fp[a + step] - fp[a])
+        return None
+
+    def _fmt_var(v):
+        if v >= 1e6: return f"AED {v/1e6:.2f}M"
+        if v >= 1e3: return f"AED {v/1e3:.0f}K"
+        return aed(v)
+
     info = {}
     for t in bdf["Type"].unique():
         fls = sorted({int(x) for x in bdf[bdf["Type"] == t]["_fn"].dropna() if int(x) in floor_y})
         if not fls:
             continue
-        info[t] = {"mid": sum(floor_y[f] for f in fls) / len(fls), "lo": min(fls), "hi": max(fls)}
+        info[t] = {"mid": sum(floor_y[f] for f in fls) / len(fls), "lo": min(fls), "hi": max(fls),
+                   "var": _type_variance(t)}
     a_types = sorted(info, key=lambda t: info[t]["mid"]); k = max(1, len(a_types))
     y_top, y_bot, LX = PAD_TOP + CROWN_H + 8, tower_bottom - 8, 192
     ann = []
     for i, t in enumerate(a_types):
         slot = y_top + (i + 0.5) * (y_bot - y_top) / k
         inf = info[t]
-        lvl = f"LEVEL {inf['lo']}" if inf["lo"] == inf["hi"] else f"LEVEL {inf['lo']}–{inf['hi']}"
-        ann.append(f'<text x="{LX}" y="{slot-3:.0f}" text-anchor="end" font-size="10.5" font-weight="bold" '
-                   f'fill="{INK}" font-family="Calibri,Arial">{_esc(t.upper())}</text>')
-        ann.append(f'<text x="{LX}" y="{slot+9:.0f}" text-anchor="end" font-size="9" fill="{SUB}" '
-                   f'font-family="Calibri,Arial">{lvl}</text>')
-        ann.append(f'<polyline points="{LX+8},{slot:.0f} {(LX+TX)/2:.0f},{slot:.0f} {TX:.0f},{inf["mid"]:.0f}" '
+        lvl = f"Level {inf['lo']}" if inf["lo"] == inf["hi"] else f"Levels {inf['lo']}–{inf['hi']}"
+        # one clean leader line from the building edge out to the label
+        ann.append(f'<polyline points="{TX:.0f},{inf["mid"]:.0f} {(LX+TX)/2:.0f},{slot:.0f} {LX+6},{slot:.0f}" '
                    f'fill="none" stroke="{INK}" stroke-width="0.8"/>')
-        ann.append(f'<circle cx="{TX:.0f}" cy="{inf["mid"]:.0f}" r="3.2" fill="#FBF7EF" stroke="{INK}" stroke-width="0.8"/>')
+        ann.append(f'<circle cx="{TX:.0f}" cy="{inf["mid"]:.0f}" r="3.2" fill="#FBF7EF" stroke="{INK}" stroke-width="0.9"/>')
+        base_y = slot - (12 if inf["var"] is not None else 5)
+        ann.append(f'<text x="{LX}" y="{base_y:.0f}" text-anchor="end" font-size="10.5" font-weight="bold" '
+                   f'fill="{INK}" font-family="Calibri,Arial">{_esc(t.upper())}</text>')
+        ann.append(f'<text x="{LX}" y="{base_y+12:.0f}" text-anchor="end" font-size="9" fill="{SUB}" '
+                   f'font-family="Calibri,Arial">{lvl}</text>')
+        if inf["var"] is not None:                       # absolute step between two stacked available units
+            ann.append(f'<text x="{LX}" y="{base_y+24:.0f}" text-anchor="end" font-size="9" font-weight="bold" '
+                       f'fill="#5C4A28" font-family="Calibri,Arial">Variance {_fmt_var(inf["var"])}</text>')
     ann = "".join(ann)
 
     svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{total_h:.0f}" '
@@ -2304,12 +2329,15 @@ def render_building_view_brochure():
     .tower svg{display:block;margin:0 auto;width:100%;height:auto;max-width:920px;}
     .tower::-webkit-scrollbar,.legend::-webkit-scrollbar{width:8px;height:8px;}
     .tower::-webkit-scrollbar-thumb,.legend::-webkit-scrollbar-thumb{background:#8C7E66;border-radius:5px;}
-    .side{flex:1 1 280px;min-width:240px;max-width:420px;display:flex;flex-direction:column;gap:12px;color:#33302A;}
+    .side{flex:1 1 280px;min-width:240px;max-width:420px;display:flex;flex-direction:column;gap:12px;
+        color:#33302A;overflow:hidden;}
+    .kpiwrap{flex:1 1 auto;min-height:90px;overflow-y:auto;padding-right:3px;}
     /* narrow screens: stack the panel under the tower so nothing is clipped */
     @media (max-width:900px){
       .bv{flex-direction:column;height:auto;}
       .tower{flex:1 1 auto;}
-      .side{max-width:none;}
+      .side{max-width:none;overflow:visible;}
+      .kpiwrap,.legend{flex:none;height:auto;min-height:0;max-height:none;overflow:visible;}
     }
     .kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
     .kpi{background:linear-gradient(180deg,#CCC0AB,#C2B49C);border:1px solid #9C8E76;border-radius:11px;
@@ -2333,7 +2361,7 @@ def render_building_view_brochure():
     .dot.av{background:#3E7A4E;}
     .sh{font-size:13px;font-weight:700;color:#33302A;letter-spacing:.4px;}
     .sh span{font-weight:400;color:#7d735f;font-size:11px;}
-    .legend{overflow-y:auto;display:flex;flex-direction:column;gap:7px;padding-right:5px;}
+    .legend{flex:0 0 244px;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:7px;padding-right:5px;}
     .lg{display:flex;align-items:center;gap:10px;background:#C6B9A4;border:1px solid #9C8E76;
         border-radius:9px;padding:8px 11px;cursor:pointer;transition:border-color .12s;}
     .lg.on{border-color:#33302A;background:#CFC2AD;}
@@ -2363,15 +2391,15 @@ def render_building_view_brochure():
       .bv{height:auto !important;border-radius:0;}
       .tower{overflow:visible !important;}
       .tower svg{width:100% !important;height:auto !important;max-width:none !important;}
-      .side{max-width:none !important;}
-      .legend{overflow:visible !important;max-height:none !important;}
+      .side{max-width:none !important;overflow:visible !important;}
+      .kpiwrap,.legend{flex:none !important;height:auto !important;max-height:none !important;overflow:visible !important;}
       #bvtip2{display:none !important;}
     }
     </style>"""
     dyn = (f'<div class="bv"><div class="tower">{svg}</div>'
            f'<div class="side"><button id="printbtn" onclick="window.print()">'
            f'&#128424;&nbsp; Print / Save as PDF (A3)</button>'
-           f'<div class="kpis">{kpis}</div>'
+           f'<div class="kpiwrap"><div class="kpis">{kpis}</div></div>'
            f'<div class="sh">By Typology <span>&nbsp;live counts &amp; value</span></div>'
            f'<div class="legend">{legend_html}</div></div></div><div id="bvtip2"></div>')
     js = """<script>
