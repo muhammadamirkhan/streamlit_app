@@ -2114,9 +2114,11 @@ def render_building_view_brochure():
 
     def draw_box(xi, cw, ry, rh, ty_mid, sold, col, u, span=None):
         gfl = span if span else str(u["Floor"])
+        _tot = float(u["Total_sqft"]) if pd.notna(u["Total_sqft"]) else 0.0
+        _pt = (float(u["Price"]) / _tot) if _tot else 0.0          # price per TOTAL sqft (for the tooltip)
         gattr = (f'class="u" data-u="{_esc(str(u["Unit"]))}" data-ty="{_esc(u["Type"])}" '
                  f'data-fl="{_esc(gfl)}" data-st="{u["Status"]}" '
-                 f'data-pr="{_esc(aed(u["Price"]))}" data-ps="{u["Price_sqft"]:,.0f}" '
+                 f'data-pr="{_esc(aed(u["Price"]))}" data-ps="{u["Price_sqft"]:,.0f}" data-pt="{_pt:,.0f}" '
                  f'data-ai="{u["Internal_sqft"]:,.0f}" data-ae="{u["External_sqft"]:,.0f}" '
                  f'data-at="{u["Total_sqft"]:,.0f}" data-c="{col}"')
         if sold:
@@ -2210,52 +2212,7 @@ def render_building_view_brochure():
             f'<rect x="{TX-50:.0f}" y="{tower_bottom+BASE_H-4:.0f}" width="{TW+100}" height="4" rx="2" fill="{INK}"/>')
     bg = f'<rect x="0" y="0" width="{W}" height="{total_h:.0f}" fill="{PAGE}"/>'
 
-    def _type_variance(t):
-        """|price step| between two AVAILABLE units of type t that sit directly one above the other
-        (consecutive levels — a duplex steps by 2). None if no such adjacent-available pair exists."""
-        step = 2 if "Duplex" in str(t) else 1
-        fp = {}
-        for _, r in bdf[bdf["Type"] == t].iterrows():
-            fv = r["_fn"]
-            if pd.notna(fv) and r["Status"] == "Available":
-                fp[int(fv)] = float(r["Price"])
-        for a in sorted(fp):
-            if a + step in fp:
-                return abs(fp[a + step] - fp[a])
-        return None
-
-    def _fmt_var(v):
-        if v >= 1e6: return f"AED {v/1e6:.2f}M"
-        if v >= 1e3: return f"AED {v/1e3:.0f}K"
-        return aed(v)
-
-    info = {}
-    for t in bdf["Type"].unique():
-        fls = sorted({int(x) for x in bdf[bdf["Type"] == t]["_fn"].dropna() if int(x) in floor_y})
-        if not fls:
-            continue
-        info[t] = {"mid": sum(floor_y[f] for f in fls) / len(fls), "lo": min(fls), "hi": max(fls),
-                   "var": _type_variance(t)}
-    a_types = sorted(info, key=lambda t: info[t]["mid"]); k = max(1, len(a_types))
-    y_top, y_bot, LX = PAD_TOP + CROWN_H + 8, tower_bottom - 8, 192
-    ann = []
-    for i, t in enumerate(a_types):
-        slot = y_top + (i + 0.5) * (y_bot - y_top) / k
-        inf = info[t]
-        lvl = f"Level {inf['lo']}" if inf["lo"] == inf["hi"] else f"Levels {inf['lo']}–{inf['hi']}"
-        # one clean leader line from the building edge out to the label
-        ann.append(f'<polyline points="{TX:.0f},{inf["mid"]:.0f} {(LX+TX)/2:.0f},{slot:.0f} {LX+6},{slot:.0f}" '
-                   f'fill="none" stroke="{INK}" stroke-width="0.8"/>')
-        ann.append(f'<circle cx="{TX:.0f}" cy="{inf["mid"]:.0f}" r="3.2" fill="#FBF7EF" stroke="{INK}" stroke-width="0.9"/>')
-        base_y = slot - (12 if inf["var"] is not None else 5)
-        ann.append(f'<text x="{LX}" y="{base_y:.0f}" text-anchor="end" font-size="10.5" font-weight="bold" '
-                   f'fill="{INK}" font-family="Calibri,Arial">{_esc(t.upper())}</text>')
-        ann.append(f'<text x="{LX}" y="{base_y+12:.0f}" text-anchor="end" font-size="9" fill="{SUB}" '
-                   f'font-family="Calibri,Arial">{lvl}</text>')
-        if inf["var"] is not None:                       # absolute step between two stacked available units
-            ann.append(f'<text x="{LX}" y="{base_y+24:.0f}" text-anchor="end" font-size="9" font-weight="bold" '
-                       f'fill="#5C4A28" font-family="Calibri,Arial">Variance {_fmt_var(inf["var"])}</text>')
-    ann = "".join(ann)
+    ann = ""                                         # typology leader labels hidden (per request)
 
     svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{total_h:.0f}" '
            f'viewBox="0 0 {W} {total_h:.0f}">{defs}{bg}{crown}{"".join(body)}{ann}{base}</svg>')
@@ -2279,7 +2236,7 @@ def render_building_view_brochure():
     SOLDVAL = VAL - AVAL
     sv_pct = (SOLDVAL / VAL * 100) if VAL else 0.0
     avv_pct = (AVAL / VAL * 100) if VAL else 0.0
-    ALLOW = float(df["Sellable_sqft"].sum())         # live total SELLABLE area (internal + terrace share)
+    ALLOW = ALLOWABLE_SELLABLE                        # fixed design cap (818,187), same as the top header
     BASE_N = base_unit_count()                        # units in the saved Base Version (for the delta card)
 
     def _m(v):                                       # compact AED for the split-bar labels
@@ -2433,7 +2390,7 @@ def render_building_view_brochure():
         tip.style.borderLeftColor=d.c;
         tip.innerHTML='<div class="h">'+d.u+' &middot; '+d.ty+'</div>'+
           '<div>Floor '+d.fl+' &middot; <b style="color:'+sc+'">'+d.st+'</b></div>'+
-          '<div class="p">'+d.pr+' <span style="font-weight:400;color:#6E6657">('+d.ps+'/sqft)</span></div>'+
+          '<div class="p">'+d.pr+' <span style="font-weight:400;color:#6E6657">(AED '+d.pt+' / total sqft)</span></div>'+
           '<div class="a">Internal '+d.ai+' &middot; External '+d.ae+' &middot; Total '+d.at+' sqft</div>';
         tip.style.display='block';
         var x=e.clientX+16, y=e.clientY+16, tw2=tip.offsetWidth, th=tip.offsetHeight;
