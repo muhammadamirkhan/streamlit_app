@@ -1412,24 +1412,33 @@ with tab1:
     order = df.copy()
     order["fnum"] = pd.to_numeric(order["Floor"].str.replace(r"[^0-9]", "", regex=True), errors="coerce")
     order["suf"]  = pd.to_numeric(order["Unit"].str.replace(r"[^0-9]", "", regex=True), errors="coerce") % 100
-    _psf_col, _pr_col = {}, {}                  # (Type, suffix) -> {floor: Price_sqft / Price} for Available
-    for _, _r in order[order["Status"] == "Available"].iterrows():
+    # Build each column (same Type + unit-number suffix) as a STACK of its units ordered by floor.
+    # Consecutive units in a stack are ONE price step apart no matter how many MEP/empty floors lie
+    # between them in number (those carry no units) — so we step by STACK POSITION, never by raw floor
+    # numbers, and skip Sold neighbours (no list price), dividing by the positions skipped.
+    _stacks = {}
+    for _, _r in order.iterrows():
         if pd.isna(_r["fnum"]) or pd.isna(_r["suf"]):
             continue
-        _k = (_r["Type"], int(_r["suf"]))
-        _psf_col.setdefault(_k, {})[int(_r["fnum"])] = _r["Price_sqft"]
-        _pr_col.setdefault(_k, {})[int(_r["fnum"])] = _r["Price"]
-    def _floor_step(row, colmap):
-        if row["Status"] == "Sold" or pd.isna(row["fnum"]) or pd.isna(row["suf"]):
-            return pd.NA
-        m = colmap.get((row["Type"], int(row["suf"])), {})
-        f = int(row["fnum"]); below = [g for g in m if g < f]
-        if f not in m or not below:
-            return pd.NA
-        fb = max(below)
-        return (m[f] - m[fb]) / (f - fb)
-    esc_map = dict(zip(order["uid"], order.apply(lambda r: _floor_step(r, _psf_col), axis=1)))
-    var_map = dict(zip(order["uid"], order.apply(lambda r: _floor_step(r, _pr_col), axis=1)))
+        _stacks.setdefault((_r["Type"], int(_r["suf"])), []).append(
+            (int(_r["fnum"]), _r["uid"], float(_r["Price"]), float(_r["Price_sqft"]),
+             _r["Status"] == "Available"))
+    esc_map, var_map = {}, {}
+    for _lst in _stacks.values():
+        _lst.sort()
+        for _i, (_f, _uid, _price, _psf, _av) in enumerate(_lst):
+            if not _av:                                   # Sold (or N/A) → blank
+                esc_map[_uid] = var_map[_uid] = pd.NA
+                continue
+            _j = _i - 1
+            while _j >= 0 and not _lst[_j][4]:            # skip Sold units below
+                _j -= 1
+            if _j < 0:                                    # nothing comparable below
+                esc_map[_uid] = var_map[_uid] = pd.NA
+                continue
+            _steps = _i - _j                              # stack positions (ignores MEP/empty floors)
+            esc_map[_uid] = (_psf - _lst[_j][3]) / _steps
+            var_map[_uid] = (_price - _lst[_j][2]) / _steps
 
     type_opts = [t for t in UNIT_TYPES if t in set(df["Type"])] + \
                 [t for t in sorted(df["Type"].unique()) if t not in UNIT_TYPES]
