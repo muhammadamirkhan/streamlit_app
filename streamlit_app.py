@@ -1426,19 +1426,23 @@ with tab1:
     esc_map, var_map = {}, {}
     for _lst in _stacks.values():
         _lst.sort()
+        _avail = [k for k, _t in enumerate(_lst) if _t[4]]   # stack positions of Available units
         for _i, (_f, _uid, _price, _psf, _av) in enumerate(_lst):
             if not _av:                                   # Sold (or N/A) → blank
                 esc_map[_uid] = var_map[_uid] = pd.NA
                 continue
-            _j = _i - 1
-            while _j >= 0 and not _lst[_j][4]:            # skip Sold units below
-                _j -= 1
-            if _j < 0:                                    # nothing comparable below
+            _below = [k for k in _avail if k < _i]
+            _above = [k for k in _avail if k > _i]
+            if _below:                                    # prefer the nearest Available unit BELOW
+                _j = max(_below); _steps = _i - _j
+                esc_map[_uid] = (_psf - _lst[_j][3]) / _steps
+                var_map[_uid] = (_price - _lst[_j][2]) / _steps
+            elif _above:                                  # else fall back to the nearest one ABOVE (same step)
+                _j = min(_above); _steps = _j - _i
+                esc_map[_uid] = (_lst[_j][3] - _psf) / _steps
+                var_map[_uid] = (_lst[_j][2] - _price) / _steps
+            else:                                         # only Available unit in its column → blank
                 esc_map[_uid] = var_map[_uid] = pd.NA
-                continue
-            _steps = _i - _j                              # stack positions (ignores MEP/empty floors)
-            esc_map[_uid] = (_psf - _lst[_j][3]) / _steps
-            var_map[_uid] = (_price - _lst[_j][2]) / _steps
 
     type_opts = [t for t in UNIT_TYPES if t in set(df["Type"])] + \
                 [t for t in sorted(df["Type"].unique()) if t not in UNIT_TYPES]
