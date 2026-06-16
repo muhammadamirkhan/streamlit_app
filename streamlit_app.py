@@ -31,7 +31,7 @@ if not _check_password():
 
 # ── Data file (lives next to this script, so it works locally and on the cloud) ─
 EXCEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Muraba Veil Unit list.xlsx")
-COMMENTS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "unit_comments.json")
+COMMENTS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "muraba_comments.json")
 STATE_PATH    = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app_state.json")
 BASE_PATH     = os.path.join(os.path.dirname(os.path.abspath(__file__)), "base_version.json")
 
@@ -843,6 +843,13 @@ def _init():
         else:                                        # fresh from the original Excel
             st.session_state.units = load_unit_data()
             st.session_state.uid_counter = len(st.session_state.units)
+        # overlay the committed comments (muraba_comments.json) so saved comments show on EVERY load
+        # path (base version / saved state / Excel) — the repo copy is the persistent source of truth
+        _cm = load_comments_file()
+        if _cm:
+            uu = st.session_state.units
+            uu["Comment"] = [_cm.get(comment_key(un, ty, fl), cur if isinstance(cur, str) else "")
+                             for un, ty, fl, cur in zip(uu["Unit"], uu["Type"], uu["Floor"], uu["Comment"])]
     if "fm_params" not in st.session_state: st.session_state.fm_params = load_params()
     if "floors"    not in st.session_state: st.session_state.floors    = build_floor_list(st.session_state.units)
     if "blocked"   not in st.session_state:

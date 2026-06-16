@@ -12,9 +12,9 @@ _test_*.xlsx
 mv_test*.xlsx
 ~$*.xlsx
 
-# base_version.json is COMMITTED on purpose (committed once = the permanent client baseline that
-# survives Cloud redeploys/reboots/sleep; it is loaded on launch). The working session state and
-# comments stay local/ephemeral.
+# base_version.json AND muraba_comments.json are COMMITTED on purpose (the permanent client
+# baseline + the persisted comments; both survive Cloud redeploys/reboots/sleep and load on launch).
+# Only the live working session stays local/ephemeral.
 app_state.json
 unit_comments.json
 
