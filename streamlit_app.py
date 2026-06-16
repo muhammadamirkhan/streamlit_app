@@ -1405,12 +1405,31 @@ tab6c = _tmap.get("Muraba Veil - Building View")
 # ── Tab 1: Unit Register ───────────────────────────────────────────────────────
 
 with tab1:
-    # Row-level escalation & price variance vs the unit one floor BELOW in the same typology
+    # Per-floor LIST-price step vs the SAME COLUMN one floor below in the same typology.
+    # Match by (Type, unit-number suffix) so 1703 compares to 1603 (not its same-floor twin), use
+    # AVAILABLE units only (so a sold/discounted neighbour can't distort it), and divide by the floor
+    # gap when the immediate floor below is sold — giving the true per-floor escalation either way.
     order = df.copy()
     order["fnum"] = pd.to_numeric(order["Floor"].str.replace(r"[^0-9]", "", regex=True), errors="coerce")
-    order = order.sort_values(["Type", "fnum"])
-    esc_map = dict(zip(order["uid"], order.groupby("Type")["Price_sqft"].diff()))
-    var_map = dict(zip(order["uid"], order.groupby("Type")["Price"].diff()))
+    order["suf"]  = pd.to_numeric(order["Unit"].str.replace(r"[^0-9]", "", regex=True), errors="coerce") % 100
+    _psf_col, _pr_col = {}, {}                  # (Type, suffix) -> {floor: Price_sqft / Price} for Available
+    for _, _r in order[order["Status"] == "Available"].iterrows():
+        if pd.isna(_r["fnum"]) or pd.isna(_r["suf"]):
+            continue
+        _k = (_r["Type"], int(_r["suf"]))
+        _psf_col.setdefault(_k, {})[int(_r["fnum"])] = _r["Price_sqft"]
+        _pr_col.setdefault(_k, {})[int(_r["fnum"])] = _r["Price"]
+    def _floor_step(row, colmap):
+        if row["Status"] == "Sold" or pd.isna(row["fnum"]) or pd.isna(row["suf"]):
+            return pd.NA
+        m = colmap.get((row["Type"], int(row["suf"])), {})
+        f = int(row["fnum"]); below = [g for g in m if g < f]
+        if f not in m or not below:
+            return pd.NA
+        fb = max(below)
+        return (m[f] - m[fb]) / (f - fb)
+    esc_map = dict(zip(order["uid"], order.apply(lambda r: _floor_step(r, _psf_col), axis=1)))
+    var_map = dict(zip(order["uid"], order.apply(lambda r: _floor_step(r, _pr_col), axis=1)))
 
     type_opts = [t for t in UNIT_TYPES if t in set(df["Type"])] + \
                 [t for t in sorted(df["Type"].unique()) if t not in UNIT_TYPES]
@@ -1494,7 +1513,8 @@ with tab1:
     st.dataframe(vis.style.apply(_hl_sold, axis=1), use_container_width=True,
                  hide_index=True, height=460, column_config=_colcfg)
     st.caption(f"Showing {len(view)} of {len(df)} units · Sold units highlighted in blue · "
-               f"“vs below” compares each unit to the one a floor lower in the same typology")
+               f"Escalation / Floor-Wise Variance = the per-floor list-price step vs the same column "
+               f"one floor below (Available units only; blank for Sold)")
 
     # Inline comment editor (toggle to show/hide); edits persist to file and reload on launch
     show_editor = st.toggle("✏️ Show inline comment editor", value=False, key="show_cmt_editor")
