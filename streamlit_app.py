@@ -1499,6 +1499,18 @@ with tab1:
             disabled=["Unit", "Type", "Floor", "Status"],
             column_config={"Comment": st.column_config.TextColumn("Comment", width="large")},
         )
+        # export comments only (keyed by unit|type|floor) — for preserving them across redeploys
+        _cmts = {}
+        for _, _r in ed.iterrows():
+            _c = "" if pd.isna(_r["Comment"]) else str(_r["Comment"]).strip()
+            if _c:
+                _cmts[comment_key(_r["Unit"], _r["Type"], _r["Floor"])] = _c
+        _cd1, _cd2 = st.columns([0.32, 0.68])
+        _cd1.download_button("⬇️  Download comments (.json)", disabled=not _cmts,
+                             data=json.dumps(_cmts, ensure_ascii=False, indent=2).encode("utf-8"),
+                             file_name="muraba_comments.json", mime="application/json",
+                             use_container_width=True, key="dl_comments")
+        _cd2.caption(f"{len(_cmts)} comment(s) — send this file to persist them across redeploys.")
         new_cmt = ed["Comment"].fillna("").astype(str).values
         if not (new_cmt == cdf["Comment"].values).all():
             cmap = dict(zip(ed["uid"].values, new_cmt))
