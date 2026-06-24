@@ -1029,8 +1029,8 @@ def normalize_mep_layout():
     """Rebuild the tower into one clean, contiguous stack from the current register — generic, not
     tied to any particular saved state. The model is a stack of *slabs*:
       • a regular floor          → 1 slab, 1 level
-      • a duplex                 → 1 slab, 2 levels (it OWNS its companion floor, incl. any pools
-                                   that sit under it)
+      • a duplex                 → 1 slab, 2 levels (record on the LOWER floor; it owns the empty
+                                   floor directly ABOVE and is labelled by its lower floor)
       • each MEP / Majlis floor  → 1 slab, 1 level
       • the amenity floor (2)    → 1 slab, 1 level
     We keep each slab's vertical ORDER, drop every bare gap, re-pack contiguously from the bottom,
@@ -1053,32 +1053,26 @@ def normalize_mep_layout():
 
     def _is_dup(idx):
         return "Duplex" in str(u.at[idx, "Type"])
-    def _up(idx):
-        dv = u.at[idx, "Dup_Up"] if "Dup_Up" in u.columns else None
-        return bool(dv) if pd.notna(dv) else False
 
-    dup_dir = {}                                         # record floor -> 'up'/'down'
-    for f, idxs in by_floor.items():
-        for i in idxs:
-            if _is_dup(i):
-                dup_dir[f] = "up" if _up(i) else "down"
-                break
-    owned = {(f + 1 if d == "up" else f - 1): f for f, d in dup_dir.items()}   # companion -> record
+    # Every duplex sits on its (lower) record floor and OWNS the floor directly ABOVE it, which
+    # stays empty — the duplex is labelled by its lower floor (e.g. 3BR Duplex 5901 on floor 59
+    # occupies 59 + 60). This is universal; the legacy per-unit Dup_Up direction no longer decides
+    # the companion.
+    dup_floors = {f for f, idxs in by_floor.items() if any(_is_dup(i) for i in idxs)}
+    owned = {f + 1: f for f in dup_floors}               # companion (above) -> record floor
 
     slabs, used = [], set()
     for f in sorted(by_floor):
         if f in used:
             continue
-        if f in dup_dir:                                 # duplex slab owns its 2 levels
-            comp = f + 1 if dup_dir[f] == "up" else f - 1
-            lo, hi = min(f, comp), max(f, comp)
+        if f in dup_floors:                              # duplex slab: record floor + empty floor above
             slabs.append({"kind": "dup", "floor": f, "h": 2,
-                          "upper": by_floor.get(hi, []), "lower": by_floor.get(lo, [])})
-            used.add(f); used.add(comp)
+                          "rec": by_floor[f], "comp": by_floor.get(f + 1, [])})
+            used.add(f); used.add(f + 1)
         elif f in owned:                                 # a duplex's companion floor (already taken)
             continue
         else:
-            slabs.append({"kind": "res", "floor": f, "h": 1, "upper": by_floor[f], "lower": []})
+            slabs.append({"kind": "res", "floor": f, "h": 1, "rec": by_floor[f]})
             used.add(f)
     for f, desc in blk.items():
         slabs.append({"kind": "mep", "floor": f, "h": 1, "desc": desc})
@@ -1087,7 +1081,7 @@ def normalize_mep_layout():
 
     pent = None                                          # the 5BR penthouse slab (highest such)
     for s in slabs:
-        if s["kind"] == "dup" and any("5 Bedroom" in str(u.at[i, "Type"]) for i in s["upper"]):
+        if s["kind"] == "dup" and any("5 Bedroom" in str(u.at[i, "Type"]) for i in s["rec"]):
             pent = s
     meps = [s for s in slabs if s["kind"] == "mep"]
     top_mep = meps[-1] if meps else None
@@ -1107,12 +1101,12 @@ def normalize_mep_layout():
         elif s["kind"] == "amen":
             n += 1                                       # reserve floor 2 for amenities (no units)
         elif s["kind"] == "res":
-            _set(s["upper"], n); n += 1
-        else:                                            # duplex: lower level, then record on top
-            _set(s["lower"], n); _set(s["upper"], n + 1)
-            for i in s["upper"]:
+            _set(s["rec"], n); n += 1
+        else:                                            # duplex: record on LOWER floor, empty floor ABOVE
+            _set(s["rec"], n); _set(s["comp"], n + 1)
+            for i in s["rec"]:
                 if _is_dup(i) and "Dup_Up" in u.columns:
-                    u.at[i, "Dup_Up"] = pd.NA            # standardise to a down-duplex
+                    u.at[i, "Dup_Up"] = True             # owns the floor above (labelled by lower floor)
             n += 2
     st.session_state.blocked = new_blk
     st.session_state.floors = build_floor_list(st.session_state.units)
@@ -2123,11 +2117,11 @@ def render_building_view_brochure():
     units_by_floor = {int(f): g.sort_values("_un") for f, g in bdf.dropna(subset=["_fn"]).groupby("_fn")}
     floor_nums = [int(f) for f in units_by_floor]
 
-    def _is_up(u):                                      # an ADDED duplex occupies its floor + the one ABOVE
+    def _is_up(u):                                      # every duplex occupies its floor + the one ABOVE
         v = u.get("Dup_Up")
         return bool(v) if pd.notna(v) else False
 
-    # added (upward) duplexes also occupy the floor above → counts toward building height
+    # duplexes also occupy the floor above their record floor → counts toward building height
     up_tops = [int(f) + 1 for f, g in units_by_floor.items()
                for _, u in g.iterrows() if "Duplex" in str(u["Type"]) and _is_up(u)]
     max_floor = max(floor_nums + list(blocked) + up_tops + [1]); min_floor = 1
@@ -2239,9 +2233,9 @@ def render_building_view_brochure():
 
     tower_bottom = y - GAP
 
-    # duplexes: one unit two floors tall. Loaded duplexes span DOWN (recorded on the upper floor,
-    # e.g. 5BR on 69 → 68–69); duplexes ADDED via Floor Manager span UP (their floor + the one above,
-    # pushing the roof up) so adding one never disturbs the floors below it.
+    # duplexes: one unit two floors tall. Every duplex is recorded on its LOWER floor and spans UP
+    # onto the floor above (e.g. 3BR Duplex 5901 on 59 → 59–60), so it is labelled by its lower floor
+    # and the empty reserved level above is covered by the box.
     for (f, xi, cw, sold, col, u) in dup_units:
         lo, hi = (f, f + 1) if _is_up(u) else (f - 1, f)
         top = (floor_y[hi] - floor_h[hi] / 2) if hi in floor_y else (floor_y[lo] - floor_h[lo] / 2 - GAP - H_STD)
