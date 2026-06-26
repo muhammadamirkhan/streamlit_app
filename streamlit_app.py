@@ -1266,13 +1266,8 @@ with st.sidebar:
     st.title("Muraba Veil")
     st.caption("Unit Manager")
 
-    st.caption("✅ Every edit applies **instantly** across all tabs. "
-               "Saving is **only** to keep your changes after a restart.")
-
-    if st.button("💾  Save for next launch", use_container_width=True, type="primary"):
-        save_state()
-        st.session_state["flash"] = ("success", "✅ State saved — the app will reopen here next time.")
-        st.rerun()
+    st.caption("✅ Every edit applies **instantly** across all tabs. To keep a version, use "
+               "**Save Base Version** below — it's stored in the cloud and persists across restarts.")
 
     if st.button("↩️  Reset to original Excel", use_container_width=True):
         clear_saved_state()
@@ -1280,13 +1275,6 @@ with st.sidebar:
             st.session_state.pop(k, None)
         st.session_state["flash"] = ("success", "↩️ Reset to the original Excel baseline.")
         st.rerun()
-
-    if has_saved_state():
-        import datetime as _dt
-        _ts = _dt.datetime.fromtimestamp(os.path.getmtime(STATE_PATH)).strftime("%d %b %Y, %H:%M")
-        st.caption(f"📂 Opened from saved state · last saved **{_ts}**")
-    else:
-        st.caption("📄 Opened from the original Excel (no saved state yet)")
 
     st.divider()
     st.caption("**Base Versions** — save the current state under a name, or load any saved version. "
@@ -1363,8 +1351,7 @@ with st.sidebar:
                         normalize_mep_layout()
                         st.session_state["bv_load_prompt"] = False
                         st.session_state.pop("bv_load_pwd", None)
-                        st.session_state["flash"] = ("success", f"📥 Loaded base version “{_sel}”. Use "
-                                                     "“Save for next launch” to also open it by default.")
+                        st.session_state["flash"] = ("success", f"📥 Loaded base version “{_sel}”.")
                         st.rerun()
                     elif _lp == _app_pwd:
                         st.error("That version could not be found.")
@@ -1377,7 +1364,7 @@ with st.sidebar:
 
     st.divider()
     st.caption("Add / edit / remove floors in the **Floor Manager** tab. Changes show everywhere "
-               "immediately; **Save for next launch** only persists them across restarts.")
+               "immediately; use **Save Base Version** to persist them across restarts.")
     if blocked:
         st.caption("**Blocked floors (MEP / Majlis):** " + ", ".join(str(k) for k in sorted(blocked)))
 
