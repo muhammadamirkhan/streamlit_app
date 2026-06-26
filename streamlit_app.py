@@ -1375,45 +1375,6 @@ with st.sidebar:
             if _sel:
                 st.caption(f"Will load: **{_sel}**")
 
-    # ── Backup / transfer: download the state as a file, or restore from one ───────
-    # Cloud storage is temporary — these let you keep a real backup and move a snapshot
-    # between the live app and a local copy (the only way to get the live state off the server).
-    with st.expander("⬇️ Download / Upload snapshot (backup & transfer)", expanded=False):
-        import datetime as _dt3
-        _stamp = _dt3.datetime.now().strftime("%Y%m%d-%H%M")
-        st.caption("Cloud storage is temporary. Download a snapshot to back it up or move it to another "
-                   "copy of the app; upload one to restore it.")
-        st.download_button("⬇️  Download current state", data=state_json_bytes(),
-                           file_name=f"muraba_state_{_stamp}.json", mime="application/json",
-                           use_container_width=True, key="dl_state")
-        if has_base():
-            with open(BASE_PATH, "rb") as _bf:
-                _base_bytes = _bf.read()
-            st.download_button("⬇️  Download Base Version", data=_base_bytes,
-                               file_name=f"muraba_base_version_{_stamp}.json", mime="application/json",
-                               use_container_width=True, key="dl_base")
-        st.markdown("—")
-        _up = st.file_uploader("⬆️  Restore from a snapshot (.json)", type=["json"], key="state_upload")
-        if _up is not None:
-            _upw = st.text_input("Enter app password to confirm restore", type="password", key="up_pwd")
-            if st.button("♻️  Restore this snapshot", use_container_width=True, key="up_restore"):
-                if _upw == _app_pwd:
-                    try:
-                        _u, _fl, _fp, _ctr, _blk = _parse_state(json.loads(_up.getvalue().decode("utf-8")))
-                        st.session_state.units = _u
-                        st.session_state.floors = _fl
-                        st.session_state.fm_params = _fp
-                        st.session_state.uid_counter = _ctr
-                        st.session_state.blocked = _blk if _blk else load_blocked_floors()
-                        normalize_mep_layout()          # keep MEP floors visible / below the 5BR
-                        st.session_state["flash"] = ("success", "♻️ Snapshot restored. Use “Save for "
-                                                     "next launch” to persist it across restarts.")
-                    except Exception as _e:
-                        st.session_state["flash"] = ("error", f"❌ Could not read that file: {_e}")
-                    st.rerun()
-                else:
-                    st.error("Incorrect password.")
-
     st.divider()
     st.caption("Add / edit / remove floors in the **Floor Manager** tab. Changes show everywhere "
                "immediately; **Save for next launch** only persists them across restarts.")
