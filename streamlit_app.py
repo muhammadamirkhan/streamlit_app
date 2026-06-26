@@ -3,6 +3,8 @@ import streamlit.components.v1 as components
 import pandas as pd
 import os
 import json
+import datetime as _dtm
+import requests
 from io import BytesIO
 
 st.set_page_config(page_title="Muraba Veil – Unit Manager", layout="wide", page_icon="🏙️")
@@ -146,6 +148,78 @@ def persist_all_comments():
         if isinstance(c, str) and c.strip():
             mapping[comment_key(r["Unit"], r["Type"], r["Floor"])] = c
     save_comments_file(mapping)
+
+
+# ── Named versions store (Supabase) ────────────────────────────────────────────
+# A small library of full-state snapshots, each addressable by name, kept in a Supabase
+# table so they survive Cloud redeploys. We talk to the PostgREST endpoint directly with
+# `requests` (no heavy SDK) and only ever call out on explicit Save / Load / list actions —
+# the list is cached — so the normal in-memory hot path is never touched.
+SUPABASE_TABLE = "muraba_versions"
+
+def _sb_cfg():
+    """(base_url, api_key) from secrets/env, both stripped; ('', '') when not configured."""
+    try:
+        url = st.secrets.get("supabase_url", os.environ.get("SUPABASE_URL", ""))
+        key = st.secrets.get("supabase_key", os.environ.get("SUPABASE_KEY", ""))
+    except Exception:
+        url, key = os.environ.get("SUPABASE_URL", ""), os.environ.get("SUPABASE_KEY", "")
+    return (url or "").rstrip("/"), (key or "")
+
+def sb_enabled():
+    u, k = _sb_cfg()
+    return bool(u and k)
+
+def _sb_headers(key):
+    return {"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+
+def _sb_endpoint():
+    u, _ = _sb_cfg()
+    return f"{u}/rest/v1/{SUPABASE_TABLE}"
+
+@st.cache_data(ttl=300, show_spinner=False)
+def sb_list_versions(_nonce=0):
+    """[(name, updated_at), …] newest first. Cached; pass a changing _nonce to force a refresh."""
+    u, k = _sb_cfg()
+    if not (u and k):
+        return []
+    try:
+        r = requests.get(_sb_endpoint(), headers=_sb_headers(k),
+                         params={"select": "name,updated_at", "order": "updated_at.desc"}, timeout=10)
+        r.raise_for_status()
+        return [(d["name"], d.get("updated_at")) for d in r.json()]
+    except Exception:
+        return []
+
+def sb_save_version(name, state):
+    """Upsert a named snapshot (overwrites if the name already exists)."""
+    u, k = _sb_cfg()
+    if not (u and k):
+        raise RuntimeError("Supabase is not configured.")
+    body = {"name": name, "state": state, "updated_at": _dtm.datetime.now(_dtm.timezone.utc).isoformat()}
+    h = _sb_headers(k); h["Prefer"] = "resolution=merge-duplicates,return=minimal"
+    r = requests.post(_sb_endpoint(), headers=h, params={"on_conflict": "name"},
+                      data=json.dumps(body), timeout=15)
+    r.raise_for_status()
+
+def sb_load_version(name):
+    """The stored state dict for `name`, or None."""
+    u, k = _sb_cfg()
+    if not (u and k):
+        return None
+    r = requests.get(_sb_endpoint(), headers=_sb_headers(k),
+                     params={"select": "state", "name": f"eq.{name}", "limit": "1"}, timeout=15)
+    r.raise_for_status()
+    data = r.json()
+    return data[0]["state"] if data else None
+
+def sb_delete_version(name):
+    u, k = _sb_cfg()
+    if not (u and k):
+        return
+    r = requests.delete(_sb_endpoint(), headers=_sb_headers(k),
+                        params={"name": f"eq.{name}"}, timeout=15)
+    r.raise_for_status()
 
 UNIT_TYPES = [
     "2 Bedroom", "3 Bedroom - New", "3 Bedroom", "3 Bedroom Pool", "4 Bedroom Pool",
@@ -1215,76 +1289,91 @@ with st.sidebar:
         st.caption("📄 Opened from the original Excel (no saved state yet)")
 
     st.divider()
-    st.caption("**Base Version** — a second, independent snapshot. *Save Base Version* stores the "
-               "current state separately; *Load Base Version* brings that snapshot back into view "
-               "(it does not change the regular saved state shown on launch). Each asks for the app "
-               "password every time, to prevent accidental presses.")
+    st.caption("**Base Versions** — save the current state under a name, or load any saved version. "
+               "Stored in the cloud database (Supabase), so they persist across restarts and "
+               "redeploys. Each Save / Load asks for the app password.")
     _app_pwd = st.secrets.get("password", os.environ.get("APP_PASSWORD", "muraba2026"))
 
-    # Save Base Version — clicking reveals a fresh password prompt every time
-    if st.button("📌  Save Base Version", use_container_width=True, key="bv_save_btn"):
-        st.session_state["bv_save_prompt"] = True
-        st.session_state["bv_load_prompt"] = False
-        st.session_state.pop("bv_save_pwd", None)
-    if st.session_state.get("bv_save_prompt"):
-        _sp = st.text_input("Enter app password to confirm Save", type="password", key="bv_save_pwd")
-        _sc1, _sc2 = st.columns(2)
-        if _sc1.button("Confirm Save", use_container_width=True, key="bv_save_ok"):
-            if _sp == _app_pwd:
-                save_base()
+    if not sb_enabled():
+        st.info("Base versions need Supabase configured — add `supabase_url` and `supabase_key` "
+                "to the app secrets.")
+    else:
+        # ── Save Base Version → app password, then a name ──
+        if st.button("📌  Save Base Version", use_container_width=True, key="bv_save_btn"):
+            st.session_state["bv_save_prompt"] = True
+            st.session_state["bv_load_prompt"] = False
+            st.session_state.pop("bv_save_pwd", None)
+            st.session_state.pop("bv_save_name", None)
+        if st.session_state.get("bv_save_prompt"):
+            _sp = st.text_input("App password", type="password", key="bv_save_pwd")
+            _sname = st.text_input("Name this base version", key="bv_save_name",
+                                   placeholder="e.g. Pre-launch · Mar 2026")
+            st.caption("Saving under an existing name overwrites that version.")
+            _sc1, _sc2 = st.columns(2)
+            if _sc1.button("Confirm Save", use_container_width=True, key="bv_save_ok",
+                           disabled=not _sname.strip()):
+                if _sp != _app_pwd:
+                    st.error("Incorrect password.")
+                else:
+                    try:
+                        sb_save_version(_sname.strip(), _state_dict())
+                        st.session_state["nv_nonce"] = st.session_state.get("nv_nonce", 0) + 1
+                        st.session_state["bv_save_prompt"] = False
+                        st.session_state.pop("bv_save_pwd", None)
+                        st.session_state.pop("bv_save_name", None)
+                        st.session_state["flash"] = ("success", f"📌 Saved base version “{_sname.strip()}”.")
+                        st.rerun()
+                    except Exception as _e:
+                        st.error(f"Save failed: {_e}")
+            if _sc2.button("Cancel", use_container_width=True, key="bv_save_cancel"):
                 st.session_state["bv_save_prompt"] = False
                 st.session_state.pop("bv_save_pwd", None)
-                st.session_state["flash"] = ("success", "📌 Base Version saved.")
+                st.session_state.pop("bv_save_name", None)
                 st.rerun()
-            else:
-                st.error("Incorrect password.")
-        if _sc2.button("Cancel", use_container_width=True, key="bv_save_cancel"):
+
+        # ── Load Base Version → app password, then pick from the list, then confirm ──
+        if st.button("📥  Load Base Version", use_container_width=True, key="bv_load_btn"):
+            st.session_state["bv_load_prompt"] = True
             st.session_state["bv_save_prompt"] = False
-            st.session_state.pop("bv_save_pwd", None)
-            st.rerun()
-
-    # Load Base Version — clicking reveals a fresh password prompt every time
-    if st.button("📥  Load Base Version", use_container_width=True, key="bv_load_btn",
-                 disabled=not has_base()):
-        st.session_state["bv_load_prompt"] = True
-        st.session_state["bv_save_prompt"] = False
-        st.session_state.pop("bv_load_pwd", None)
-    if st.session_state.get("bv_load_prompt"):
-        _lp = st.text_input("Enter app password to confirm Load", type="password", key="bv_load_pwd")
-        _lc1, _lc2 = st.columns(2)
-        if _lc1.button("Confirm Load", use_container_width=True, key="bv_load_ok"):
-            if _lp == _app_pwd:
-                loaded = load_base()
-                if loaded is not None:
-                    units, floors, fparams, ctr, blk = loaded
-                    st.session_state.units = units
-                    st.session_state.floors = floors
-                    st.session_state.fm_params = fparams
-                    st.session_state.uid_counter = ctr
-                    # older snapshots didn't store the MEP/Majlis list — restore it from the Excel
-                    # so the MEP floors always come back correctly
-                    st.session_state.blocked = blk if blk else load_blocked_floors()
-                    normalize_mep_layout()              # keep MEP floors visible / below the 5BR
-                    st.session_state["bv_load_prompt"] = False
-                    st.session_state.pop("bv_load_pwd", None)
-                    st.session_state["flash"] = ("success", "📥 Base Version loaded. Use “Save for next "
-                                                 "launch” to also open it by default.")
-                else:
-                    st.session_state["flash"] = ("error", "❌ Could not load Base Version.")
-                st.rerun()
-            else:
-                st.error("Incorrect password.")
-        if _lc2.button("Cancel", use_container_width=True, key="bv_load_cancel"):
-            st.session_state["bv_load_prompt"] = False
             st.session_state.pop("bv_load_pwd", None)
-            st.rerun()
-
-    if has_base():
-        import datetime as _dt
-        _bts = _dt.datetime.fromtimestamp(os.path.getmtime(BASE_PATH)).strftime("%d %b %Y, %H:%M")
-        st.caption(f"📌 Base Version last saved **{_bts}**")
-    else:
-        st.caption("📌 No Base Version saved yet")
+        if st.session_state.get("bv_load_prompt"):
+            _lp = st.text_input("App password", type="password", key="bv_load_pwd")
+            _names = [n for n, _ in sb_list_versions(st.session_state.get("nv_nonce", 0))]
+            _sel = st.selectbox("Choose a base version to load", _names, key="bv_load_select") if _names else None
+            if not _names:
+                st.caption("No base versions saved yet.")
+            _lc1, _lc2 = st.columns(2)
+            if _lc1.button("✅  Confirm Load", use_container_width=True, key="bv_load_ok",
+                           disabled=not _names):
+                if _lp != _app_pwd:
+                    st.error("Incorrect password.")
+                else:
+                    try:
+                        _state = sb_load_version(_sel)
+                    except Exception as _e:
+                        _state = None
+                        st.error(f"Load failed: {_e}")
+                    if _state:
+                        _u, _fl, _fp, _ctr, _blk = _parse_state(_state)
+                        st.session_state.units = _u
+                        st.session_state.floors = _fl
+                        st.session_state.fm_params = _fp
+                        st.session_state.uid_counter = _ctr
+                        st.session_state.blocked = _blk if _blk else load_blocked_floors()
+                        normalize_mep_layout()
+                        st.session_state["bv_load_prompt"] = False
+                        st.session_state.pop("bv_load_pwd", None)
+                        st.session_state["flash"] = ("success", f"📥 Loaded base version “{_sel}”. Use "
+                                                     "“Save for next launch” to also open it by default.")
+                        st.rerun()
+                    elif _lp == _app_pwd:
+                        st.error("That version could not be found.")
+            if _lc2.button("Cancel", use_container_width=True, key="bv_load_cancel"):
+                st.session_state["bv_load_prompt"] = False
+                st.session_state.pop("bv_load_pwd", None)
+                st.rerun()
+            if _sel:
+                st.caption(f"Will load: **{_sel}**")
 
     # ── Backup / transfer: download the state as a file, or restore from one ───────
     # Cloud storage is temporary — these let you keep a real backup and move a snapshot
