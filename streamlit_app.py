@@ -72,7 +72,7 @@ def _parse_state(state):
     """Turn a state dict into (units_df, floors, params, uid_counter, blocked)."""
     units = pd.DataFrame(state["units"])
     # backfill columns older snapshots may not have, so all downstream code is safe
-    for col in ("Dup_Up", "Terrace_Override", "Sellable_Override"):
+    for col in ("Dup_Up", "Terrace_Override", "Sellable_Override", "Adj_Pct"):
         if col not in units.columns:
             units[col] = pd.NA
     if "Comment" not in units.columns:
@@ -497,6 +497,7 @@ def load_unit_data() -> pd.DataFrame:
     df["Terrace_Override"] = pd.NA                                     # per-unit terrace-rate override (set by bulk tool)
     df["Sellable_Override"] = pd.NA                                    # per-unit sellable-area override (set in Edit Units)
     df["Dup_Up"] = pd.NA                                               # loaded duplexes span DOWN; added ones span UP
+    df["Adj_Pct"] = pd.NA                                              # per-unit appreciation(+)/discount(-) as a %
     cmts = load_comments_file()                                       # free-text notes per unit, persisted to JSON
     df["Comment"] = [cmts.get(comment_key(u, t, fl), "")
                      for u, t, fl in zip(df["Unit"], df["Type"], df["Floor"])]
@@ -895,7 +896,12 @@ def recalc(df, params):
     if "Sellable_Override" in df.columns:
         so = df["Sellable_Override"].notna()
         df.loc[so, "Sellable_sqft"] = pd.to_numeric(df.loc[so, "Sellable_Override"], errors="coerce")
-    df["Price"]         = df["Price_sqft"] * df["Sellable_sqft"]
+    df["Base_Price"]    = df["Price_sqft"] * df["Sellable_sqft"]        # LIST price (pre appreciation/discount)
+    # per-unit appreciation(+%) / discount(-%) → the effective price used in the register total,
+    # building view and portfolio KPIs. The Base_Price stays the list price for the variance ladder.
+    _adj = (pd.to_numeric(df["Adj_Pct"], errors="coerce").fillna(0.0)
+            if "Adj_Pct" in df.columns else 0.0)
+    df["Price"]         = df["Base_Price"] * (1 + _adj / 100.0)
     return df
 
 
@@ -969,6 +975,7 @@ def add_units_to_register(unit_list, floor_num, params):
             "Terrace_Override": pd.NA, "Sellable_Override": pd.NA,
             # a duplex added here is ONE unit that occupies its floor + the floor ABOVE (roof shifts up)
             "Dup_Up": (True if "Duplex" in u["type"] else pd.NA),
+            "Adj_Pct": pd.NA,
             "Comment": "", "uid": uid,
         }])], ignore_index=True)
 
@@ -1452,7 +1459,7 @@ with tab1:
         if pd.isna(_r["fnum"]) or pd.isna(_r["suf"]):
             continue
         _stacks.setdefault((_r["Type"], int(_r["suf"])), []).append(
-            (int(_r["fnum"]), _r["uid"], float(_r["Price"]), float(_r["Price_sqft"]),
+            (int(_r["fnum"]), _r["uid"], float(_r["Base_Price"]), float(_r["Price_sqft"]),
              _r["Status"] == "Available"))
     esc_map, var_map = {}, {}
     for _lst in _stacks.values():
@@ -1502,6 +1509,11 @@ with tab1:
 
     def _money(v):  return "" if pd.isna(v) else f"AED {v:,.0f}"
     def _num1(v):   return "" if pd.isna(v) else f"{v:,.1f}"
+    def _adjpct(v):                                    # signed % for appreciation(+)/discount(-); blank if none
+        v = pd.to_numeric(v, errors="coerce")
+        if pd.isna(v) or round(float(v), 4) == 0:
+            return ""
+        return ("+" if v > 0 else "−") + f"{abs(float(v)):.1f}%"
 
     # Pre-format every value to a string so the look matches; Comment stays editable.
     disp = pd.DataFrame({
@@ -1517,7 +1529,9 @@ with tab1:
         "Price/Total sqft": view["PSF_total"].map(_money).values,
         "Internal Value (AED)": view["Int_Value"].map(_money).values,
         "Terrace Value (AED)": view["Terr_Value"].map(_money).values,
+        "List Price (AED)": view["Base_Price"].map(_money).values,
         "Total Price (AED)": view["Price"].map(_money).values,
+        "Appreciation / Discount": view["Adj_Pct"].map(_adjpct).values,
         "Escalation vs below (/sqft)": view["Esc_row"].map(_money).values,
         "Floor Wise Variance (AED)": view["Var_row"].map(_money).values,
         "Comment": view["Comment"].fillna("").astype(str).values,
@@ -1532,13 +1546,19 @@ with tab1:
     vis.index = disp["uid"].values
     def _hl_sold(row):
         return ["background-color:#9DC3E6" if bool(sold_by_idx.loc[row.name]) else "" for _ in row]
+    def _color_adj(val):                               # green = appreciation, red = discount
+        s = str(val)
+        if s.startswith("+"):                          return "color:#1a7f37;font-weight:600"
+        if s.startswith("−") or s.startswith("-"):     return "color:#d1242f;font-weight:600"
+        return ""
     _ur = st.columns([0.74, 0.26])
     with _ur[1]:
         # export AED columns as real numbers (currency format) + paint Sold rows yellow
         _reg_raw = {
             "Price/Sellable sqft": view["Price_sqft"], "Price/Total sqft": view["PSF_total"],
             "Internal Value (AED)": view["Int_Value"], "Terrace Value (AED)": view["Terr_Value"],
-            "Total Price (AED)": view["Price"], "Escalation vs below (/sqft)": view["Esc_row"],
+            "List Price (AED)": view["Base_Price"], "Total Price (AED)": view["Price"],
+            "Escalation vs below (/sqft)": view["Esc_row"],
             "Floor Wise Variance (AED)": view["Var_row"],
         }
         _exp = vis.reset_index(drop=True).copy()
@@ -1554,7 +1574,10 @@ with tab1:
     if "Comment" in vis.columns and len(vis):
         _ml = int(vis["Comment"].astype(str).map(len).max())
         _colcfg = {"Comment": st.column_config.TextColumn("Comment", width=max(180, min(720, _ml * 7 + 24)))}
-    st.dataframe(vis.style.apply(_hl_sold, axis=1), use_container_width=True,
+    _sty = vis.style.apply(_hl_sold, axis=1)
+    if "Appreciation / Discount" in vis.columns:
+        _sty = _sty.map(_color_adj, subset=["Appreciation / Discount"])
+    st.dataframe(_sty, use_container_width=True,
                  hide_index=True, height=460, column_config=_colcfg)
     st.caption(f"Showing {len(view)} of {len(df)} units · Sold units highlighted in blue · "
                f"Escalation / Floor-Wise Variance = the per-floor list-price step vs the same column "
@@ -2199,11 +2222,13 @@ def render_building_view_brochure():
         gfl = span if span else str(u["Floor"])
         _tot = float(u["Total_sqft"]) if pd.notna(u["Total_sqft"]) else 0.0
         _pt = (float(u["Price"]) / _tot) if _tot else 0.0          # price per TOTAL sqft (for the tooltip)
+        _av = pd.to_numeric(u.get("Adj_Pct"), errors="coerce")     # appreciation(+)/discount(-) %, for the tooltip
+        _adj = "" if (pd.isna(_av) or float(_av) == 0) else (("+" if float(_av) > 0 else "−") + f"{abs(float(_av)):.1f}%")
         gattr = (f'class="u" data-u="{_esc(str(u["Unit"]))}" data-ty="{_esc(u["Type"])}" '
                  f'data-fl="{_esc(gfl)}" data-st="{u["Status"]}" '
                  f'data-pr="{_esc(aed(u["Price"]))}" data-ps="{u["Price_sqft"]:,.0f}" data-pt="{_pt:,.0f}" '
                  f'data-ai="{u["Internal_sqft"]:,.0f}" data-ae="{u["External_sqft"]:,.0f}" '
-                 f'data-at="{u["Total_sqft"]:,.0f}" data-c="{col}"')
+                 f'data-at="{u["Total_sqft"]:,.0f}" data-adj="{_esc(_adj)}" data-c="{col}"')
         if sold:
             body.append(f'<g {gattr}><rect x="{xi:.1f}" y="{ry:.1f}" width="{cw:.1f}" height="{rh:.1f}" '
                         f'rx="2" fill="none" stroke="{SOLDS}" stroke-width="1"/></g>')
@@ -2474,6 +2499,8 @@ def render_building_view_brochure():
         tip.innerHTML='<div class="h">'+d.u+' &middot; '+d.ty+'</div>'+
           '<div>Floor '+d.fl+' &middot; <b style="color:'+sc+'">'+d.st+'</b></div>'+
           '<div class="p">'+d.pr+' <span style="font-weight:400;color:#6E6657">(AED '+d.pt+' / total sqft)</span></div>'+
+          (d.adj?('<div style="font-weight:700;color:'+(d.adj.charAt(0)==='+'?'#1a7f37':'#d1242f')+'">'
+                  +(d.adj.charAt(0)==='+'?'Appreciation ':'Discount ')+d.adj+'</div>'):'')+
           '<div class="a">Internal '+d.ai+' &middot; External '+d.ae+' &middot; Total '+d.at+' sqft</div>';
         tip.style.display='block';
         var x=e.clientX+16, y=e.clientY+16, tw2=tip.offsetWidth, th=tip.offsetHeight;
@@ -3275,6 +3302,104 @@ with tab4:
             # No st.rerun() — stay on this page; the user navigates when ready.
             st.success(f"✅ Saved per-unit changes to {done} unit(s). "
                        "Use the tabs above to navigate when ready.")
+
+    st.divider()
+    st.subheader("Appreciation / Discount")
+    st.caption("Select the units to work with, then set an **appreciation** (price up) or **discount** "
+               "(price down) **for each unit individually** in the grid — by **percentage** or a **total "
+               "AED amount** per row. Set a row to **None** to clear that unit. Apply updates the price in "
+               "the Register, Building View and portfolio totals (Floor-Wise Variance keeps the list price).")
+    adj_uids = st.multiselect("Units to adjust", df["uid"].tolist(),
+                              format_func=lambda u: uid_label(u, df), key="adj_units")
+    if adj_uids:
+        _sub = df[df["uid"].isin(adj_uids)].copy()
+        _sub["uid"] = pd.Categorical(_sub["uid"], categories=adj_uids, ordered=True)
+        _sub = _sub.sort_values("uid")
+        def _pre_dir(v):
+            v = pd.to_numeric(v, errors="coerce")
+            if pd.isna(v) or float(v) == 0:
+                return "None"
+            return "Appreciation" if float(v) > 0 else "Discount"
+        def _pre_val(v):
+            v = pd.to_numeric(v, errors="coerce")
+            return round(abs(float(v)), 2) if pd.notna(v) and float(v) != 0 else 0.0
+        grid = pd.DataFrame({
+            "Unit": _sub["Unit"].astype(str).values,
+            "Type": _sub["Type"].astype(str).values,
+            "Floor": _sub["Floor"].astype(str).values,
+            "List Price (AED)": _sub["Base_Price"].round(0).values,
+            "Adjustment": [_pre_dir(v) for v in _sub["Adj_Pct"].values],
+            "Basis": ["Percentage"] * len(_sub),
+            "Value": [_pre_val(v) for v in _sub["Adj_Pct"].values],
+            "uid": _sub["uid"].astype(str).values,
+        })
+        edited = st.data_editor(
+            grid, hide_index=True, use_container_width=True, key="adj_editor",
+            column_order=["Unit", "Type", "Floor", "List Price (AED)", "Adjustment", "Basis", "Value"],
+            disabled=["Unit", "Type", "Floor", "List Price (AED)"],
+            column_config={
+                "List Price (AED)": st.column_config.NumberColumn("List Price (AED)", format="AED %d"),
+                "Adjustment": st.column_config.SelectboxColumn(
+                    "Adjustment", options=["None", "Appreciation", "Discount"], required=True),
+                "Basis": st.column_config.SelectboxColumn(
+                    "Basis", options=["Percentage", "Amount (AED)"], required=True),
+                "Value": st.column_config.NumberColumn(
+                    "Value", min_value=0.0, format="%.2f",
+                    help="Per the Basis column: a percentage (e.g. 5 = 5%) OR a total AED amount"),
+            },
+        )
+        ap1, ap2 = st.columns(2)
+        if ap1.button(f"Apply to {len(adj_uids)} unit(s)", type="primary", key="btn_adj_apply"):
+            u = st.session_state.units
+            if "Adj_Pct" not in u.columns:
+                u["Adj_Pct"] = pd.NA
+            n_set = 0
+            for _, _row in edited.iterrows():
+                _ix = u.index[u["uid"] == _row["uid"]]
+                if not len(_ix):
+                    continue
+                _adj = str(_row["Adjustment"]); _val = float(_row["Value"] or 0)
+                if _adj == "None" or _val <= 0:
+                    u.at[_ix[0], "Adj_Pct"] = pd.NA
+                    continue
+                sign = 1.0 if _adj == "Appreciation" else -1.0
+                if str(_row["Basis"]) == "Percentage":
+                    _pct = sign * _val
+                else:                                      # total AED → % of that unit's LIST price
+                    _bp = float(df.loc[df["uid"] == _row["uid"], "Base_Price"].iloc[0])
+                    _pct = sign * (_val / _bp * 100.0) if _bp else 0.0
+                u.at[_ix[0], "Adj_Pct"] = round(_pct, 6); n_set += 1
+            st.session_state["flash"] = ("success",
+                f"Applied per-unit adjustments — {n_set} set / {len(adj_uids) - n_set} cleared.")
+            st.rerun()
+        if ap2.button("Clear adjustment for these units", key="btn_adj_remove"):
+            u = st.session_state.units
+            if "Adj_Pct" in u.columns:
+                u.loc[u["uid"].isin(adj_uids), "Adj_Pct"] = pd.NA
+            st.session_state["flash"] = ("success", f"Cleared adjustment for {len(adj_uids)} unit(s).")
+            st.rerun()
+
+    _adj_now = (df[pd.to_numeric(df["Adj_Pct"], errors="coerce").fillna(0) != 0].copy()
+                if "Adj_Pct" in df.columns else df.iloc[0:0])
+    if len(_adj_now):
+        _p = pd.to_numeric(_adj_now["Adj_Pct"], errors="coerce")
+        _cur = pd.DataFrame({
+            "Unit": _adj_now["Unit"].values, "Type": _adj_now["Type"].values,
+            "Floor": _adj_now["Floor"].values,
+            "List Price (AED)": _adj_now["Base_Price"].map(lambda v: f"AED {v:,.0f}").values,
+            "Appreciation / Discount": _p.map(lambda v: ("+" if v > 0 else "−") + f"{abs(v):.1f}%").values,
+            "Updated Price (AED)": _adj_now["Price"].map(lambda v: f"AED {v:,.0f}").values,
+        })
+        st.caption(f"**{len(_cur)} unit(s) currently adjusted** (green = appreciation, red = discount):")
+        def _c_adj(val):
+            s = str(val)
+            if s.startswith("+"):                          return "color:#1a7f37;font-weight:600"
+            if s.startswith("−") or s.startswith("-"):     return "color:#d1242f;font-weight:600"
+            return ""
+        st.dataframe(_cur.style.map(_c_adj, subset=["Appreciation / Discount"]),
+                     hide_index=True, use_container_width=True)
+    else:
+        st.caption("No units currently have an appreciation / discount applied.")
 
     st.divider()
     st.subheader("Remove Units")
