@@ -3309,7 +3309,8 @@ with tab4:
                "(price down) **for each unit individually** in the grid — by **percentage** or a **total "
                "AED amount** per row. Set a row to **None** to clear that unit. Apply updates the price in "
                "the Register, Building View and portfolio totals (Floor-Wise Variance keeps the list price).")
-    adj_uids = st.multiselect("Units to adjust", df["uid"].tolist(),
+    _adj_pool = df[df["Status"] == "Available"]["uid"].tolist()   # Sold units excluded
+    adj_uids = st.multiselect("Units to adjust (available units only)", _adj_pool,
                               format_func=lambda u: uid_label(u, df), key="adj_units")
     if adj_uids:
         st.caption("Set each unit's adjustment below, then press **Apply** — every row submits together. "
