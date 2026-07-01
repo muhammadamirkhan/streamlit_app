@@ -3312,67 +3312,60 @@ with tab4:
     adj_uids = st.multiselect("Units to adjust", df["uid"].tolist(),
                               format_func=lambda u: uid_label(u, df), key="adj_units")
     if adj_uids:
-        _sub = df[df["uid"].isin(adj_uids)].copy()
-        _sub["uid"] = pd.Categorical(_sub["uid"], categories=adj_uids, ordered=True)
-        _sub = _sub.sort_values("uid")
-        def _pre_dir(v):
-            v = pd.to_numeric(v, errors="coerce")
-            if pd.isna(v) or float(v) == 0:
-                return "None"
-            return "Appreciation" if float(v) > 0 else "Discount"
-        def _pre_val(v):
-            v = pd.to_numeric(v, errors="coerce")
-            return round(abs(float(v)), 2) if pd.notna(v) and float(v) != 0 else 0.0
-        grid = pd.DataFrame({
-            "Unit": _sub["Unit"].astype(str).values,
-            "Type": _sub["Type"].astype(str).values,
-            "Floor": _sub["Floor"].astype(str).values,
-            "List Price (AED)": _sub["Base_Price"].round(0).values,
-            "Adjustment": [_pre_dir(v) for v in _sub["Adj_Pct"].values],
-            "Basis": ["Percentage"] * len(_sub),
-            "Value": [_pre_val(v) for v in _sub["Adj_Pct"].values],
-            "uid": _sub["uid"].astype(str).values,
-        })
-        edited = st.data_editor(
-            grid, hide_index=True, use_container_width=True, key="adj_editor",
-            column_order=["Unit", "Type", "Floor", "List Price (AED)", "Adjustment", "Basis", "Value"],
-            disabled=["Unit", "Type", "Floor", "List Price (AED)"],
-            column_config={
-                "List Price (AED)": st.column_config.NumberColumn("List Price (AED)", format="AED %d"),
-                "Adjustment": st.column_config.SelectboxColumn(
-                    "Adjustment", options=["None", "Appreciation", "Discount"], required=True),
-                "Basis": st.column_config.SelectboxColumn(
-                    "Basis", options=["Percentage", "Amount (AED)"], required=True),
-                "Value": st.column_config.NumberColumn(
-                    "Value", min_value=0.0, format="%.2f",
-                    help="Per the Basis column: a percentage (e.g. 5 = 5%) OR a total AED amount"),
-            },
-        )
-        ap1, ap2 = st.columns(2)
-        if ap1.button(f"Apply to {len(adj_uids)} unit(s)", type="primary", key="btn_adj_apply"):
+        st.caption("Set each unit's adjustment below, then press **Apply** — every row submits together. "
+                   "Value = a percentage (e.g. 5 = 5%) or a total AED amount, per the **By** column; "
+                   "set **None** to clear a unit.")
+        with st.form("adj_form", clear_on_submit=False):
+            _hdr = st.columns([2.6, 1.4, 1.5, 1.2])
+            _hdr[0].markdown("**Unit**"); _hdr[1].markdown("**Adjustment**")
+            _hdr[2].markdown("**By**");   _hdr[3].markdown("**Value**")
+            _rows = []
+            for _uid in adj_uids:
+                _r = df[df["uid"] == _uid].iloc[0]
+                _cur = pd.to_numeric(_r.get("Adj_Pct"), errors="coerce")
+                _di = 0 if (pd.isna(_cur) or float(_cur) == 0) else (1 if float(_cur) > 0 else 2)
+                _c = st.columns([2.6, 1.4, 1.5, 1.2])
+                _c[0].markdown(
+                    f"**{_r['Unit']}** · {_r['Type']} · {_r['Floor']}  \n"
+                    f"<span style='color:#8a8a8a;font-size:0.85em'>List AED {float(_r['Base_Price']):,.0f}</span>",
+                    unsafe_allow_html=True)
+                _adj = _c[1].selectbox("Adjustment", ["None", "Appreciation", "Discount"], index=_di,
+                                       key=f"adj_dir_{_uid}", label_visibility="collapsed")
+                _basis = _c[2].selectbox("By", ["Percentage", "Amount (AED)"],
+                                         key=f"adj_basis_{_uid}", label_visibility="collapsed")
+                _val = _c[3].number_input("Value", min_value=0.0, step=1.0,
+                                          value=(abs(float(_cur)) if pd.notna(_cur) and float(_cur) != 0 else 0.0),
+                                          key=f"adj_val_{_uid}", label_visibility="collapsed")
+                _rows.append((_uid, _adj, _basis, _val))
+            _b1, _b2 = st.columns(2)
+            _do_apply = _b1.form_submit_button(f"Apply to {len(adj_uids)} unit(s)", type="primary",
+                                               use_container_width=True)
+            _do_clear = _b2.form_submit_button("Clear adjustment for these units",
+                                               use_container_width=True)
+        if _do_apply:
             u = st.session_state.units
             if "Adj_Pct" not in u.columns:
                 u["Adj_Pct"] = pd.NA
             n_set = 0
-            for _, _row in edited.iterrows():
-                _ix = u.index[u["uid"] == _row["uid"]]
+            for _uid, _adj, _basis, _val in _rows:
+                _ix = u.index[u["uid"] == _uid]
                 if not len(_ix):
                     continue
-                _adj = str(_row["Adjustment"]); _val = float(_row["Value"] or 0)
+                _val = float(_val or 0)
                 if _adj == "None" or _val <= 0:
                     u.at[_ix[0], "Adj_Pct"] = pd.NA
                     continue
                 sign = 1.0 if _adj == "Appreciation" else -1.0
-                if str(_row["Basis"]) == "Percentage":
+                if _basis == "Percentage":
                     _pct = sign * _val
                 else:                                      # total AED → % of that unit's LIST price
-                    _bp = float(df.loc[df["uid"] == _row["uid"], "Base_Price"].iloc[0])
+                    _bp = float(df.loc[df["uid"] == _uid, "Base_Price"].iloc[0])
                     _pct = sign * (_val / _bp * 100.0) if _bp else 0.0
                 u.at[_ix[0], "Adj_Pct"] = round(_pct, 6); n_set += 1
             st.session_state["flash"] = ("success",
                 f"Applied per-unit adjustments — {n_set} set / {len(adj_uids) - n_set} cleared.")
             st.rerun()
-        if ap2.button("Clear adjustment for these units", key="btn_adj_remove"):
+        if _do_clear:
             u = st.session_state.units
             if "Adj_Pct" in u.columns:
                 u.loc[u["uid"].isin(adj_uids), "Adj_Pct"] = pd.NA
