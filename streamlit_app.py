@@ -1530,8 +1530,8 @@ with tab1:
         "Internal Value (AED)": view["Int_Value"].map(_money).values,
         "Terrace Value (AED)": view["Terr_Value"].map(_money).values,
         "List Price (AED)": view["Base_Price"].map(_money).values,
-        "Total Price (AED)": view["Price"].map(_money).values,
         "Appreciation / Discount": view["Adj_Pct"].map(_adjpct).values,
+        "Final Price (AED)": view["Price"].map(_money).values,
         "Escalation vs below (/sqft)": view["Esc_row"].map(_money).values,
         "Floor Wise Variance (AED)": view["Var_row"].map(_money).values,
         "Comment": view["Comment"].fillna("").astype(str).values,
@@ -1557,7 +1557,7 @@ with tab1:
         _reg_raw = {
             "Price/Sellable sqft": view["Price_sqft"], "Price/Total sqft": view["PSF_total"],
             "Internal Value (AED)": view["Int_Value"], "Terrace Value (AED)": view["Terr_Value"],
-            "List Price (AED)": view["Base_Price"], "Total Price (AED)": view["Price"],
+            "List Price (AED)": view["Base_Price"], "Final Price (AED)": view["Price"],
             "Escalation vs below (/sqft)": view["Esc_row"],
             "Floor Wise Variance (AED)": view["Var_row"],
         }
