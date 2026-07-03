@@ -3,11 +3,16 @@ import streamlit.components.v1 as components
 import pandas as pd
 import os
 import json
+import hashlib
 import datetime as _dtm
 import requests
 from io import BytesIO
 
 st.set_page_config(page_title="Muraba Veil – Unit Manager", layout="wide", page_icon="🏙️")
+
+# Hide Streamlit's "Press Enter to submit form" / "Press Enter to apply" hint under inputs.
+st.markdown('<style>[data-testid="InputInstructions"]{display:none!important;}</style>',
+            unsafe_allow_html=True)
 
 # ── Password gate ──────────────────────────────────────────────────────────────
 def _check_password() -> bool:
@@ -191,16 +196,37 @@ def sb_list_versions(_nonce=0):
     except Exception:
         return []
 
-def sb_save_version(name, state):
-    """Upsert a named snapshot (overwrites if the name already exists)."""
+def _pwd_hash(pw):
+    return hashlib.sha256((pw or "").encode("utf-8")).hexdigest()
+
+def sb_save_version(name, state, password):
+    """Upsert a named snapshot with its own password (SHA-256 hash). Overwrites if name exists."""
     u, k = _sb_cfg()
     if not (u and k):
         raise RuntimeError("Supabase is not configured.")
-    body = {"name": name, "state": state, "updated_at": _dtm.datetime.now(_dtm.timezone.utc).isoformat()}
+    body = {"name": name, "state": state, "password": _pwd_hash(password),
+            "updated_at": _dtm.datetime.now(_dtm.timezone.utc).isoformat()}
     h = _sb_headers(k); h["Prefer"] = "resolution=merge-duplicates,return=minimal"
     r = requests.post(_sb_endpoint(), headers=h, params={"on_conflict": "name"},
                       data=json.dumps(body), timeout=15)
     r.raise_for_status()
+
+def sb_password_of(name):
+    """Stored password HASH for a version name; None if the version doesn't exist,
+    '' if the row exists with no password set."""
+    u, k = _sb_cfg()
+    if not (u and k):
+        return None
+    try:
+        r = requests.get(_sb_endpoint(), headers=_sb_headers(k),
+                         params={"select": "password", "name": f"eq.{name}", "limit": "1"}, timeout=15)
+        r.raise_for_status()
+        data = r.json()
+    except Exception:
+        return None
+    if not data:
+        return None
+    return data[0].get("password") or ""
 
 def sb_load_version(name):
     """The stored state dict for `name`, or None."""
@@ -457,10 +483,23 @@ def column_picker(all_cols, key, locked=None, hidden_default=None):
     hidden_default = hidden_default or []
     selectable = [c for c in all_cols if c not in locked]
     default = [c for c in selectable if c not in hidden_default]
+    # Auto-reveal columns that appear AFTER a saved selection was made, so newly added table columns
+    # are never hidden by stale widget state (it persists within a session / across hot-reloads).
+    _seen_key = f"{key}__seen"
+    if key in st.session_state:
+        _seen = st.session_state.get(_seen_key, [])
+        _fresh = [c for c in selectable if c not in _seen and c not in hidden_default]
+        if _fresh:
+            _cur_sel = [c for c in st.session_state[key] if c in selectable]
+            st.session_state[key] = _cur_sel + [c for c in _fresh if c not in _cur_sel]
+    st.session_state[_seen_key] = selectable
     with st.popover("🔧 Columns", use_container_width=False):
         st.caption("Tick to show, untick to hide. Key columns are always shown.")
-        chosen = st.multiselect("Columns", selectable, default=default,
-                                key=key, label_visibility="collapsed")
+        if key in st.session_state:
+            chosen = st.multiselect("Columns", selectable, key=key, label_visibility="collapsed")
+        else:
+            chosen = st.multiselect("Columns", selectable, default=default,
+                                    key=key, label_visibility="collapsed")
     return [c for c in all_cols if c in locked or c in chosen]
 
 
@@ -1064,6 +1103,46 @@ def insert_floors_between(N, count, ordered_types, params):
     st.session_state.floors.sort(key=lambda x: x["floor"])
     return new_nums, remap
 
+def insert_duplex_between(N, dup_types, params):
+    """Insert ONE duplex (2 levels) starting at N: residential floors >= N shift UP by 2 non-MEP
+    levels (MEP/Majlis fixed, top MEP floats under the penthouse), then the duplex is added on N —
+    it owns N+1. Same cascade math as insert_floors_between, but two levels for one duplex unit.
+    Returns (new_floor, remap)."""
+    blk = st.session_state.blocked
+    top_mep = max(blk) if blk else None
+    fixed = (set(blk.keys()) - ({top_mep} if top_mep is not None else set())) | {2}
+    u = st.session_state.units
+    ufn = pd.to_numeric(u["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True), errors="coerce")
+    res_floors = sorted({int(f) for f in ufn.dropna().astype(int).tolist() if int(f) not in fixed
+                         and int(f) != top_mep})
+    affected = [f for f in res_floors if f >= N]
+
+    def kth_above(f, k):
+        x = f
+        while k > 0:
+            x += 1
+            if x not in fixed:
+                k -= 1
+        return x
+
+    remap = {f: kth_above(f, 2) for f in affected}            # everything at/above N slides up 2 levels
+    if top_mep is not None and affected:
+        pent = max(remap.values()); new_mep = pent - 2
+        new_res = set(remap.values()) | {f for f in res_floors if f not in affected}
+        while new_mep in new_res and new_mep > 1:
+            new_mep -= 1
+        if new_mep != top_mep:
+            remap[top_mep] = new_mep
+    _apply_floor_remap(remap)
+
+    nos = gen_unit_nos(N, dup_types)                          # add_units sets Dup_Up=True for a Duplex
+    new_units = [{"unit_no": no, "type": t, "rate": new_unit_rate(t, N, st.session_state.units, params)}
+                 for no, t in zip(nos, dup_types)]
+    add_units_to_register(new_units, N, params)
+    st.session_state.floors.append({"floor": N, "kind": "Inserted", "levels": 2, "units": new_units})
+    st.session_state.floors.sort(key=lambda x: x["floor"])
+    return N, remap
+
 def remove_floors_between(From, To):
     """Remove all residential floors in [From, To]. The residential floors above shift DOWN by
     `count` non-MEP levels. **All MEP / Majlis floors stay fixed EXCEPT the top one** (default 67),
@@ -1284,90 +1363,137 @@ with st.sidebar:
         st.rerun()
 
     st.divider()
-    st.caption("**Base Versions** — save the current state under a name, or load any saved version. "
-               "Stored in the cloud database (Supabase), so they persist across restarts and "
-               "redeploys. Each Save / Load asks for the app password.")
+    st.caption("**Base Versions** — save the current state under a name **with its own password**. "
+               "Loading or removing a version requires **that version's password**. Stored in the cloud "
+               "database (Supabase), so they persist across restarts.")
     _app_pwd = st.secrets.get("password", os.environ.get("APP_PASSWORD", "muraba2026"))
+
+    def _pw_ok(_name, _entered):
+        """True if `_entered` matches the version's stored password. Any version saved without a
+        password (legacy) falls back to the app password."""
+        _h = sb_password_of(_name)
+        if _h is None:
+            return False                                  # version no longer exists
+        if not _h:
+            return _entered == _app_pwd                   # legacy row → app password
+        return _pwd_hash(_entered) == _h
 
     if not sb_enabled():
         st.info("Base versions need Supabase configured — add `supabase_url` and `supabase_key` "
                 "to the app secrets.")
     else:
-        # ── Save Base Version → app password, then a name ──
+        # ── Save → name + a password (overwriting a name needs its current password) ──
         if st.button("📌  Save Base Version", use_container_width=True, key="bv_save_btn"):
             st.session_state["bv_save_prompt"] = True
             st.session_state["bv_load_prompt"] = False
-            st.session_state.pop("bv_save_pwd", None)
-            st.session_state.pop("bv_save_name", None)
+            st.session_state["bv_rem_prompt"] = False
+            for _k in ("bv_save_name", "bv_save_pwd", "bv_save_pwd2"):
+                st.session_state.pop(_k, None)
         if st.session_state.get("bv_save_prompt"):
-            _sp = st.text_input("App password", type="password", key="bv_save_pwd")
             _sname = st.text_input("Name this base version", key="bv_save_name",
                                    placeholder="e.g. Pre-launch · Mar 2026")
-            st.caption("Saving under an existing name overwrites that version.")
+            _sp = st.text_input("Set a password for this version", type="password", key="bv_save_pwd")
+            _existing = [n for n, _ in sb_list_versions(st.session_state.get("nv_nonce", 0))]
+            _is_overwrite = _sname.strip() in _existing
+            if _is_overwrite:
+                st.warning(f"“{_sname.strip()}” exists — enter its **current** password to overwrite.")
+                st.text_input("Current password (to overwrite)", type="password", key="bv_save_pwd2")
             _sc1, _sc2 = st.columns(2)
             if _sc1.button("Confirm Save", use_container_width=True, key="bv_save_ok",
-                           disabled=not _sname.strip()):
-                if _sp != _app_pwd:
-                    st.error("Incorrect password.")
+                           disabled=(not _sname.strip() or not _sp)):
+                if _is_overwrite and not _pw_ok(_sname.strip(), st.session_state.get("bv_save_pwd2", "")):
+                    st.error("Wrong current password — cannot overwrite this version.")
                 else:
                     try:
-                        sb_save_version(_sname.strip(), _state_dict())
+                        sb_save_version(_sname.strip(), _state_dict(), _sp)
                         st.session_state["nv_nonce"] = st.session_state.get("nv_nonce", 0) + 1
                         st.session_state["bv_save_prompt"] = False
-                        st.session_state.pop("bv_save_pwd", None)
-                        st.session_state.pop("bv_save_name", None)
+                        for _k in ("bv_save_name", "bv_save_pwd", "bv_save_pwd2"):
+                            st.session_state.pop(_k, None)
                         st.session_state["flash"] = ("success", f"📌 Saved base version “{_sname.strip()}”.")
                         st.rerun()
                     except Exception as _e:
                         st.error(f"Save failed: {_e}")
             if _sc2.button("Cancel", use_container_width=True, key="bv_save_cancel"):
                 st.session_state["bv_save_prompt"] = False
-                st.session_state.pop("bv_save_pwd", None)
-                st.session_state.pop("bv_save_name", None)
+                for _k in ("bv_save_name", "bv_save_pwd", "bv_save_pwd2"):
+                    st.session_state.pop(_k, None)
                 st.rerun()
 
-        # ── Load Base Version → app password, then pick from the list, then confirm ──
+        # ── Load → pick a version, then enter that version's password ──
         if st.button("📥  Load Base Version", use_container_width=True, key="bv_load_btn"):
             st.session_state["bv_load_prompt"] = True
             st.session_state["bv_save_prompt"] = False
+            st.session_state["bv_rem_prompt"] = False
             st.session_state.pop("bv_load_pwd", None)
         if st.session_state.get("bv_load_prompt"):
-            _lp = st.text_input("App password", type="password", key="bv_load_pwd")
             _names = [n for n, _ in sb_list_versions(st.session_state.get("nv_nonce", 0))]
-            _sel = st.selectbox("Choose a base version to load", _names, key="bv_load_select") if _names else None
             if not _names:
                 st.caption("No base versions saved yet.")
-            _lc1, _lc2 = st.columns(2)
-            if _lc1.button("✅  Confirm Load", use_container_width=True, key="bv_load_ok",
-                           disabled=not _names):
-                if _lp != _app_pwd:
-                    st.error("Incorrect password.")
-                else:
-                    try:
-                        _state = sb_load_version(_sel)
-                    except Exception as _e:
-                        _state = None
-                        st.error(f"Load failed: {_e}")
-                    if _state:
-                        _u, _fl, _fp, _ctr, _blk = _parse_state(_state)
-                        st.session_state.units = _u
-                        st.session_state.floors = _fl
-                        st.session_state.fm_params = _fp
-                        st.session_state.uid_counter = _ctr
-                        st.session_state.blocked = _blk if _blk else load_blocked_floors()
-                        normalize_mep_layout()
-                        st.session_state["bv_load_prompt"] = False
-                        st.session_state.pop("bv_load_pwd", None)
-                        st.session_state["flash"] = ("success", f"📥 Loaded base version “{_sel}”.")
-                        st.rerun()
-                    elif _lp == _app_pwd:
-                        st.error("That version could not be found.")
-            if _lc2.button("Cancel", use_container_width=True, key="bv_load_cancel"):
-                st.session_state["bv_load_prompt"] = False
-                st.session_state.pop("bv_load_pwd", None)
-                st.rerun()
-            if _sel:
-                st.caption(f"Will load: **{_sel}**")
+            else:
+                _sel = st.selectbox("Choose a base version to load", _names, key="bv_load_select")
+                _lp = st.text_input(f"Password for “{_sel}”", type="password", key="bv_load_pwd")
+                _lc1, _lc2 = st.columns(2)
+                if _lc1.button("✅  Confirm Load", use_container_width=True, key="bv_load_ok"):
+                    if not _pw_ok(_sel, _lp):
+                        st.error("Wrong password for this version.")
+                    else:
+                        try:
+                            _state = sb_load_version(_sel)
+                        except Exception as _e:
+                            _state = None
+                            st.error(f"Load failed: {_e}")
+                        if _state:
+                            _u, _fl, _fp, _ctr, _blk = _parse_state(_state)
+                            st.session_state.units = _u
+                            st.session_state.floors = _fl
+                            st.session_state.fm_params = _fp
+                            st.session_state.uid_counter = _ctr
+                            st.session_state.blocked = _blk if _blk else load_blocked_floors()
+                            normalize_mep_layout()
+                            st.session_state["bv_load_prompt"] = False
+                            st.session_state.pop("bv_load_pwd", None)
+                            st.session_state["flash"] = ("success", f"📥 Loaded base version “{_sel}”.")
+                            st.rerun()
+                        else:
+                            st.error("That version could not be found.")
+                if _lc2.button("Cancel", use_container_width=True, key="bv_load_cancel"):
+                    st.session_state["bv_load_prompt"] = False
+                    st.session_state.pop("bv_load_pwd", None)
+                    st.rerun()
+
+        # ── Remove → pick a version, then enter that version's password ──
+        if st.button("🗑️  Remove Base Version", use_container_width=True, key="bv_rem_btn"):
+            st.session_state["bv_rem_prompt"] = True
+            st.session_state["bv_save_prompt"] = False
+            st.session_state["bv_load_prompt"] = False
+            st.session_state.pop("bv_rem_pwd", None)
+        if st.session_state.get("bv_rem_prompt"):
+            _names = [n for n, _ in sb_list_versions(st.session_state.get("nv_nonce", 0))]
+            if not _names:
+                st.caption("No base versions saved yet.")
+            else:
+                _rsel = st.selectbox("Choose a base version to remove", _names, key="bv_rem_select")
+                _rp = st.text_input(f"Password for “{_rsel}”", type="password", key="bv_rem_pwd")
+                st.caption("⚠️ Removal is permanent.")
+                _rc1, _rc2 = st.columns(2)
+                if _rc1.button("🗑️  Confirm Remove", use_container_width=True, key="bv_rem_ok"):
+                    if not _pw_ok(_rsel, _rp):
+                        st.error("Wrong password for this version.")
+                    else:
+                        try:
+                            sb_delete_version(_rsel)
+                            st.session_state["nv_nonce"] = st.session_state.get("nv_nonce", 0) + 1
+                            st.session_state["bv_rem_prompt"] = False
+                            st.session_state.pop("bv_rem_pwd", None)
+                            st.session_state["flash"] = ("success", f"🗑️ Removed base version “{_rsel}”.")
+                            st.rerun()
+                        except Exception as _e:
+                            st.error(f"Remove failed: {_e}")
+                if _rc2.button("Cancel", use_container_width=True, key="bv_rem_cancel"):
+                    st.session_state["bv_rem_prompt"] = False
+                    st.session_state.pop("bv_rem_pwd", None)
+                    st.rerun()
 
     st.divider()
     st.caption("Add / edit / remove floors in the **Floor Manager** tab. Changes show everywhere "
@@ -1503,6 +1629,7 @@ with tab1:
     view["Esc_row"]    = view["uid"].map(esc_map)
     view["Var_row"]    = view["uid"].map(var_map)
     view.loc[view["Status"] == "Sold", "Var_row"] = pd.NA   # Floor Wise Variance blank for Sold units
+    view["Adj_AED"]    = view["Price"] - view["Base_Price"]  # appreciation(+)/discount(-) in AED
 
     if "Comment" not in view.columns:
         view["Comment"] = ""
@@ -1514,6 +1641,11 @@ with tab1:
         if pd.isna(v) or round(float(v), 4) == 0:
             return ""
         return ("+" if v > 0 else "−") + f"{abs(float(v)):.1f}%"
+    def _adjaed(v):                                    # signed AED delta for appreciation/discount; blank if none
+        v = pd.to_numeric(v, errors="coerce")
+        if pd.isna(v) or round(float(v), 2) == 0:
+            return ""
+        return ("+" if v > 0 else "−") + f"AED {abs(float(v)):,.0f}"
 
     # Pre-format every value to a string so the look matches; Comment stays editable.
     disp = pd.DataFrame({
@@ -1531,6 +1663,7 @@ with tab1:
         "Terrace Value (AED)": view["Terr_Value"].map(_money).values,
         "List Price (AED)": view["Base_Price"].map(_money).values,
         "Appreciation / Discount": view["Adj_Pct"].map(_adjpct).values,
+        "Appreciation / Discount (AED)": view["Adj_AED"].map(_adjaed).values,
         "Final Price (AED)": view["Price"].map(_money).values,
         "Escalation vs below (/sqft)": view["Esc_row"].map(_money).values,
         "Floor Wise Variance (AED)": view["Var_row"].map(_money).values,
@@ -1558,6 +1691,7 @@ with tab1:
             "Price/Sellable sqft": view["Price_sqft"], "Price/Total sqft": view["PSF_total"],
             "Internal Value (AED)": view["Int_Value"], "Terrace Value (AED)": view["Terr_Value"],
             "List Price (AED)": view["Base_Price"], "Final Price (AED)": view["Price"],
+            "Appreciation / Discount (AED)": view["Adj_AED"],
             "Escalation vs below (/sqft)": view["Esc_row"],
             "Floor Wise Variance (AED)": view["Var_row"],
         }
@@ -1575,8 +1709,9 @@ with tab1:
         _ml = int(vis["Comment"].astype(str).map(len).max())
         _colcfg = {"Comment": st.column_config.TextColumn("Comment", width=max(180, min(720, _ml * 7 + 24)))}
     _sty = vis.style.apply(_hl_sold, axis=1)
-    if "Appreciation / Discount" in vis.columns:
-        _sty = _sty.map(_color_adj, subset=["Appreciation / Discount"])
+    _adj_cols = [c for c in ("Appreciation / Discount", "Appreciation / Discount (AED)") if c in vis.columns]
+    if _adj_cols:
+        _sty = _sty.map(_color_adj, subset=_adj_cols)
     st.dataframe(_sty, use_container_width=True,
                  hide_index=True, height=460, column_config=_colcfg)
     st.caption(f"Showing {len(view)} of {len(df)} units · Sold units highlighted in blue · "
@@ -2785,178 +2920,89 @@ with tab3:
 
     st.divider()
     action = st.radio("Action",
-                      ["Add a New Floor", "Insert a Floor (between)", "Remove Floor(s)", "Edit a Floor"],
+                      ["Add a New Floor", "Remove Floor(s)", "Edit a Floor"],
                       horizontal=True, key="fm_action")
     st.divider()
 
     # ─────────────────────── ADD A NEW FLOOR ──────────────────────────────────
     if action == "Add a New Floor":
-        st.subheader("Add New Floor(s)")
-        st.caption("Pick a floor range (set **From = To** for a single floor) and one unit mix — the "
-                   "**same mix** is added to every floor in the range. Units are priced from the escalation "
-                   "ladder for their floor (built bottom-up). Blocked / existing floors are skipped.")
-        st.caption("🔼 A **Duplex** is one unit that occupies the floor you add it on **plus the floor above** "
-                   "(the roof shifts up automatically) — so add a duplex on a **single floor**; it counts as "
-                   "**1 unit** even though it shows as two levels in the Building View.")
-        existing = [fl["floor"] for fl in floors]
-        # an ADDED (upward) duplex physically occupies its floor + the one ABOVE, so that upper
-        # level is taken too and must not be offered as a new floor
-        u_all = st.session_state.units
-        dup_up_tops = set()
-        if "Dup_Up" in u_all.columns:
-            u_fn = pd.to_numeric(u_all["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True),
-                                 errors="coerce")
-            upmask = (u_all["Type"].astype(str).str.contains("Duplex") &
-                      u_all["Dup_Up"].apply(lambda v: pd.notna(v) and bool(v)))
-            dup_up_tops = set((u_fn[upmask].dropna().astype(int) + 1).tolist())
-        occupied = set(existing) | dup_up_tops
+        st.subheader("Add / Insert Floor(s)")
+        st.caption("Pick a floor (or a **From → To** range) and a unit mix — the app **inserts** brand-new "
+                   "floor(s) there and pushes **everything above up** (floor **and** unit numbers renumber) "
+                   "while **MEP / Majlis floors keep their fixed numbers** (residential renumbers around them; "
+                   "the roof rides up; moved units keep their prices). New floors are priced off the "
+                   "escalation ladder.")
+        st.caption("🔼 A **Duplex** is one unit occupying the floor you add it on **plus the floor above** "
+                   "(inserted as two levels; the *To floor* is ignored). It counts as **1 unit**.")
+        res_floors_now = sorted({fl["floor"] for fl in floors
+                                 if fl["floor"] not in blocked and fl["floor"] != 2})
+        _default_from = int(res_floors_now[0]) if res_floors_now else 3
         ac1, ac2 = st.columns(2)
-        nf_from = ac1.number_input("From floor", min_value=1, max_value=999,
-                                   value=(max(occupied)+1 if occupied else 59), step=1, key="newfl_from")
+        nf_from = ac1.number_input("From floor (insert starting here)", min_value=1, max_value=999,
+                                   value=_default_from, step=1, key="newfl_from")
         nf_to = ac2.number_input("To floor", min_value=1, max_value=999,
                                  value=int(nf_from), step=1, key="newfl_to")
         lo, hi = int(min(nf_from, nf_to)), int(max(nf_from, nf_to))
 
-        st.markdown("**Unit mix** — pick topology and use **− / +** to set quantity (applied to each floor):")
+        st.markdown("**Unit mix for each new floor** — pick topology and use **− / +** to set quantity:")
         mix = unit_mix_builder("addmix", [{"type": "3 Bedroom", "qty": 1}, {"type": "2 Bedroom", "qty": 2}])
         mix = [(t, (1 if "Duplex" in t else q)) for t, q in mix]      # a duplex is always 1 unit per floor
         has_duplex = any(("Duplex" in t) and q > 0 for t, q in mix)
+        ordered = []
+        for t, q in mix:
+            ordered += [t] * q
+        ordered.sort(key=lambda t: (t != "3 Bedroom", t))
+        n_above = len([f for f in res_floors_now if f >= lo])
 
         if has_duplex:
-            # a duplex ALWAYS occupies From + (From+1) as a single unit — the "To floor" is ignored
-            base, upper = lo, lo + 1
-            st.info(f"🔼 Duplex selected → it will occupy **{ordinal(base)}–{ordinal(upper)}** as **one** unit "
-                    f"(the *To floor* is ignored; a duplex is always exactly two levels, max one per floor).")
-            conflict = [f for f in (base, upper) if f in blocked or f in occupied]
-            if conflict:
-                st.error("Cannot place the duplex — these level(s) are blocked or already occupied: "
-                         + ", ".join(ordinal(f) for f in conflict))
-                place_floors = []
-            else:
-                place_floors = [base]                    # one record floor; the upper level is auto-reserved
-            total_units = sum(q for _, q in mix)
-            approx = sum(unit_val(t, new_unit_rate(t, base, st.session_state.units, params), params)["total"] * q
-                         for t, q in mix)
+            count = 1
+            st.info(f"🔼 Duplex → inserts **one** duplex at {ordinal(lo)} occupying "
+                    f"**{ordinal(lo)}–{ordinal(lo+1)}** (the *To floor* is ignored).")
+            approx = sum(unit_val(t, new_unit_rate(t, lo, st.session_state.units, params), params)["total"]
+                         for t in ordered)
+            total_units = len(ordered)
             m1, m2, m3 = st.columns(3)
-            m1.metric("Levels occupied", f"{base}–{upper}" if place_floors else "—")
+            m1.metric("Levels inserted", 2)
             m2.metric("Units to add", total_units)
             m3.metric("Added value (≈)", aed(approx))
-            add_label = f"Add Duplex on {ordinal(base)} (occupies {ordinal(base)}–{ordinal(upper)})"
+            add_label = f"Insert Duplex at {ordinal(lo)} (occupies {ordinal(lo)}–{ordinal(lo+1)})"
         else:
-            rng = list(range(lo, hi + 1))
-            place_floors = [f for f in rng if f not in blocked and f not in occupied]
-            skip_block   = [f for f in rng if f in blocked]
-            skip_exists  = [f for f in rng if f in occupied]
-            if skip_block:
-                st.warning("Skipping blocked (MEP/Majlis): " + ", ".join(ordinal(f) for f in skip_block))
-            if skip_exists:
-                st.warning("Skipping floors already occupied (incl. the upper level of a duplex): "
-                           + ", ".join(ordinal(f) for f in skip_exists))
-            if not place_floors:
-                st.error("No valid floors in this range (all are blocked or already occupied).")
+            count = hi - lo + 1
             per_floor = sum(q for _, q in mix)
-            total_units = per_floor * len(place_floors)
-            approx = 0.0
-            for f in place_floors:
-                for t, q in mix:
-                    approx += unit_val(t, new_unit_rate(t, f, st.session_state.units, params), params)["total"] * q
+            total_units = per_floor * count
+            approx = count * sum(
+                unit_val(t, new_unit_rate(t, lo, st.session_state.units, params), params)["total"] * q
+                for t, q in mix)
             m1, m2, m3 = st.columns(3)
-            m1.metric("Floors to add", len(place_floors))
+            m1.metric("Floors to insert", count)
             m2.metric("Units to add", total_units)
             m3.metric("Added value (≈)", aed(approx))
-            if place_floors:
-                st.caption(f"Floors to add: {', '.join(ordinal(f) for f in place_floors)}")
-            add_label = ((f"Add Floor {ordinal(place_floors[0])}" if len(place_floors) == 1
-                          else f"Add {len(place_floors)} floors "
-                               f"({ordinal(min(place_floors))}–{ordinal(max(place_floors))})")
-                         if place_floors else "Add")
+            add_label = (f"Insert {count} floor(s) at {ordinal(lo)}" if count > 1
+                         else f"Insert 1 floor at {ordinal(lo)}")
+        st.caption(f"⚠️ This inserts and renumbers **{n_above}** residential floor(s) at/above {ordinal(lo)} "
+                   f"(MEP / Majlis floors unchanged). Use Reload / a Base Version to undo.")
 
-        can_add = len(place_floors) > 0 and sum(q for _, q in mix) > 0
+        can_add = len(ordered) > 0
         if st.button(add_label, type="primary", key="btn_addfl", disabled=not can_add):
             try:
-                ordered = []
-                for t, q in mix:
-                    ordered += [t] * q
-                ordered.sort(key=lambda t: (t != "3 Bedroom", t))
-                for f in place_floors:                    # ascending → each floor escalates off the one below
-                    nos = gen_unit_nos(f, ordered)
-                    new_units = [{"unit_no": no, "type": t,
-                                  "rate": new_unit_rate(t, f, st.session_state.units, params)}
-                                 for no, t in zip(nos, ordered)]
-                    add_units_to_register(new_units, f, params)
-                    st.session_state.floors.append({"floor": f, "kind": "Added",
-                                                    "levels": max(TYPE_DEFAULTS[t]["levels"] for t in ordered),
-                                                    "units": new_units})
-                st.session_state.floors.sort(key=lambda x: x["floor"])
+                if has_duplex:
+                    new_floor, remap = insert_duplex_between(int(lo), ordered, params)
+                    _msg = (f"✅ Inserted a duplex at {ordinal(new_floor)} "
+                            f"(occupies {ordinal(new_floor)}–{ordinal(new_floor+1)}); "
+                            f"{len(remap)} floor(s) above renumbered. MEP / Majlis unchanged.")
+                else:
+                    new_nums, remap = insert_floors_between(int(lo), int(count), ordered, params)
+                    _msg = (f"✅ Inserted {len(new_nums)} floor(s) at "
+                            f"{', '.join(ordinal(n) for n in new_nums)}; "
+                            f"{len(remap)} floor(s) above renumbered. MEP / Majlis unchanged.")
                 st.session_state.pop("_mep_normalized", None)   # re-clean the whole tower next run
                 clear_builder("addmix")
                 for _k in ("newfl_from", "newfl_to"):
                     st.session_state.pop(_k, None)
-                st.session_state["flash"] = ("success",
-                    f"✅ Added {len(place_floors)} floor record(s), {total_units} unit(s).")
+                st.session_state["flash"] = ("success", _msg)
             except Exception as e:
                 st.session_state["flash"] = ("error", f"❌ Could not add floors: {e}")
             st.rerun()
-
-    # ─────────────────────── INSERT FLOOR(S) (BETWEEN) ─────────────────────────
-    elif action == "Insert a Floor (between)":
-        st.subheader("Insert Floor(s) in between")
-        st.caption("Insert **one or more** brand-new floors starting at a chosen level. Those floors and "
-                   "**everything above them move up** — floor numbers **and** unit numbers are renumbered — "
-                   "while **MEP / Majlis floors keep their fixed numbers** (residential renumbers around "
-                   "them). The roof rides up; moved units keep their prices; new floors are priced from "
-                   "the escalation ladder.")
-        res_floors = sorted({fl["floor"] for fl in floors
-                             if fl["floor"] not in blocked and fl["floor"] != 2})
-        if not res_floors:
-            st.info("No residential floors to insert between.")
-        else:
-            ic1, ic2 = st.columns(2)
-            ins_from = ic1.selectbox("Insert starting at level", res_floors,
-                                     format_func=lambda f: f"{ordinal(f)}", key="ins_from")
-            n_floors = ic2.number_input("How many floors to insert", min_value=1, max_value=50,
-                                        value=1, step=1, key="ins_count")
-            st.markdown("**Unit mix for each new floor** — the same mix is applied to every inserted floor:")
-            imix = unit_mix_builder("insmix", [{"type": "2 Bedroom", "qty": 2}, {"type": "3 Bedroom", "qty": 1}])
-            has_dup = any(("Duplex" in t) and q > 0 for t, q in imix)
-            per = sum(q for _, q in imix)
-            # the actual new floor numbers (skipping any MEP/Majlis levels in the way)
-            _fixed = set(blocked) | {2}
-            _slots, _x = [], int(ins_from)
-            while len(_slots) < int(n_floors):
-                while _x in _fixed:
-                    _x += 1
-                _slots.append(_x); _x += 1
-            if has_dup:
-                st.error("Duplex units can't be inserted in between (a duplex occupies two levels). "
-                         "Add duplexes from **Add a New Floor** instead.")
-            m1, m2, m3 = st.columns(3)
-            m1.metric("New floors", int(n_floors))
-            m2.metric("Units to add", per * int(n_floors))
-            m3.metric("New floor levels",
-                      ", ".join(ordinal(s) for s in _slots[:5]) + ("…" if len(_slots) > 5 else ""))
-            n_above = len([f for f in res_floors if f >= int(ins_from)])
-            st.caption(f"⚠️ This renumbers **{n_above}** residential floor(s) at/above {ordinal(ins_from)} "
-                       f"(+{int(n_floors)} level(s), skipping MEP/Majlis). MEP / Majlis floors are unchanged.")
-            can_ins = (per > 0) and (not has_dup)
-            if st.button(f"Insert {int(n_floors)} floor(s) at {ordinal(ins_from)}", type="primary",
-                         key="btn_insfl", disabled=not can_ins):
-                try:
-                    ordered = []
-                    for t, q in imix:
-                        ordered += [t] * q
-                    ordered.sort(key=lambda t: (t != "3 Bedroom", t))
-                    new_nums, remap = insert_floors_between(int(ins_from), int(n_floors), ordered, params)
-                    st.session_state.pop("_mep_normalized", None)   # re-clean the whole tower next run
-                    clear_builder("insmix")
-                    for _k in ("ins_from", "ins_count"):
-                        st.session_state.pop(_k, None)
-                    st.session_state["flash"] = ("success",
-                        f"✅ Inserted {len(new_nums)} floor(s) at {', '.join(ordinal(n) for n in new_nums)}; "
-                        f"{len(remap)} floor(s) above renumbered. MEP / Majlis floors unchanged.")
-                except Exception as e:
-                    st.session_state["flash"] = ("error", f"❌ Could not insert: {e}")
-                st.rerun()
 
     # ─────────────────────── REMOVE FLOOR(S) (BETWEEN) ─────────────────────────
     elif action == "Remove Floor(s)":
@@ -3377,11 +3423,14 @@ with tab4:
                 if "Adj_Pct" in df.columns else df.iloc[0:0])
     if len(_adj_now):
         _p = pd.to_numeric(_adj_now["Adj_Pct"], errors="coerce")
+        _var = (_adj_now["Price"] - _adj_now["Base_Price"])           # AED delta (green up / red down)
         _cur = pd.DataFrame({
             "Unit": _adj_now["Unit"].values, "Type": _adj_now["Type"].values,
             "Floor": _adj_now["Floor"].values,
             "List Price (AED)": _adj_now["Base_Price"].map(lambda v: f"AED {v:,.0f}").values,
             "Appreciation / Discount": _p.map(lambda v: ("+" if v > 0 else "−") + f"{abs(v):.1f}%").values,
+            "Variance": _var.map(lambda v: (("+" if v > 0 else "−") + f"AED {abs(v):,.0f}")
+                                 if round(float(v), 2) != 0 else "").values,
             "Updated Price (AED)": _adj_now["Price"].map(lambda v: f"AED {v:,.0f}").values,
         })
         st.caption(f"**{len(_cur)} unit(s) currently adjusted** (green = appreciation, red = discount):")
@@ -3390,7 +3439,7 @@ with tab4:
             if s.startswith("+"):                          return "color:#1a7f37;font-weight:600"
             if s.startswith("−") or s.startswith("-"):     return "color:#d1242f;font-weight:600"
             return ""
-        st.dataframe(_cur.style.map(_c_adj, subset=["Appreciation / Discount"]),
+        st.dataframe(_cur.style.map(_c_adj, subset=["Appreciation / Discount", "Variance"]),
                      hide_index=True, use_container_width=True)
     else:
         st.caption("No units currently have an appreciation / discount applied.")
