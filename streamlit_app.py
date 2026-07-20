@@ -460,7 +460,7 @@ def avail_adjusted_median(sub, col):
 
 def ensure_new_options(key, options):
     """Keep a 'show-all' multiselect honest: when a brand-new option appears in the data
-    (e.g. a freshly added topology), add it to the current selection so it shows by default —
+    (e.g. a freshly added typology), add it to the current selection so it shows by default —
     without resurrecting options the user deliberately unticked."""
     seen_key = f"_seen__{key}"
     seen = st.session_state.setdefault(seen_key, set(options))
@@ -1022,6 +1022,18 @@ def _digits(s):
     d = "".join(ch for ch in str(s) if ch.isdigit())
     return int(d) if d else None
 
+def unit_number_for(unit_type, floor, suffix):
+    """The unit number for a unit sitting on `floor` — normally floor*100 + suffix.
+
+    The **5 Bedroom penthouse** always takes suffix **01** (it is the only unit on its level). It is
+    also labelled by the UPPER level of its two-floor span (see normalize_mep_layout), so the duplex
+    spanning 68–69 reads **6901 on the 69th**. Applying it here means every renumber path (floor
+    inserts/removes and the normalize re-pack) keeps the name right, and it survives a Reset to Excel
+    or loading any Base Version."""
+    if "5 Bedroom" in str(unit_type):
+        return str(int(floor) * 100 + 1)
+    return str(int(floor) * 100 + int(suffix))
+
 def _apply_floor_remap(remap, drop_uids=None):
     """Drop the given unit uids, then renumber every remaining floor per `remap` (old→new) across the
     register (Floor + Unit number), the floors list, and the MEP/Majlis map. Keyed by row so it never
@@ -1040,7 +1052,7 @@ def _apply_floor_remap(remap, drop_uids=None):
         if of in remap and remap[of] != of:
             nf = remap[of]; suf = (_digits(u.at[idx, "Unit"]) or 0) % 100
             u.at[idx, "Floor"] = ordinal(nf)
-            u.at[idx, "Unit"] = str(nf * 100 + suf)
+            u.at[idx, "Unit"] = unit_number_for(u.at[idx, "Type"], nf, suf)
     for fl in st.session_state.floors:
         of = fl["floor"]
         if of in remap and remap[of] != of:
@@ -1190,7 +1202,10 @@ def normalize_mep_layout():
     tied to any particular saved state. The model is a stack of *slabs*:
       • a regular floor          → 1 slab, 1 level
       • a duplex                 → 1 slab, 2 levels (record on the LOWER floor; it owns the empty
-                                   floor directly ABOVE and is labelled by its lower floor)
+                                   floor directly ABOVE and is labelled by its lower floor) — EXCEPT
+                                   the 5BR penthouse, which is labelled by the UPPER level of its
+                                   span and so owns the empty floor BELOW (e.g. 6901 on the 69th,
+                                   spanning 68–69)
       • each MEP / Majlis floor  → 1 slab, 1 level
       • the amenity floor (2)    → 1 slab, 1 level
     We keep each slab's vertical ORDER, drop every bare gap, re-pack contiguously from the bottom,
@@ -1214,21 +1229,34 @@ def normalize_mep_layout():
     def _is_dup(idx):
         return "Duplex" in str(u.at[idx, "Type"])
 
-    # Every duplex sits on its (lower) record floor and OWNS the floor directly ABOVE it, which
-    # stays empty — the duplex is labelled by its lower floor (e.g. 3BR Duplex 5901 on floor 59
-    # occupies 59 + 60). This is universal; the legacy per-unit Dup_Up direction no longer decides
-    # the companion.
-    dup_floors = {f for f, idxs in by_floor.items() if any(_is_dup(i) for i in idxs)}
-    owned = {f + 1: f for f in dup_floors}               # companion (above) -> record floor
+    # Every duplex spans 2 levels. All duplexes EXCEPT the 5BR penthouse sit on their LOWER floor and
+    # own the empty floor ABOVE (labelled by the lower floor — 3BR Duplex 5901 on 59 spans 59+60).
+    # The 5BR penthouse is labelled by its UPPER level (client convention: 6901 on the 69th), so it
+    # owns the floor BELOW. If that lower floor isn't free yet (e.g. straight from the Excel, where the
+    # 5BR still sits on the lower level) we fall back to owning the floor above for this pass — the
+    # record is still emitted on the UPPER level, so the next pass finds the floor below free and
+    # stays put. Self-correcting, and idempotent thereafter.
+    fixed_lv = set(blk) | {AMEN}
+    dup_dir = {}                                         # record floor -> 'down' | 'up'
+    for f, idxs in by_floor.items():
+        if not any(_is_dup(i) for i in idxs):
+            continue
+        is_pent = any("5 Bedroom" in str(u.at[i, "Type"]) for i in idxs)
+        if is_pent and (f - 1) >= 1 and (f - 1) not in fixed_lv and (f - 1) not in by_floor:
+            dup_dir[f] = "down"                          # penthouse owns the empty floor below it
+        else:
+            dup_dir[f] = "up"
+    owned = {(f - 1 if d == "down" else f + 1): f for f, d in dup_dir.items()}
 
     slabs, used = [], set()
     for f in sorted(by_floor):
         if f in used:
             continue
-        if f in dup_floors:                              # duplex slab: record floor + empty floor above
-            slabs.append({"kind": "dup", "floor": f, "h": 2,
-                          "rec": by_floor[f], "comp": by_floor.get(f + 1, [])})
-            used.add(f); used.add(f + 1)
+        if f in dup_dir:                                 # duplex slab = its 2 levels
+            comp_f = f - 1 if dup_dir[f] == "down" else f + 1
+            slabs.append({"kind": "dup", "floor": min(f, comp_f), "h": 2,
+                          "rec": by_floor[f], "comp": by_floor.get(comp_f, [])})
+            used.add(f); used.add(comp_f)
         elif f in owned:                                 # a duplex's companion floor (already taken)
             continue
         else:
@@ -1252,7 +1280,8 @@ def normalize_mep_layout():
     def _set(idxs, flo):
         for i in idxs:
             suf = (_digits(u.at[i, "Unit"]) or 0) % 100
-            u.at[i, "Floor"] = ordinal(flo); u.at[i, "Unit"] = str(flo * 100 + suf)
+            u.at[i, "Floor"] = ordinal(flo)
+            u.at[i, "Unit"] = unit_number_for(u.at[i, "Type"], flo, suf)
 
     new_blk, n = {}, 1
     for s in slabs:
@@ -1262,11 +1291,16 @@ def normalize_mep_layout():
             n += 1                                       # reserve floor 2 for amenities (no units)
         elif s["kind"] == "res":
             _set(s["rec"], n); n += 1
-        else:                                            # duplex: record on LOWER floor, empty floor ABOVE
-            _set(s["rec"], n); _set(s["comp"], n + 1)
+        else:                                            # duplex slab = 2 levels
+            _is_pent_slab = any("5 Bedroom" in str(u.at[i, "Type"]) for i in s["rec"])
+            if _is_pent_slab:                            # 5BR penthouse → record on the UPPER level
+                _set(s["comp"], n); _set(s["rec"], n + 1)
+            else:                                        # every other duplex → record on the LOWER level
+                _set(s["rec"], n); _set(s["comp"], n + 1)
             for i in s["rec"]:
                 if _is_dup(i) and "Dup_Up" in u.columns:
-                    u.at[i, "Dup_Up"] = True             # owns the floor above (labelled by lower floor)
+                    # True = owns the floor above (lower-labelled); False = owns the floor below (penthouse)
+                    u.at[i, "Dup_Up"] = (not _is_pent_slab)
             n += 2
     st.session_state.blocked = new_blk
     st.session_state.floors = build_floor_list(st.session_state.units)
@@ -1313,7 +1347,7 @@ def unit_mix_builder(state_key, default_rows, qmin=1):
             st.session_state[sk_ctr] += 1
     rows = st.session_state[sk_rows]
     h1, h2, h3 = st.columns([3, 2, 1])
-    h1.caption("Topology"); h2.caption("Quantity (use − / +)"); h3.caption(" ")
+    h1.caption("Typology"); h2.caption("Quantity (use − / +)"); h3.caption(" ")
     to_del = None
     for r in rows:
         rid = r["id"]
@@ -1330,7 +1364,7 @@ def unit_mix_builder(state_key, default_rows, qmin=1):
         st.session_state.pop(f"{state_key}__t{to_del}", None)
         st.session_state.pop(f"{state_key}__q{to_del}", None)
         st.rerun()
-    if st.button("➕ Add topology", key=f"{state_key}__add"):
+    if st.button("➕ Add typology", key=f"{state_key}__add"):
         st.session_state[sk_rows].append({"id": st.session_state[sk_ctr], "type": "2 Bedroom", "qty": qmin})
         st.session_state[sk_ctr] += 1
         st.rerun()
@@ -1554,12 +1588,12 @@ except Exception:
 _bv_flag = str(_bv_secret or os.environ.get("SHOW_BUILDING_VIEW", "")).strip().lower()
 SHOW_BV = _bv_flag not in ("0", "false", "no", "off")
 
-_labels = ["Unit Register", "Summary by Type", "Topology View"]
+_labels = ["Unit Register", "Summary by Type", "Typology View"]
 if SHOW_BV:
     _labels += ["Muraba Veil - Building View"]
 _labels += ["Floor Manager", "Edit / Remove Units"]
 _tmap = dict(zip(_labels, st.tabs(_labels)))
-tab1 = _tmap["Unit Register"]; tab2 = _tmap["Summary by Type"]; tab5 = _tmap["Topology View"]
+tab1 = _tmap["Unit Register"]; tab2 = _tmap["Summary by Type"]; tab5 = _tmap["Typology View"]
 tab3 = _tmap["Floor Manager"]; tab4 = _tmap["Edit / Remove Units"]
 tab6 = None                          # legacy dark Building View — hidden
 tab6b = None                         # legacy enhanced (✦) Building View — hidden
@@ -1616,7 +1650,7 @@ with tab1:
     f_status = fc2.multiselect("Status", STATUS_OPTIONS, default=STATUS_OPTIONS, key="reg_status_filter")
     view = df[df["Type"].isin(f_types) & df["Status"].isin(f_status)].copy()
 
-    # Default sort: by typology (topology order), then by unit number (…02 before …03, etc.)
+    # Default sort: by typology (typology order), then by unit number (…02 before …03, etc.)
     _trank = {t: i for i, t in enumerate(UNIT_TYPES)}
     view["_tr"]   = view["Type"].map(_trank).fillna(999)
     view["_unum"] = pd.to_numeric(view["Unit"].str.replace(r"[^0-9]", "", regex=True), errors="coerce")
@@ -1870,10 +1904,10 @@ with tab2:
         table_with_export(fp, "Furniture_Pack.xlsx", "exp_fp", title="Muraba Veil Furniture Pack")
 
 
-# ── Tab 5: Topology View (min/max/avg stats) ───────────────────────────────────
+# ── Tab 5: Typology View (min/max/avg stats) ───────────────────────────────────
 
 with tab5:
-    st.subheader("Topology Summary Statistics")
+    st.subheader("Typology Summary Statistics")
     st.caption("**Total Units**, **Total Value** and **Avg Unit Price** (= Total Value ÷ Total Units) "
                "include all units (Sold + Available). **Median /sqft** takes the median row position "
                "across all rows (incl. Sold) but reports the nearest **Available** unit's value "
@@ -1918,7 +1952,7 @@ with tab5:
                 "Avg_Price": (g_all["Price"].sum() / n_all) if n_all else float("nan"),
             })
         tv = pd.DataFrame(stat_rows)
-        # preserve topology order
+        # preserve typology order
         _o = {t: i for i, t in enumerate(all_types)}
         tv = tv.sort_values("Type", key=lambda s: s.map(_o)).reset_index(drop=True)
 
@@ -1933,8 +1967,8 @@ with tab5:
                        "Min /sqft (lowest)","Median /sqft (mid)","Max /sqft (highest)",
                        "Min Price","Median Price","Max Price","Avg Unit Price","Total Value (incl. Sold)"]
         topo_show = column_picker(list(tvd.columns), key="topo_cols", locked=["Type"])
-        table_with_export(tvd[topo_show], "Topology_View.xlsx", "exp_topo",
-                          title="Muraba Veil Topology Summary")
+        table_with_export(tvd[topo_show], "Typology_View.xlsx", "exp_topo",
+                          title="Muraba Veil Typology Summary")
 
 
 # ── Tab 6: Building View (full floor-by-floor tower elevation) ─────────────────
@@ -2791,13 +2825,13 @@ with tab3:
         table_with_export(_ref_df, "Escalation_Terrace_Settings.xlsx", "exp_settings",
                           title="Escalation & Terrace Settings")
 
-    with st.expander("📐  Area & Parking Settings (Internal/External sqft & parking per topology — cascades to all units of that type)", expanded=False):
-        st.caption("Change a topology's area or parking and every unit of that type updates — sellable area, price, parking and all stats recompute.")
+    with st.expander("📐  Area & Parking Settings (Internal/External sqft & parking per typology — cascades to all units of that type)", expanded=False):
+        st.caption("Change a typology's area or parking and every unit of that type updates — sellable area, price, parking and all stats recompute.")
         cur_area = params.get("area", {})
         cur_park = params.get("parking", {})
         new_area, new_park = {}, {}
         ah1, ah2, ah3, ah4 = st.columns([2, 1.4, 1.4, 1.1])
-        ah1.markdown("**Topology**"); ah2.markdown("**Internal (sqft)**")
+        ah1.markdown("**Typology**"); ah2.markdown("**Internal (sqft)**")
         ah3.markdown("**External (sqft)**"); ah4.markdown("**Parking**")
         for t in UNIT_TYPES:
             a = cur_area.get(t, {"internal": TYPE_DEFAULTS[t]["internal"], "external": TYPE_DEFAULTS[t]["external"]})
@@ -2944,7 +2978,7 @@ with tab3:
                                  value=int(nf_from), step=1, key="newfl_to")
         lo, hi = int(min(nf_from, nf_to)), int(max(nf_from, nf_to))
 
-        st.markdown("**Unit mix for each new floor** — pick topology and use **− / +** to set quantity:")
+        st.markdown("**Unit mix for each new floor** — pick typology and use **− / +** to set quantity:")
         mix = unit_mix_builder("addmix", [{"type": "3 Bedroom", "qty": 1}, {"type": "2 Bedroom", "qty": 2}])
         mix = [(t, (1 if "Duplex" in t else q)) for t, q in mix]      # a duplex is always 1 unit per floor
         has_duplex = any(("Duplex" in t) and q > 0 for t, q in mix)
@@ -3278,9 +3312,11 @@ with tab4:
             "Type":  rng["Type"].astype(str).values,
             "Floor": rng["Floor"].astype(str).values,
             "Status": rng["Status"].astype(str).values,
-            "Price/sellable sqft": rng["Price_sqft"].round(0).astype(float).values,
-            "Sellable sqft": rng["Sellable_sqft"].round(0).astype(float).values,
-            "Total Value": rng["Price"].round(0).astype(float).values,
+            # keep FULL precision — the register re-derives List Price as price/sqft x sellable, so any
+            # rounding stored here gets multiplied back up into the price (2 dp is shown, not stored)
+            "Price/sellable sqft": rng["Price_sqft"].astype(float).values,
+            "Sellable sqft": rng["Sellable_sqft"].astype(float).values,
+            "Total Value": rng["Price"].astype(float).values,
             "_uid":  rng["uid"].astype(str).values,
         })
         rngkey   = f"{range_uids[0]}_{range_uids[-1]}"
@@ -3298,9 +3334,11 @@ with tab4:
                     wdf.at[ridx, col] = val
                 sell = float(wdf.at[ridx, "Sellable sqft"] or 0)
                 if "Total Value" in chg:                       # Total entered → recompute price/sellable
-                    wdf.at[ridx, "Price/sellable sqft"] = float(round(wdf.at[ridx, "Total Value"] / sell)) if sell else 0.0
+                    # NO rounding: List Price is re-derived as price/sqft x sellable, so rounding here is
+                    # multiplied back up (a 0.2 rounding became +864 AED on a 4,219 sqft unit)
+                    wdf.at[ridx, "Price/sellable sqft"] = (float(wdf.at[ridx, "Total Value"]) / sell) if sell else 0.0
                 elif "Sellable sqft" in chg or "Price/sellable sqft" in chg:   # either → recompute Total
-                    wdf.at[ridx, "Total Value"] = float(round(wdf.at[ridx, "Price/sellable sqft"] * sell))
+                    wdf.at[ridx, "Total Value"] = float(wdf.at[ridx, "Price/sellable sqft"]) * sell
             st.session_state[work_key] = wdf.copy()            # new identity → editor re-reads recomputed values
             st.session_state[ekey]["edited_rows"] = {}         # consume delta so the table shows recomputed values
 
@@ -3313,11 +3351,11 @@ with tab4:
                 "Floor": st.column_config.TextColumn("Floor", disabled=True),
                 "Status": st.column_config.SelectboxColumn("Status", options=STATUS_OPTIONS, required=True),
                 "Price/sellable sqft": st.column_config.NumberColumn(
-                    "Price / sellable sqft (AED)", min_value=0.0, step=50.0, format="%.0f"),
+                    "Price / sellable sqft (AED)", min_value=0.0, step=0.01, format="%.2f"),
                 "Sellable sqft": st.column_config.NumberColumn(
-                    "Sellable sqft", min_value=0.0, step=10.0, format="%.0f"),
+                    "Sellable sqft", min_value=0.0, step=0.01, format="%.2f"),
                 "Total Value": st.column_config.NumberColumn(
-                    "Total Value (AED)", min_value=0.0, step=10000.0, format="%.0f"),
+                    "Total Value (AED)", min_value=0.0, step=0.01, format="%.2f"),
                 "_uid": None,                              # hidden key column
             },
         )
@@ -3339,7 +3377,7 @@ with tab4:
                 u.at[i, "Status"] = wdf.at[idx, "Status"]
                 # sellable: override only when the user actually changed it (else stay dynamic)
                 new_sell = float(wdf.at[idx, "Sellable sqft"])
-                if abs(new_sell - float(orig_sell.get(uidk, new_sell))) > 0.5:
+                if abs(new_sell - float(orig_sell.get(uidk, new_sell))) > 0.005:
                     u.at[i, "Sellable_Override"] = new_sell
                 # price/sellable sqft already reflects any Total Value edit (live recompute above)
                 u.at[i, "Price_sqft"] = float(wdf.at[idx, "Price/sellable sqft"])
@@ -3524,7 +3562,7 @@ def build_export():
             Total_Value=("Price","sum")).reset_index()
         grp.columns = ["Type","Units","Sold","Available","Avg Price/sqft (AED)","Min Price/sqft (AED)",
                        "Max Price/sqft (AED)","Total Sellable (sqft)","Total Value (AED)"]
-        grp.to_excel(writer, index=False, sheet_name="Topology Summary")
+        grp.to_excel(writer, index=False, sheet_name="Typology Summary")
 
         fe = []
         for fl in st.session_state.floors:
