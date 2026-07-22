@@ -1,3098 +1,3500 @@
 {
   "units": [
     {
+      "uid": "u0",
       "Type": "2 Bedroom",
-      "Status": "Sold",
       "Unit": "302",
       "Floor": "3rd",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 15.Feb.2025",
       "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 4350.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u0"
+      "Sellable_Override": null
     },
     {
+      "uid": "u1",
       "Type": "2 Bedroom",
-      "Status": "Sold",
       "Unit": "303",
       "Floor": "3rd",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 27.Feb.2025",
       "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 4350.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u1"
+      "Sellable_Override": null
     },
     {
+      "uid": "u2",
       "Type": "2 Bedroom",
-      "Status": "Sold",
       "Unit": "402",
       "Floor": "4th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 27.May.2025 to Mr Ibrahim with 5% Discount",
       "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 4227.4998535088,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u2"
+      "Sellable_Override": null
     },
     {
+      "uid": "u3",
       "Type": "2 Bedroom",
-      "Status": "Sold",
       "Unit": "403",
       "Floor": "4th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 10.Jun.2025",
       "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 4449.999865259,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u3"
+      "Sellable_Override": null
     },
     {
+      "uid": "u4",
       "Type": "2 Bedroom",
-      "Status": "Sold",
       "Unit": "502",
       "Floor": "5th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 28.Jul.2025",
       "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 4550.0001738145,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u4"
+      "Sellable_Override": null
     },
     {
+      "uid": "u5",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "503",
       "Floor": "5th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 5000.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u5"
+      "Parking": 2,
+      "Price_sqft": 5000.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u6",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "602",
       "Floor": "6th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 5150.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u6"
+      "Parking": 2,
+      "Price_sqft": 5150.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u7",
       "Type": "2 Bedroom",
-      "Status": "Sold",
       "Unit": "603",
       "Floor": "6th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 25.Dec.2025",
       "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 5050.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u7"
+      "Sellable_Override": null
     },
     {
+      "uid": "u8",
       "Type": "2 Bedroom",
-      "Status": "Sold",
       "Unit": "702",
       "Floor": "7th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 08.Jul.2025",
       "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 4750.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u8"
+      "Sellable_Override": null
     },
     {
+      "uid": "u9",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "703",
       "Floor": "7th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 5300.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u9"
+      "Parking": 2,
+      "Price_sqft": 5300.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u10",
       "Type": "2 Bedroom",
-      "Status": "Sold",
       "Unit": "802",
       "Floor": "8th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 17.Sep.2025 with 3% Discount (Approved by Mr Ibrahim)",
       "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 4801.5718479817,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u10"
+      "Sellable_Override": null
     },
     {
+      "uid": "u11",
       "Type": "2 Bedroom",
-      "Status": "Sold",
       "Unit": "803",
       "Floor": "8th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 17.Sep.2025 with 3% Discount (Approved by Mr Ibrahim)",
       "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 4801.5718479817,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u11"
+      "Sellable_Override": null
     },
     {
+      "uid": "u12",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "902",
       "Floor": "9th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 5600.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u12"
+      "Parking": 2,
+      "Price_sqft": 5600.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u13",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "903",
       "Floor": "9th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 5600.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u13"
+      "Parking": 2,
+      "Price_sqft": 5600.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u14",
       "Type": "2 Bedroom",
-      "Status": "Sold",
       "Unit": "1102",
       "Floor": "11th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 28.May.2025",
       "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 5050.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u14"
+      "Sellable_Override": null
     },
     {
+      "uid": "u15",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "1103",
       "Floor": "11th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 5750.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u15"
+      "Parking": 2,
+      "Price_sqft": 5750.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u16",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "1202",
       "Floor": "12th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 5900.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u16"
+      "Parking": 2,
+      "Price_sqft": 5900.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u17",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "1203",
       "Floor": "12th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 5900.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u17"
+      "Parking": 2,
+      "Price_sqft": 5900.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u18",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "1302",
       "Floor": "13th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 6050.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u18"
+      "Parking": 2,
+      "Price_sqft": 6050.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u19",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "1303",
       "Floor": "13th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 6050.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u19"
+      "Parking": 2,
+      "Price_sqft": 6050.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u20",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "1402",
       "Floor": "14th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 6200.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u20"
+      "Parking": 2,
+      "Price_sqft": 6200.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u21",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "1403",
       "Floor": "14th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 6200.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u21"
+      "Parking": 2,
+      "Price_sqft": 6200.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u22",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "1502",
       "Floor": "15th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 6350.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u22"
+      "Parking": 2,
+      "Price_sqft": 6350.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u23",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "1503",
       "Floor": "15th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 6350.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u23"
+      "Parking": 2,
+      "Price_sqft": 6350.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u24",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "1602",
       "Floor": "16th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 6500.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u24"
+      "Parking": 2,
+      "Price_sqft": 6500.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u25",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "1603",
       "Floor": "16th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 6500.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u25"
+      "Parking": 2,
+      "Price_sqft": 6500.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u26",
       "Type": "2 Bedroom",
-      "Status": "Sold",
       "Unit": "1702",
       "Floor": "17th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 30.May.2025 with 2% DLD Wavier (Approved by Mr Ibrahim)",
       "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 5541.3460339164,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u26"
+      "Sellable_Override": null
     },
     {
+      "uid": "u27",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "1703",
       "Floor": "17th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 6650.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u27"
+      "Parking": 2,
+      "Price_sqft": 6650.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u28",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "1802",
       "Floor": "18th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 6800.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u28"
+      "Parking": 2,
+      "Price_sqft": 6800.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u29",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "1803",
       "Floor": "18th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 6800.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u29"
+      "Parking": 2,
+      "Price_sqft": 6800.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u30",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "1902",
       "Floor": "19th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 6950.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u30"
+      "Parking": 2,
+      "Price_sqft": 6950.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u31",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "1903",
       "Floor": "19th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 6950.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u31"
+      "Parking": 2,
+      "Price_sqft": 6950.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u32",
       "Type": "2 Bedroom",
-      "Status": "Sold",
       "Unit": "2002",
       "Floor": "20th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 10.Feb.2025 with 10% Discount (Approved by Mr Ibrahim)",
       "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 5361.3124232523,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u32"
+      "Sellable_Override": null
     },
     {
+      "uid": "u33",
       "Type": "2 Bedroom",
-      "Status": "Sold",
       "Unit": "2003",
       "Floor": "20th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 24.Jul.2025",
       "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 5950.0000566441,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u33"
+      "Sellable_Override": null
     },
     {
+      "uid": "u34",
       "Type": "2 Bedroom",
-      "Status": "Sold",
       "Unit": "2102",
       "Floor": "21st",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 05.Nov.2025",
       "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 6149.9999342638,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u34"
+      "Sellable_Override": null
     },
     {
+      "uid": "u35",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "2103",
       "Floor": "21st",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 7250.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u35"
+      "Parking": 2,
+      "Price_sqft": 7250.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u36",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "2202",
       "Floor": "22nd",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 7400.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u36"
+      "Parking": 2,
+      "Price_sqft": 7400.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u37",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "2203",
       "Floor": "22nd",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 7400.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u37"
+      "Parking": 2,
+      "Price_sqft": 7400.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u38",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "2302",
       "Floor": "23rd",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 7550.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u38"
+      "Parking": 2,
+      "Price_sqft": 7550.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u39",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "2303",
       "Floor": "23rd",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 7550.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u39"
+      "Parking": 2,
+      "Price_sqft": 7550.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u40",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "2402",
       "Floor": "24th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 7700.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u40"
+      "Parking": 2,
+      "Price_sqft": 7700.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u41",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "2403",
       "Floor": "24th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 7700.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u41"
+      "Parking": 2,
+      "Price_sqft": 7700.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u42",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "2502",
       "Floor": "25th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 7850.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u42"
+      "Parking": 2,
+      "Price_sqft": 7850.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u43",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "2503",
       "Floor": "25th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 7850.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u43"
+      "Parking": 2,
+      "Price_sqft": 7850.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u44",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "2602",
       "Floor": "26th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 8000.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u44"
+      "Parking": 2,
+      "Price_sqft": 8000.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u45",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "2603",
       "Floor": "26th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 8000.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u45"
+      "Parking": 2,
+      "Price_sqft": 8000.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u46",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "2702",
       "Floor": "27th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 8150.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u46"
+      "Parking": 2,
+      "Price_sqft": 8150.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u47",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "2703",
       "Floor": "27th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 8150.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u47"
+      "Parking": 2,
+      "Price_sqft": 8150.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u48",
       "Type": "2 Bedroom",
-      "Status": "Sold",
       "Unit": "2802",
       "Floor": "28th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 01.Dec.2025",
       "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 7600.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u48"
+      "Sellable_Override": null
     },
     {
+      "uid": "u49",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "2803",
       "Floor": "28th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 8300.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u49"
+      "Parking": 2,
+      "Price_sqft": 8300.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u50",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "2902",
       "Floor": "29th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 8450.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u50"
+      "Parking": 2,
+      "Price_sqft": 8450.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u51",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "2903",
       "Floor": "29th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 8450.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u51"
+      "Parking": 2,
+      "Price_sqft": 8450.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u52",
       "Type": "2 Bedroom",
-      "Status": "Available",
       "Unit": "3002",
       "Floor": "30th",
-      "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 8600.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u52"
+      "Parking": 2,
+      "Price_sqft": 8600.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u53",
       "Type": "2 Bedroom",
-      "Status": "Sold",
       "Unit": "3003",
       "Floor": "30th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 27.May.2025 to Mr Ibrahim with 5% Discount",
       "Parking": 2,
-      "Internal_sqft": 2218.764850752,
-      "External_sqft": 1619.322680576,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 6602.4998783099,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 1619.322680576,
+      "Internal_sqft": 2218.764850752,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u53"
+      "Sellable_Override": null
     },
     {
+      "uid": "u104",
       "Type": "3 Bedroom",
-      "Status": "Sold",
       "Unit": "301",
       "Floor": "3rd",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 16.Jun.2025",
       "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 4350.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u104"
+      "Sellable_Override": null
     },
     {
+      "uid": "u105",
       "Type": "3 Bedroom",
-      "Status": "Sold",
       "Unit": "401",
       "Floor": "4th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 20.Oct.2025",
       "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 4650.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u105"
+      "Sellable_Override": null
     },
     {
+      "uid": "u106",
       "Type": "3 Bedroom",
-      "Status": "Sold",
       "Unit": "501",
       "Floor": "5th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 09.May.2025",
       "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 4550.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u106"
+      "Sellable_Override": null
     },
     {
+      "uid": "u107",
       "Type": "3 Bedroom",
-      "Status": "Sold",
       "Unit": "601",
       "Floor": "6th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 30.Sep.2025",
       "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 4850.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u107"
+      "Sellable_Override": null
     },
     {
+      "uid": "u108",
       "Type": "3 Bedroom",
-      "Status": "Sold",
       "Unit": "701",
       "Floor": "7th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 23.Aug.2025",
       "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 4850.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u108"
+      "Sellable_Override": null
     },
     {
+      "uid": "u109",
       "Type": "3 Bedroom",
-      "Status": "Sold",
       "Unit": "801",
       "Floor": "8th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 17.Sep.2025 with 3% Discount (Approved by Mr Ibrahim)",
       "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 4902.299228568,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u109"
+      "Sellable_Override": null
     },
     {
+      "uid": "u110",
       "Type": "3 Bedroom",
-      "Status": "Sold",
       "Unit": "901",
       "Floor": "9th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 03.Apr.2025",
       "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 4950.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u110"
+      "Sellable_Override": null
     },
     {
+      "uid": "u111",
       "Type": "3 Bedroom",
-      "Status": "Sold",
       "Unit": "1101",
       "Floor": "11th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 05.Nov.2025",
       "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 5350.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u111"
+      "Sellable_Override": null
     },
     {
+      "uid": "u112",
       "Type": "3 Bedroom",
-      "Status": "Sold",
       "Unit": "1201",
       "Floor": "12th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 20.May.2025",
       "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 5150.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u112"
+      "Sellable_Override": null
     },
     {
+      "uid": "u113",
       "Type": "3 Bedroom",
-      "Status": "Available",
       "Unit": "1301",
       "Floor": "13th",
-      "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 6650.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u113"
+      "Parking": 2,
+      "Price_sqft": 6650.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u114",
       "Type": "3 Bedroom",
-      "Status": "Available",
       "Unit": "1401",
       "Floor": "14th",
-      "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 6800.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u114"
+      "Parking": 2,
+      "Price_sqft": 6800.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u115",
       "Type": "3 Bedroom",
-      "Status": "Sold",
       "Unit": "1501",
       "Floor": "15th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 10.Jun.2025",
       "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 5450.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u115"
+      "Sellable_Override": null
     },
     {
+      "uid": "u116",
       "Type": "3 Bedroom",
-      "Status": "Sold",
       "Unit": "1601",
       "Floor": "16th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 09.Jun.2025",
       "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 5550.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u116"
+      "Sellable_Override": null
     },
     {
+      "uid": "u117",
       "Type": "3 Bedroom",
-      "Status": "Sold",
       "Unit": "1701",
       "Floor": "17th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 06.May.2025",
       "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 5502.8201221446,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u117"
+      "Sellable_Override": null
     },
     {
+      "uid": "u118",
       "Type": "3 Bedroom",
-      "Status": "Available",
       "Unit": "1801",
       "Floor": "18th",
-      "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 7400.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u118"
+      "Parking": 2,
+      "Price_sqft": 7400.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u119",
       "Type": "3 Bedroom",
-      "Status": "Available",
       "Unit": "1901",
       "Floor": "19th",
-      "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 7550.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u119"
+      "Parking": 2,
+      "Price_sqft": 7550.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u120",
       "Type": "3 Bedroom",
-      "Status": "Sold",
       "Unit": "2001",
       "Floor": "20th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 01.Aug.2025",
       "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 5949.9998672466,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u120"
+      "Sellable_Override": null
     },
     {
+      "uid": "u121",
       "Type": "3 Bedroom",
-      "Status": "Available",
       "Unit": "2101",
       "Floor": "21st",
-      "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 7850.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u121"
+      "Parking": 2,
+      "Price_sqft": 7850.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u122",
       "Type": "3 Bedroom",
-      "Status": "Available",
       "Unit": "2201",
       "Floor": "22nd",
-      "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 8000.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u122"
+      "Parking": 2,
+      "Price_sqft": 8000.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u123",
       "Type": "3 Bedroom",
-      "Status": "Available",
       "Unit": "2301",
       "Floor": "23rd",
-      "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 8150.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u123"
+      "Parking": 2,
+      "Price_sqft": 8150.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u124",
       "Type": "3 Bedroom",
-      "Status": "Sold",
       "Unit": "2401",
       "Floor": "24th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 14.Jan.2026 with 2% Discount (Approved by Mr Ibrahim)",
       "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 7492.7765197676,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u124"
+      "Sellable_Override": null
     },
     {
+      "uid": "u125",
       "Type": "3 Bedroom",
-      "Status": "Sold",
       "Unit": "2501",
       "Floor": "25th",
-      "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
-      "Price_sqft": 7950.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u125"
+      "Parking": 2,
+      "Price_sqft": 8449.9999417602,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u126",
       "Type": "3 Bedroom",
-      "Status": "Sold",
       "Unit": "2601",
       "Floor": "26th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 11.Aug.2025",
       "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 6549.9999307298,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u126"
+      "Sellable_Override": null
     },
     {
+      "uid": "u127",
       "Type": "3 Bedroom",
-      "Status": "Sold",
       "Unit": "2701",
       "Floor": "27th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 10.May.2025",
       "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 6650.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u127"
+      "Sellable_Override": null
     },
     {
+      "uid": "u128",
       "Type": "3 Bedroom",
-      "Status": "Sold",
       "Unit": "2801",
       "Floor": "28th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 15.May.2025",
       "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 6750.0,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u128"
+      "Sellable_Override": null
     },
     {
+      "uid": "u129",
       "Type": "3 Bedroom",
-      "Status": "Sold",
       "Unit": "2901",
       "Floor": "29th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 15.Apr.2025 with 4% DLD Wavier (Approved by Mr Ibrahim)",
       "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 6585.1642376839,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u129"
+      "Sellable_Override": null
     },
     {
+      "uid": "u130",
       "Type": "3 Bedroom",
-      "Status": "Sold",
       "Unit": "3001",
       "Floor": "30th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 27.May.2025 to Mr Ibrahim with 5% Discount",
       "Parking": 2,
-      "Internal_sqft": 2880.530062144,
-      "External_sqft": 2058.920781312,
-      "Terrace_Rate": 0.3,
       "Price_sqft": 6602.4999791637,
+      "Terrace_Rate": 0.3,
+      "External_sqft": 2058.920781312,
+      "Internal_sqft": 2880.530062144,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u130"
+      "Sellable_Override": null
     },
     {
+      "uid": "u171",
       "Type": "3 Bedroom Duplex",
-      "Status": "Available",
       "Unit": "6301",
       "Floor": "63rd",
-      "Parking": 3,
-      "Internal_sqft": 4733.537237504,
-      "External_sqft": 3334.228885504,
-      "Terrace_Rate": 0.75,
-      "Price_sqft": 10690.1552127633,
-      "Terrace_Override": null,
+      "Dup_Up": true,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u171"
+      "Parking": 3,
+      "Price_sqft": 10690.1552127633,
+      "Terrace_Rate": 0.75,
+      "External_sqft": 3334.228885504,
+      "Internal_sqft": 4733.537237504,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u172",
       "Type": "4 Bedroom Duplex",
-      "Status": "Available",
       "Unit": "6302",
       "Floor": "63rd",
-      "Parking": 4,
-      "Internal_sqft": 7485.653848576,
-      "External_sqft": 7260.042286592,
-      "Terrace_Rate": 0.75,
-      "Price_sqft": 11110.9659817487,
-      "Terrace_Override": null,
+      "Dup_Up": true,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u172"
+      "Parking": 4,
+      "Price_sqft": 11110.9659817487,
+      "Terrace_Rate": 0.75,
+      "External_sqft": 7260.042286592,
+      "Internal_sqft": 7485.653848576,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u175",
       "Type": "3 Bedroom Pool",
-      "Status": "Sold",
       "Unit": "3301",
       "Floor": "33rd",
-      "Parking": 2,
-      "Internal_sqft": 2880.530062,
-      "External_sqft": 2059.243699,
-      "Terrace_Rate": 0.65,
-      "Price_sqft": 7096.5411760994,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u175"
+      "Parking": 2,
+      "Price_sqft": 7096.5411760994,
+      "Terrace_Rate": 0.65,
+      "External_sqft": 2059.243699,
+      "Internal_sqft": 2880.530062,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u176",
       "Type": "4 Bedroom Pool",
-      "Status": "Sold",
       "Unit": "3302",
       "Floor": "33rd",
-      "Parking": 3,
-      "Internal_sqft": 4643.550947,
-      "External_sqft": 5258.816065,
-      "Terrace_Rate": 0.55,
-      "Price_sqft": 5700.0000316253,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u176"
+      "Parking": 3,
+      "Price_sqft": 5700.0000316253,
+      "Terrace_Rate": 0.55,
+      "External_sqft": 5258.816065,
+      "Internal_sqft": 4643.550947,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u177",
       "Type": "3 Bedroom Pool",
-      "Status": "Sold",
       "Unit": "3401",
       "Floor": "34th",
-      "Parking": 2,
-      "Internal_sqft": 2880.530062,
-      "External_sqft": 2059.243699,
-      "Terrace_Rate": 0.65,
-      "Price_sqft": 7200.9020757479,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u177"
+      "Parking": 2,
+      "Price_sqft": 7200.9020757479,
+      "Terrace_Rate": 0.65,
+      "External_sqft": 2059.243699,
+      "Internal_sqft": 2880.530062,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u178",
       "Type": "4 Bedroom Pool",
-      "Status": "Available",
       "Unit": "3402",
       "Floor": "34th",
-      "Parking": 3,
-      "Internal_sqft": 4643.550947,
-      "External_sqft": 5258.816065,
-      "Terrace_Rate": 0.55,
-      "Price_sqft": 6354.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u178"
+      "Parking": 3,
+      "Price_sqft": 6354.0,
+      "Terrace_Rate": 0.55,
+      "External_sqft": 5258.816065,
+      "Internal_sqft": 4643.550947,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u179",
       "Type": "3 Bedroom Pool",
-      "Status": "Sold",
       "Unit": "3501",
       "Floor": "35th",
-      "Parking": 2,
-      "Internal_sqft": 2880.530062,
-      "External_sqft": 2059.243699,
-      "Terrace_Rate": 0.65,
-      "Price_sqft": 6939.9997732969,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u179"
+      "Parking": 2,
+      "Price_sqft": 6939.9997732969,
+      "Terrace_Rate": 0.65,
+      "External_sqft": 2059.243699,
+      "Internal_sqft": 2880.530062,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u180",
       "Type": "4 Bedroom Pool",
-      "Status": "Available",
       "Unit": "3502",
       "Floor": "35th",
-      "Parking": 3,
-      "Internal_sqft": 4643.550947,
-      "External_sqft": 5258.816065,
-      "Terrace_Rate": 0.55,
-      "Price_sqft": 6458.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u180"
+      "Parking": 3,
+      "Price_sqft": 6458.0,
+      "Terrace_Rate": 0.55,
+      "External_sqft": 5258.816065,
+      "Internal_sqft": 4643.550947,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u181",
       "Type": "3 Bedroom Pool",
-      "Status": "Sold",
       "Unit": "3601",
       "Floor": "36th",
-      "Parking": 2,
-      "Internal_sqft": 2880.530062,
-      "External_sqft": 2059.243699,
-      "Terrace_Rate": 0.65,
-      "Price_sqft": 7287.15614725,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u181"
+      "Parking": 2,
+      "Price_sqft": 7287.15614725,
+      "Terrace_Rate": 0.65,
+      "External_sqft": 2059.243699,
+      "Internal_sqft": 2880.530062,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u182",
       "Type": "4 Bedroom Pool",
-      "Status": "Available",
       "Unit": "3602",
       "Floor": "36th",
-      "Parking": 3,
-      "Internal_sqft": 4643.550947,
-      "External_sqft": 5258.816065,
-      "Terrace_Rate": 0.55,
-      "Price_sqft": 6562.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u182"
+      "Parking": 3,
+      "Price_sqft": 6562.0,
+      "Terrace_Rate": 0.55,
+      "External_sqft": 5258.816065,
+      "Internal_sqft": 4643.550947,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u183",
       "Type": "3 Bedroom Pool",
-      "Status": "Sold",
       "Unit": "3701",
       "Floor": "37th",
-      "Parking": 2,
-      "Internal_sqft": 2880.530062,
-      "External_sqft": 2059.243699,
-      "Terrace_Rate": 0.65,
-      "Price_sqft": 7213.4253438862,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u183"
+      "Parking": 2,
+      "Price_sqft": 7213.4253438862,
+      "Terrace_Rate": 0.65,
+      "External_sqft": 2059.243699,
+      "Internal_sqft": 2880.530062,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u184",
       "Type": "4 Bedroom Pool",
-      "Status": "Available",
       "Unit": "3702",
       "Floor": "37th",
-      "Parking": 3,
-      "Internal_sqft": 4643.550947,
-      "External_sqft": 5258.816065,
-      "Terrace_Rate": 0.55,
-      "Price_sqft": 6666.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u184"
+      "Parking": 3,
+      "Price_sqft": 6666.0,
+      "Terrace_Rate": 0.55,
+      "External_sqft": 5258.816065,
+      "Internal_sqft": 4643.550947,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u185",
       "Type": "3 Bedroom Pool",
-      "Status": "Available",
       "Unit": "3801",
       "Floor": "38th",
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
+      "Comment": "Sold on 09.Jul.2026 with 3% Discount (Approved by Mr Ibrahim) Client upgraded from 2501 to 3801",
       "Parking": 2,
-      "Internal_sqft": 2880.530062,
-      "External_sqft": 2059.243699,
+      "Price_sqft": 7486.7952145804,
       "Terrace_Rate": 0.65,
-      "Price_sqft": 7718.3456745233,
+      "External_sqft": 2059.243699,
+      "Internal_sqft": 2880.530062,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u185"
+      "Sellable_Override": null
     },
     {
+      "uid": "u186",
       "Type": "4 Bedroom Pool",
-      "Status": "Available",
       "Unit": "3802",
       "Floor": "38th",
-      "Parking": 3,
-      "Internal_sqft": 4643.550947,
-      "External_sqft": 5258.816065,
-      "Terrace_Rate": 0.55,
-      "Price_sqft": 6770.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u186"
+      "Parking": 3,
+      "Price_sqft": 6770.0,
+      "Terrace_Rate": 0.55,
+      "External_sqft": 5258.816065,
+      "Internal_sqft": 4643.550947,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u187",
       "Type": "3 Bedroom Pool",
-      "Status": "Available",
       "Unit": "3901",
       "Floor": "39th",
-      "Parking": 2,
-      "Internal_sqft": 2880.530062,
-      "External_sqft": 2059.243699,
-      "Terrace_Rate": 0.65,
-      "Price_sqft": 7822.7065741743,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u187"
+      "Parking": 2,
+      "Price_sqft": 7822.7065741743,
+      "Terrace_Rate": 0.65,
+      "External_sqft": 2059.243699,
+      "Internal_sqft": 2880.530062,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u188",
       "Type": "4 Bedroom Pool",
-      "Status": "Available",
       "Unit": "3902",
       "Floor": "39th",
-      "Parking": 3,
-      "Internal_sqft": 4643.550947,
-      "External_sqft": 5258.816065,
-      "Terrace_Rate": 0.55,
-      "Price_sqft": 6874.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u188"
+      "Parking": 3,
+      "Price_sqft": 6874.0,
+      "Terrace_Rate": 0.55,
+      "External_sqft": 5258.816065,
+      "Internal_sqft": 4643.550947,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u189",
       "Type": "3 Bedroom Pool",
-      "Status": "Sold",
       "Unit": "4001",
       "Floor": "40th",
-      "Parking": 2,
-      "Internal_sqft": 2880.530062,
-      "External_sqft": 2059.243699,
-      "Terrace_Rate": 0.65,
-      "Price_sqft": 7827.067473639,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u189"
+      "Parking": 2,
+      "Price_sqft": 7827.067473639,
+      "Terrace_Rate": 0.65,
+      "External_sqft": 2059.243699,
+      "Internal_sqft": 2880.530062,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u190",
       "Type": "4 Bedroom Pool",
-      "Status": "Available",
       "Unit": "4002",
       "Floor": "40th",
-      "Parking": 3,
-      "Internal_sqft": 4643.550947,
-      "External_sqft": 5258.816065,
-      "Terrace_Rate": 0.55,
-      "Price_sqft": 6978.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u190"
+      "Parking": 3,
+      "Price_sqft": 6978.0,
+      "Terrace_Rate": 0.55,
+      "External_sqft": 5258.816065,
+      "Internal_sqft": 4643.550947,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u191",
       "Type": "3 Bedroom Pool",
-      "Status": "Sold",
       "Unit": "4101",
       "Floor": "41st",
-      "Parking": 2,
-      "Internal_sqft": 2880.530062,
-      "External_sqft": 2059.243699,
-      "Terrace_Rate": 0.65,
-      "Price_sqft": 7931.4282784792,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u191"
+      "Parking": 2,
+      "Price_sqft": 7931.4282784792,
+      "Terrace_Rate": 0.65,
+      "External_sqft": 2059.243699,
+      "Internal_sqft": 2880.530062,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u192",
       "Type": "4 Bedroom Pool",
-      "Status": "Available",
       "Unit": "4102",
       "Floor": "41st",
-      "Parking": 3,
-      "Internal_sqft": 4643.550947,
-      "External_sqft": 5258.816065,
-      "Terrace_Rate": 0.55,
-      "Price_sqft": 7082.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u192"
+      "Parking": 3,
+      "Price_sqft": 7082.0,
+      "Terrace_Rate": 0.55,
+      "External_sqft": 5258.816065,
+      "Internal_sqft": 4643.550947,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u193",
       "Type": "3 Bedroom Pool",
-      "Status": "Sold",
       "Unit": "4201",
       "Floor": "42nd",
-      "Parking": 2,
-      "Internal_sqft": 2880.530062,
-      "External_sqft": 2059.243699,
-      "Terrace_Rate": 0.65,
-      "Price_sqft": 8035.789261085,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Sold",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u193"
+      "Parking": 2,
+      "Price_sqft": 8035.789261085,
+      "Terrace_Rate": 0.65,
+      "External_sqft": 2059.243699,
+      "Internal_sqft": 2880.530062,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u194",
       "Type": "4 Bedroom Pool",
-      "Status": "Available",
       "Unit": "4202",
       "Floor": "42nd",
-      "Parking": 3,
-      "Internal_sqft": 4643.550947,
-      "External_sqft": 5258.816065,
-      "Terrace_Rate": 0.55,
-      "Price_sqft": 7186.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u194"
+      "Parking": 3,
+      "Price_sqft": 7186.0,
+      "Terrace_Rate": 0.55,
+      "External_sqft": 5258.816065,
+      "Internal_sqft": 4643.550947,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u195",
       "Type": "3 Bedroom Pool",
-      "Status": "Available",
       "Unit": "4301",
       "Floor": "43rd",
-      "Parking": 2,
-      "Internal_sqft": 2880.530062,
-      "External_sqft": 2059.243699,
-      "Terrace_Rate": 0.65,
-      "Price_sqft": 8240.1501727783,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u195"
+      "Parking": 2,
+      "Price_sqft": 8240.1501727783,
+      "Terrace_Rate": 0.65,
+      "External_sqft": 2059.243699,
+      "Internal_sqft": 2880.530062,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u196",
       "Type": "4 Bedroom Pool",
-      "Status": "Available",
       "Unit": "4302",
       "Floor": "43rd",
-      "Parking": 3,
-      "Internal_sqft": 4643.550947,
-      "External_sqft": 5258.816065,
-      "Terrace_Rate": 0.55,
-      "Price_sqft": 7290.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u196"
+      "Parking": 3,
+      "Price_sqft": 7290.0,
+      "Terrace_Rate": 0.55,
+      "External_sqft": 5258.816065,
+      "Internal_sqft": 4643.550947,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u197",
       "Type": "3 Bedroom Pool",
-      "Status": "Available",
       "Unit": "4401",
       "Floor": "44th",
-      "Parking": 2,
-      "Internal_sqft": 2880.530062,
-      "External_sqft": 2059.243699,
-      "Terrace_Rate": 0.65,
-      "Price_sqft": 8344.5110724293,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u197"
+      "Parking": 2,
+      "Price_sqft": 8344.5110724293,
+      "Terrace_Rate": 0.65,
+      "External_sqft": 2059.243699,
+      "Internal_sqft": 2880.530062,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u198",
       "Type": "4 Bedroom Pool",
-      "Status": "Available",
       "Unit": "4402",
       "Floor": "44th",
-      "Parking": 3,
-      "Internal_sqft": 4643.550947,
-      "External_sqft": 5258.816065,
-      "Terrace_Rate": 0.55,
-      "Price_sqft": 7394.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u198"
+      "Parking": 3,
+      "Price_sqft": 7394.0,
+      "Terrace_Rate": 0.55,
+      "External_sqft": 5258.816065,
+      "Internal_sqft": 4643.550947,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u199",
       "Type": "3 Bedroom Pool",
-      "Status": "Available",
       "Unit": "4501",
       "Floor": "45th",
-      "Parking": 2,
-      "Internal_sqft": 2880.530062,
-      "External_sqft": 2059.243699,
-      "Terrace_Rate": 0.65,
-      "Price_sqft": 8448.8719720803,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u199"
+      "Parking": 2,
+      "Price_sqft": 8448.8719720803,
+      "Terrace_Rate": 0.65,
+      "External_sqft": 2059.243699,
+      "Internal_sqft": 2880.530062,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u200",
       "Type": "4 Bedroom Pool",
-      "Status": "Available",
       "Unit": "4502",
       "Floor": "45th",
-      "Parking": 3,
-      "Internal_sqft": 4643.550947,
-      "External_sqft": 5258.816065,
-      "Terrace_Rate": 0.55,
-      "Price_sqft": 7498.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u200"
+      "Parking": 3,
+      "Price_sqft": 7498.0,
+      "Terrace_Rate": 0.55,
+      "External_sqft": 5258.816065,
+      "Internal_sqft": 4643.550947,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u201",
       "Type": "3 Bedroom Pool",
-      "Status": "Available",
       "Unit": "4601",
       "Floor": "46th",
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
+      "Comment": "Sold on 17.Feb.2024",
       "Parking": 2,
-      "Internal_sqft": 2880.530062,
-      "External_sqft": 2059.243699,
-      "Terrace_Rate": 0.65,
       "Price_sqft": 8553.2328717313,
+      "Terrace_Rate": 0.65,
+      "External_sqft": 2059.243699,
+      "Internal_sqft": 2880.530062,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u201"
+      "Sellable_Override": null
     },
     {
+      "uid": "u202",
       "Type": "4 Bedroom Pool",
-      "Status": "Available",
       "Unit": "4602",
       "Floor": "46th",
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
+      "Comment": "Sold on 24.Oct.2025 with 4% Discount (Approved by Mr Ibrahim)",
       "Parking": 3,
-      "Internal_sqft": 4643.550947,
-      "External_sqft": 5258.816065,
-      "Terrace_Rate": 0.55,
       "Price_sqft": 7602.0,
+      "Terrace_Rate": 0.55,
+      "External_sqft": 5258.816065,
+      "Internal_sqft": 4643.550947,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u202"
+      "Sellable_Override": null
     },
     {
+      "uid": "u203",
       "Type": "3 Bedroom Pool",
-      "Status": "Available",
       "Unit": "4701",
       "Floor": "47th",
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
+      "Comment": "Sold on 29.Feb.2024",
       "Parking": 2,
-      "Internal_sqft": 2880.530062,
-      "External_sqft": 2059.243699,
-      "Terrace_Rate": 0.65,
       "Price_sqft": 8657.5937713823,
+      "Terrace_Rate": 0.65,
+      "External_sqft": 2059.243699,
+      "Internal_sqft": 2880.530062,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u203"
+      "Sellable_Override": null
     },
     {
+      "uid": "u204",
       "Type": "4 Bedroom Pool",
-      "Status": "Available",
       "Unit": "4702",
       "Floor": "47th",
-      "Parking": 3,
-      "Internal_sqft": 4643.550947,
-      "External_sqft": 5258.816065,
-      "Terrace_Rate": 0.55,
-      "Price_sqft": 7706.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u204"
+      "Parking": 3,
+      "Price_sqft": 7706.0,
+      "Terrace_Rate": 0.55,
+      "External_sqft": 5258.816065,
+      "Internal_sqft": 4643.550947,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u205",
       "Type": "3 Bedroom Pool",
-      "Status": "Available",
       "Unit": "4801",
       "Floor": "48th",
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
+      "Comment": "Sold on 27.May.2025 to Mr Ibrahim with 5% Discount",
       "Parking": 2,
-      "Internal_sqft": 2880.530062,
-      "External_sqft": 2059.243699,
-      "Terrace_Rate": 0.65,
       "Price_sqft": 8761.9546710333,
+      "Terrace_Rate": 0.65,
+      "External_sqft": 2059.243699,
+      "Internal_sqft": 2880.530062,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u205"
+      "Sellable_Override": null
     },
     {
+      "uid": "u206",
       "Type": "4 Bedroom Pool",
-      "Status": "Available",
       "Unit": "4802",
       "Floor": "48th",
-      "Parking": 3,
-      "Internal_sqft": 4643.550947,
-      "External_sqft": 5258.816065,
-      "Terrace_Rate": 0.55,
-      "Price_sqft": 7810.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u206"
+      "Parking": 3,
+      "Price_sqft": 7810.0,
+      "Terrace_Rate": 0.55,
+      "External_sqft": 5258.816065,
+      "Internal_sqft": 4643.550947,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u207",
       "Type": "3 Bedroom Pool",
-      "Status": "Available",
       "Unit": "4901",
       "Floor": "49th",
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
+      "Comment": "Sold on 17.Sep.2025 with 3% Discount (Approved by Mr Ibrahim)",
       "Parking": 2,
-      "Internal_sqft": 2880.530062,
-      "External_sqft": 2059.243699,
-      "Terrace_Rate": 0.65,
       "Price_sqft": 8866.3155706843,
+      "Terrace_Rate": 0.65,
+      "External_sqft": 2059.243699,
+      "Internal_sqft": 2880.530062,
       "Terrace_Override": null,
-      "Comment": "",
-      "uid": "u207"
+      "Sellable_Override": null
     },
     {
+      "uid": "u208",
       "Type": "4 Bedroom Pool",
-      "Status": "Available",
       "Unit": "4902",
       "Floor": "49th",
-      "Parking": 3,
-      "Internal_sqft": 4643.550947,
-      "External_sqft": 5258.816065,
-      "Terrace_Rate": 0.55,
-      "Price_sqft": 7914.0,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u208"
+      "Parking": 3,
+      "Price_sqft": 7914.0,
+      "Terrace_Rate": 0.55,
+      "External_sqft": 5258.816065,
+      "Internal_sqft": 4643.550947,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u209",
       "Type": "4 Bedroom XL",
-      "Status": "Available",
       "Unit": "5101",
       "Floor": "51st",
-      "Parking": 4,
-      "Internal_sqft": 7474.889938,
-      "External_sqft": 7857.654592,
-      "Terrace_Rate": 0.65,
-      "Price_sqft": 10179.707079649,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u209"
+      "Parking": 4,
+      "Price_sqft": 10179.707079649,
+      "Terrace_Rate": 0.65,
+      "External_sqft": 7857.654592,
+      "Internal_sqft": 7474.889938,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u210",
       "Type": "4 Bedroom XL",
-      "Status": "Available",
       "Unit": "5201",
       "Floor": "52nd",
-      "Parking": 4,
-      "Internal_sqft": 7474.889938,
-      "External_sqft": 7857.654592,
-      "Terrace_Rate": 0.65,
-      "Price_sqft": 10676.278156705,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u210"
+      "Parking": 4,
+      "Price_sqft": 10676.278156705,
+      "Terrace_Rate": 0.65,
+      "External_sqft": 7857.654592,
+      "Internal_sqft": 7474.889938,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u211",
       "Type": "4 Bedroom XL",
-      "Status": "Available",
       "Unit": "5301",
       "Floor": "53rd",
-      "Parking": 4,
-      "Internal_sqft": 7474.889938,
-      "External_sqft": 7857.654592,
-      "Terrace_Rate": 0.65,
-      "Price_sqft": 11172.8492337611,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u211"
+      "Parking": 4,
+      "Price_sqft": 11172.8492337611,
+      "Terrace_Rate": 0.65,
+      "External_sqft": 7857.654592,
+      "Internal_sqft": 7474.889938,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u212",
       "Type": "4 Bedroom XL",
-      "Status": "Available",
       "Unit": "5401",
       "Floor": "54th",
-      "Parking": 4,
-      "Internal_sqft": 7474.889938,
-      "External_sqft": 7857.654592,
-      "Terrace_Rate": 0.65,
-      "Price_sqft": 11669.4203108171,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u212"
+      "Parking": 4,
+      "Price_sqft": 11669.4203108171,
+      "Terrace_Rate": 0.65,
+      "External_sqft": 7857.654592,
+      "Internal_sqft": 7474.889938,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u213",
       "Type": "4 Bedroom XL",
-      "Status": "Available",
       "Unit": "5501",
       "Floor": "55th",
-      "Parking": 4,
-      "Internal_sqft": 7474.889938,
-      "External_sqft": 7857.654592,
-      "Terrace_Rate": 0.65,
-      "Price_sqft": 12165.9913878732,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u213"
+      "Parking": 4,
+      "Price_sqft": 12165.9913878732,
+      "Terrace_Rate": 0.65,
+      "External_sqft": 7857.654592,
+      "Internal_sqft": 7474.889938,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u214",
       "Type": "4 Bedroom XL",
-      "Status": "Available",
       "Unit": "5601",
       "Floor": "56th",
-      "Parking": 4,
-      "Internal_sqft": 7474.889938,
-      "External_sqft": 7857.654592,
-      "Terrace_Rate": 0.65,
-      "Price_sqft": 12662.5624649292,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u214"
+      "Parking": 4,
+      "Price_sqft": 12662.5624649292,
+      "Terrace_Rate": 0.65,
+      "External_sqft": 7857.654592,
+      "Internal_sqft": 7474.889938,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u215",
       "Type": "4 Bedroom XL",
-      "Status": "Available",
       "Unit": "5701",
       "Floor": "57th",
-      "Parking": 4,
-      "Internal_sqft": 7474.889938,
-      "External_sqft": 7857.654592,
-      "Terrace_Rate": 0.65,
-      "Price_sqft": 13159.1335419853,
-      "Terrace_Override": null,
+      "Dup_Up": null,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u215"
+      "Parking": 4,
+      "Price_sqft": 13159.1335419853,
+      "Terrace_Rate": 0.65,
+      "External_sqft": 7857.654592,
+      "Internal_sqft": 7474.889938,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u216",
       "Type": "3 Bedroom Duplex",
-      "Status": "Available",
       "Unit": "5901",
       "Floor": "59th",
-      "Parking": 3,
-      "Internal_sqft": 4733.537238,
-      "External_sqft": 3334.228886,
-      "Terrace_Rate": 0.75,
-      "Price_sqft": 10073.41548895,
-      "Terrace_Override": null,
+      "Dup_Up": true,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u216"
+      "Parking": 3,
+      "Price_sqft": 10073.41548895,
+      "Terrace_Rate": 0.75,
+      "External_sqft": 3334.228886,
+      "Internal_sqft": 4733.537238,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u217",
       "Type": "4 Bedroom Duplex",
-      "Status": "Available",
       "Unit": "5902",
       "Floor": "59th",
-      "Parking": 4,
-      "Internal_sqft": 7485.653849,
-      "External_sqft": 7260.042287,
-      "Terrace_Rate": 0.75,
-      "Price_sqft": 10500.0,
-      "Terrace_Override": null,
+      "Dup_Up": true,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u217"
+      "Parking": 4,
+      "Price_sqft": 10500.0,
+      "Terrace_Rate": 0.75,
+      "External_sqft": 7260.042287,
+      "Internal_sqft": 7485.653849,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u218",
       "Type": "3 Bedroom Duplex",
-      "Status": "Available",
       "Unit": "6101",
       "Floor": "61st",
-      "Parking": 3,
-      "Internal_sqft": 4733.537238,
-      "External_sqft": 3334.228886,
-      "Terrace_Rate": 0.75,
-      "Price_sqft": 10381.7853508566,
-      "Terrace_Override": null,
+      "Dup_Up": true,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u218"
+      "Parking": 3,
+      "Price_sqft": 10381.7853508566,
+      "Terrace_Rate": 0.75,
+      "External_sqft": 3334.228886,
+      "Internal_sqft": 4733.537238,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u219",
       "Type": "3 Bedroom Duplex",
-      "Status": "Available",
       "Unit": "6501",
       "Floor": "65th",
-      "Parking": 3,
-      "Internal_sqft": 4733.537238,
-      "External_sqft": 3334.228886,
-      "Terrace_Rate": 0.75,
-      "Price_sqft": 10998.5250746699,
-      "Terrace_Override": null,
+      "Dup_Up": true,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u219"
+      "Parking": 3,
+      "Price_sqft": 10998.5250746699,
+      "Terrace_Rate": 0.75,
+      "External_sqft": 3334.228886,
+      "Internal_sqft": 4733.537238,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u220",
       "Type": "4 Bedroom Duplex",
-      "Status": "Available",
       "Unit": "6502",
       "Floor": "65th",
-      "Parking": 4,
-      "Internal_sqft": 7485.653849,
-      "External_sqft": 7260.042287,
-      "Terrace_Rate": 0.75,
-      "Price_sqft": 11416.4489726231,
-      "Terrace_Override": null,
+      "Dup_Up": true,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u220"
+      "Parking": 4,
+      "Price_sqft": 11416.4489726231,
+      "Terrace_Rate": 0.75,
+      "External_sqft": 7260.042287,
+      "Internal_sqft": 7485.653849,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u221",
       "Type": "4 Bedroom Duplex",
-      "Status": "Available",
       "Unit": "6102",
       "Floor": "61st",
-      "Parking": 4,
-      "Internal_sqft": 7485.653849,
-      "External_sqft": 7260.042287,
-      "Terrace_Rate": 0.75,
-      "Price_sqft": 10805.4829908744,
-      "Terrace_Override": null,
+      "Dup_Up": true,
+      "Status": "Available",
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u221"
+      "Parking": 4,
+      "Price_sqft": 10805.4829908744,
+      "Terrace_Rate": 0.75,
+      "External_sqft": 7260.042287,
+      "Internal_sqft": 7485.653849,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     },
     {
+      "uid": "u222",
       "Type": "5 Bedroom Duplex",
+      "Unit": "6901",
+      "Floor": "69th",
+      "Dup_Up": false,
       "Status": "Available",
-      "Unit": "6802",
-      "Floor": "68th",
-      "Parking": 6,
-      "Internal_sqft": 11648.17,
-      "External_sqft": 15018.56,
-      "Terrace_Rate": 1.0,
-      "Price_sqft": 16194.6360894481,
-      "Terrace_Override": null,
+      "Adj_Pct": null,
       "Comment": "",
-      "uid": "u222"
+      "Parking": 6,
+      "Price_sqft": 16194.6360894481,
+      "Terrace_Rate": 1.0,
+      "External_sqft": 15018.56,
+      "Internal_sqft": 11648.17,
+      "Terrace_Override": null,
+      "Sellable_Override": null
     }
   ],
   "floors": [
     {
+      "kind": "Standard",
       "floor": 3,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "302",
-          "type": "2 Bedroom",
+          "uid": "u0",
           "rate": 4350.0,
-          "uid": "u0"
+          "type": "2 Bedroom",
+          "unit_no": "302"
         },
         {
-          "unit_no": "303",
-          "type": "2 Bedroom",
+          "uid": "u1",
           "rate": 4350.0,
-          "uid": "u1"
+          "type": "2 Bedroom",
+          "unit_no": "303"
         },
         {
-          "unit_no": "301",
+          "uid": "u104",
+          "rate": 4350.0,
           "type": "3 Bedroom",
-          "rate": 4350.0,
-          "uid": "u104"
+          "unit_no": "301"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Standard",
       "floor": 4,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "402",
+          "uid": "u2",
+          "rate": 4227.4998535088,
           "type": "2 Bedroom",
-          "rate": 4227.49985350876,
-          "uid": "u2"
+          "unit_no": "402"
         },
         {
-          "unit_no": "403",
+          "uid": "u3",
+          "rate": 4449.999865259,
           "type": "2 Bedroom",
-          "rate": 4449.999865258994,
-          "uid": "u3"
+          "unit_no": "403"
         },
         {
-          "unit_no": "401",
-          "type": "3 Bedroom",
+          "uid": "u105",
           "rate": 4650.0,
-          "uid": "u105"
+          "type": "3 Bedroom",
+          "unit_no": "401"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Standard",
       "floor": 5,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "502",
+          "uid": "u4",
+          "rate": 4550.0001738145,
           "type": "2 Bedroom",
-          "rate": 4550.000173814547,
-          "uid": "u4"
+          "unit_no": "502"
         },
         {
-          "unit_no": "503",
-          "type": "2 Bedroom",
+          "uid": "u5",
           "rate": 5000.0,
-          "uid": "u5"
+          "type": "2 Bedroom",
+          "unit_no": "503"
         },
         {
-          "unit_no": "501",
-          "type": "3 Bedroom",
+          "uid": "u106",
           "rate": 4550.0,
-          "uid": "u106"
+          "type": "3 Bedroom",
+          "unit_no": "501"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Standard",
       "floor": 6,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "602",
-          "type": "2 Bedroom",
+          "uid": "u6",
           "rate": 5150.0,
-          "uid": "u6"
-        },
-        {
-          "unit_no": "603",
           "type": "2 Bedroom",
-          "rate": 5050.0,
-          "uid": "u7"
+          "unit_no": "602"
         },
         {
-          "unit_no": "601",
-          "type": "3 Bedroom",
+          "uid": "u7",
+          "rate": 5050.0,
+          "type": "2 Bedroom",
+          "unit_no": "603"
+        },
+        {
+          "uid": "u107",
           "rate": 4850.0,
-          "uid": "u107"
+          "type": "3 Bedroom",
+          "unit_no": "601"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Standard",
       "floor": 7,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "702",
-          "type": "2 Bedroom",
+          "uid": "u8",
           "rate": 4750.0,
-          "uid": "u8"
+          "type": "2 Bedroom",
+          "unit_no": "702"
         },
         {
-          "unit_no": "703",
-          "type": "2 Bedroom",
+          "uid": "u9",
           "rate": 5300.0,
-          "uid": "u9"
+          "type": "2 Bedroom",
+          "unit_no": "703"
         },
         {
-          "unit_no": "701",
-          "type": "3 Bedroom",
+          "uid": "u108",
           "rate": 4850.0,
-          "uid": "u108"
+          "type": "3 Bedroom",
+          "unit_no": "701"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Standard",
       "floor": 8,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "802",
+          "uid": "u10",
+          "rate": 4801.5718479817,
           "type": "2 Bedroom",
-          "rate": 4801.571847981741,
-          "uid": "u10"
+          "unit_no": "802"
         },
         {
-          "unit_no": "803",
+          "uid": "u11",
+          "rate": 4801.5718479817,
           "type": "2 Bedroom",
-          "rate": 4801.571847981741,
-          "uid": "u11"
+          "unit_no": "803"
         },
         {
-          "unit_no": "801",
+          "uid": "u109",
+          "rate": 4902.299228568,
           "type": "3 Bedroom",
-          "rate": 4902.299228568037,
-          "uid": "u109"
+          "unit_no": "801"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Standard",
       "floor": 9,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "902",
-          "type": "2 Bedroom",
+          "uid": "u12",
           "rate": 5600.0,
-          "uid": "u12"
+          "type": "2 Bedroom",
+          "unit_no": "902"
         },
         {
-          "unit_no": "903",
-          "type": "2 Bedroom",
+          "uid": "u13",
           "rate": 5600.0,
-          "uid": "u13"
+          "type": "2 Bedroom",
+          "unit_no": "903"
         },
         {
-          "unit_no": "901",
-          "type": "3 Bedroom",
+          "uid": "u110",
           "rate": 4950.0,
-          "uid": "u110"
+          "type": "3 Bedroom",
+          "unit_no": "901"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Standard",
       "floor": 11,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "1102",
-          "type": "2 Bedroom",
+          "uid": "u14",
           "rate": 5050.0,
-          "uid": "u14"
+          "type": "2 Bedroom",
+          "unit_no": "1102"
         },
         {
-          "unit_no": "1103",
-          "type": "2 Bedroom",
+          "uid": "u15",
           "rate": 5750.0,
-          "uid": "u15"
+          "type": "2 Bedroom",
+          "unit_no": "1103"
         },
         {
-          "unit_no": "1101",
-          "type": "3 Bedroom",
+          "uid": "u111",
           "rate": 5350.0,
-          "uid": "u111"
+          "type": "3 Bedroom",
+          "unit_no": "1101"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Standard",
       "floor": 12,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "1202",
-          "type": "2 Bedroom",
+          "uid": "u16",
           "rate": 5900.0,
-          "uid": "u16"
+          "type": "2 Bedroom",
+          "unit_no": "1202"
         },
         {
-          "unit_no": "1203",
-          "type": "2 Bedroom",
+          "uid": "u17",
           "rate": 5900.0,
-          "uid": "u17"
+          "type": "2 Bedroom",
+          "unit_no": "1203"
         },
         {
-          "unit_no": "1201",
+          "uid": "u112",
+          "rate": 5150.0,
           "type": "3 Bedroom",
-          "rate": 5150.000000000001,
-          "uid": "u112"
+          "unit_no": "1201"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Standard",
       "floor": 13,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "1302",
-          "type": "2 Bedroom",
+          "uid": "u18",
           "rate": 6050.0,
-          "uid": "u18"
+          "type": "2 Bedroom",
+          "unit_no": "1302"
         },
         {
-          "unit_no": "1303",
-          "type": "2 Bedroom",
+          "uid": "u19",
           "rate": 6050.0,
-          "uid": "u19"
+          "type": "2 Bedroom",
+          "unit_no": "1303"
         },
         {
-          "unit_no": "1301",
-          "type": "3 Bedroom",
+          "uid": "u113",
           "rate": 6650.0,
-          "uid": "u113"
+          "type": "3 Bedroom",
+          "unit_no": "1301"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Standard",
       "floor": 14,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "1402",
-          "type": "2 Bedroom",
+          "uid": "u20",
           "rate": 6200.0,
-          "uid": "u20"
+          "type": "2 Bedroom",
+          "unit_no": "1402"
         },
         {
-          "unit_no": "1403",
-          "type": "2 Bedroom",
+          "uid": "u21",
           "rate": 6200.0,
-          "uid": "u21"
+          "type": "2 Bedroom",
+          "unit_no": "1403"
         },
         {
-          "unit_no": "1401",
-          "type": "3 Bedroom",
+          "uid": "u114",
           "rate": 6800.0,
-          "uid": "u114"
+          "type": "3 Bedroom",
+          "unit_no": "1401"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Standard",
       "floor": 15,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "1502",
-          "type": "2 Bedroom",
+          "uid": "u22",
           "rate": 6350.0,
-          "uid": "u22"
+          "type": "2 Bedroom",
+          "unit_no": "1502"
         },
         {
-          "unit_no": "1503",
-          "type": "2 Bedroom",
+          "uid": "u23",
           "rate": 6350.0,
-          "uid": "u23"
+          "type": "2 Bedroom",
+          "unit_no": "1503"
         },
         {
-          "unit_no": "1501",
-          "type": "3 Bedroom",
+          "uid": "u115",
           "rate": 5450.0,
-          "uid": "u115"
+          "type": "3 Bedroom",
+          "unit_no": "1501"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Standard",
       "floor": 16,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "1602",
-          "type": "2 Bedroom",
+          "uid": "u24",
           "rate": 6500.0,
-          "uid": "u24"
+          "type": "2 Bedroom",
+          "unit_no": "1602"
         },
         {
-          "unit_no": "1603",
-          "type": "2 Bedroom",
+          "uid": "u25",
           "rate": 6500.0,
-          "uid": "u25"
+          "type": "2 Bedroom",
+          "unit_no": "1603"
         },
         {
-          "unit_no": "1601",
-          "type": "3 Bedroom",
+          "uid": "u116",
           "rate": 5550.0,
-          "uid": "u116"
+          "type": "3 Bedroom",
+          "unit_no": "1601"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Standard",
       "floor": 17,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "1702",
+          "uid": "u26",
+          "rate": 5541.3460339164,
           "type": "2 Bedroom",
-          "rate": 5541.346033916431,
-          "uid": "u26"
+          "unit_no": "1702"
         },
         {
-          "unit_no": "1703",
-          "type": "2 Bedroom",
+          "uid": "u27",
           "rate": 6650.0,
-          "uid": "u27"
+          "type": "2 Bedroom",
+          "unit_no": "1703"
         },
         {
-          "unit_no": "1701",
+          "uid": "u117",
+          "rate": 5502.8201221446,
           "type": "3 Bedroom",
-          "rate": 5502.820122144587,
-          "uid": "u117"
+          "unit_no": "1701"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Standard",
       "floor": 18,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "1802",
-          "type": "2 Bedroom",
+          "uid": "u28",
           "rate": 6800.0,
-          "uid": "u28"
+          "type": "2 Bedroom",
+          "unit_no": "1802"
         },
         {
-          "unit_no": "1803",
-          "type": "2 Bedroom",
+          "uid": "u29",
           "rate": 6800.0,
-          "uid": "u29"
+          "type": "2 Bedroom",
+          "unit_no": "1803"
         },
         {
-          "unit_no": "1801",
-          "type": "3 Bedroom",
+          "uid": "u118",
           "rate": 7400.0,
-          "uid": "u118"
+          "type": "3 Bedroom",
+          "unit_no": "1801"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Standard",
       "floor": 19,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "1902",
-          "type": "2 Bedroom",
+          "uid": "u30",
           "rate": 6950.0,
-          "uid": "u30"
+          "type": "2 Bedroom",
+          "unit_no": "1902"
         },
         {
-          "unit_no": "1903",
-          "type": "2 Bedroom",
+          "uid": "u31",
           "rate": 6950.0,
-          "uid": "u31"
+          "type": "2 Bedroom",
+          "unit_no": "1903"
         },
         {
-          "unit_no": "1901",
-          "type": "3 Bedroom",
+          "uid": "u119",
           "rate": 7550.0,
-          "uid": "u119"
+          "type": "3 Bedroom",
+          "unit_no": "1901"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Standard",
       "floor": 20,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "2002",
+          "uid": "u32",
+          "rate": 5361.3124232523,
           "type": "2 Bedroom",
-          "rate": 5361.312423252252,
-          "uid": "u32"
+          "unit_no": "2002"
         },
         {
-          "unit_no": "2003",
+          "uid": "u33",
+          "rate": 5950.0000566441,
           "type": "2 Bedroom",
-          "rate": 5950.000056644093,
-          "uid": "u33"
+          "unit_no": "2003"
         },
         {
-          "unit_no": "2001",
+          "uid": "u120",
+          "rate": 5949.9998672466,
           "type": "3 Bedroom",
-          "rate": 5949.999867246617,
-          "uid": "u120"
+          "unit_no": "2001"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Standard",
       "floor": 21,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "2102",
+          "uid": "u34",
+          "rate": 6149.9999342638,
           "type": "2 Bedroom",
-          "rate": 6149.999934263832,
-          "uid": "u34"
+          "unit_no": "2102"
         },
         {
-          "unit_no": "2103",
-          "type": "2 Bedroom",
+          "uid": "u35",
           "rate": 7250.0,
-          "uid": "u35"
+          "type": "2 Bedroom",
+          "unit_no": "2103"
         },
         {
-          "unit_no": "2101",
-          "type": "3 Bedroom",
+          "uid": "u121",
           "rate": 7850.0,
-          "uid": "u121"
+          "type": "3 Bedroom",
+          "unit_no": "2101"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Standard",
       "floor": 22,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "2202",
-          "type": "2 Bedroom",
+          "uid": "u36",
           "rate": 7400.0,
-          "uid": "u36"
+          "type": "2 Bedroom",
+          "unit_no": "2202"
         },
         {
-          "unit_no": "2203",
-          "type": "2 Bedroom",
+          "uid": "u37",
           "rate": 7400.0,
-          "uid": "u37"
+          "type": "2 Bedroom",
+          "unit_no": "2203"
         },
         {
-          "unit_no": "2201",
-          "type": "3 Bedroom",
+          "uid": "u122",
           "rate": 8000.0,
-          "uid": "u122"
+          "type": "3 Bedroom",
+          "unit_no": "2201"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Standard",
       "floor": 23,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "2302",
-          "type": "2 Bedroom",
+          "uid": "u38",
           "rate": 7550.0,
-          "uid": "u38"
+          "type": "2 Bedroom",
+          "unit_no": "2302"
         },
         {
-          "unit_no": "2303",
-          "type": "2 Bedroom",
+          "uid": "u39",
           "rate": 7550.0,
-          "uid": "u39"
+          "type": "2 Bedroom",
+          "unit_no": "2303"
         },
         {
-          "unit_no": "2301",
-          "type": "3 Bedroom",
+          "uid": "u123",
           "rate": 8150.0,
-          "uid": "u123"
+          "type": "3 Bedroom",
+          "unit_no": "2301"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Standard",
       "floor": 24,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "2402",
-          "type": "2 Bedroom",
+          "uid": "u40",
           "rate": 7700.0,
-          "uid": "u40"
+          "type": "2 Bedroom",
+          "unit_no": "2402"
         },
         {
-          "unit_no": "2403",
-          "type": "2 Bedroom",
+          "uid": "u41",
           "rate": 7700.0,
-          "uid": "u41"
+          "type": "2 Bedroom",
+          "unit_no": "2403"
         },
         {
-          "unit_no": "2401",
+          "uid": "u124",
+          "rate": 7492.7765197676,
           "type": "3 Bedroom",
-          "rate": 7492.776519767571,
-          "uid": "u124"
+          "unit_no": "2401"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Standard",
       "floor": 25,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "2502",
-          "type": "2 Bedroom",
+          "uid": "u42",
           "rate": 7850.0,
-          "uid": "u42"
+          "type": "2 Bedroom",
+          "unit_no": "2502"
         },
         {
-          "unit_no": "2503",
-          "type": "2 Bedroom",
+          "uid": "u43",
           "rate": 7850.0,
-          "uid": "u43"
+          "type": "2 Bedroom",
+          "unit_no": "2503"
         },
         {
-          "unit_no": "2501",
-          "type": "3 Bedroom",
+          "uid": "u125",
           "rate": 7950.0,
-          "uid": "u125"
+          "type": "3 Bedroom",
+          "unit_no": "2501"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Standard",
       "floor": 26,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "2602",
-          "type": "2 Bedroom",
+          "uid": "u44",
           "rate": 8000.0,
-          "uid": "u44"
+          "type": "2 Bedroom",
+          "unit_no": "2602"
         },
         {
-          "unit_no": "2603",
-          "type": "2 Bedroom",
+          "uid": "u45",
           "rate": 8000.0,
-          "uid": "u45"
+          "type": "2 Bedroom",
+          "unit_no": "2603"
         },
         {
-          "unit_no": "2601",
+          "uid": "u126",
+          "rate": 6549.9999307298,
           "type": "3 Bedroom",
-          "rate": 6549.9999307298485,
-          "uid": "u126"
+          "unit_no": "2601"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Standard",
       "floor": 27,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "2702",
-          "type": "2 Bedroom",
+          "uid": "u46",
           "rate": 8150.0,
-          "uid": "u46"
+          "type": "2 Bedroom",
+          "unit_no": "2702"
         },
         {
-          "unit_no": "2703",
-          "type": "2 Bedroom",
+          "uid": "u47",
           "rate": 8150.0,
-          "uid": "u47"
+          "type": "2 Bedroom",
+          "unit_no": "2703"
         },
         {
-          "unit_no": "2701",
-          "type": "3 Bedroom",
+          "uid": "u127",
           "rate": 6650.0,
-          "uid": "u127"
+          "type": "3 Bedroom",
+          "unit_no": "2701"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Standard",
       "floor": 28,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "2802",
-          "type": "2 Bedroom",
+          "uid": "u48",
           "rate": 7600.0,
-          "uid": "u48"
+          "type": "2 Bedroom",
+          "unit_no": "2802"
         },
         {
-          "unit_no": "2803",
-          "type": "2 Bedroom",
+          "uid": "u49",
           "rate": 8300.0,
-          "uid": "u49"
+          "type": "2 Bedroom",
+          "unit_no": "2803"
         },
         {
-          "unit_no": "2801",
+          "uid": "u128",
+          "rate": 6750.0,
           "type": "3 Bedroom",
-          "rate": 6749.999999999999,
-          "uid": "u128"
+          "unit_no": "2801"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Standard",
       "floor": 29,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "2902",
-          "type": "2 Bedroom",
+          "uid": "u50",
           "rate": 8450.0,
-          "uid": "u50"
+          "type": "2 Bedroom",
+          "unit_no": "2902"
         },
         {
-          "unit_no": "2903",
-          "type": "2 Bedroom",
+          "uid": "u51",
           "rate": 8450.0,
-          "uid": "u51"
+          "type": "2 Bedroom",
+          "unit_no": "2903"
         },
         {
-          "unit_no": "2901",
+          "uid": "u129",
+          "rate": 6585.1642376839,
           "type": "3 Bedroom",
-          "rate": 6585.164237683888,
-          "uid": "u129"
+          "unit_no": "2901"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Standard",
       "floor": 30,
-      "kind": "Standard",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "3002",
-          "type": "2 Bedroom",
+          "uid": "u52",
           "rate": 8600.0,
-          "uid": "u52"
-        },
-        {
-          "unit_no": "3003",
           "type": "2 Bedroom",
-          "rate": 6602.499878309947,
-          "uid": "u53"
+          "unit_no": "3002"
         },
         {
-          "unit_no": "3001",
+          "uid": "u53",
+          "rate": 6602.4998783099,
+          "type": "2 Bedroom",
+          "unit_no": "3003"
+        },
+        {
+          "uid": "u130",
+          "rate": 6602.4999791637,
           "type": "3 Bedroom",
-          "rate": 6602.499979163749,
-          "uid": "u130"
+          "unit_no": "3001"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Pool",
       "floor": 33,
-      "kind": "Edited",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "3301",
+          "uid": "u175",
+          "rate": 7096.5411760994,
           "type": "3 Bedroom Pool",
-          "rate": 7096.541176099391,
-          "uid": "u175"
+          "unit_no": "3301"
         },
         {
-          "unit_no": "3302",
+          "uid": "u176",
+          "rate": 5700.0000316253,
           "type": "4 Bedroom Pool",
-          "rate": 5700.000031625288,
-          "uid": "u176"
+          "unit_no": "3302"
         }
-      ]
+      ],
+      "levels": 2
     },
     {
+      "kind": "Pool",
       "floor": 34,
-      "kind": "Edited",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "3401",
+          "uid": "u177",
+          "rate": 7200.9020757479,
           "type": "3 Bedroom Pool",
-          "rate": 7200.902075747912,
-          "uid": "u177"
+          "unit_no": "3401"
         },
         {
-          "unit_no": "3402",
-          "type": "4 Bedroom Pool",
+          "uid": "u178",
           "rate": 6354.0,
-          "uid": "u178"
+          "type": "4 Bedroom Pool",
+          "unit_no": "3402"
         }
-      ]
+      ],
+      "levels": 2
     },
     {
+      "kind": "Pool",
       "floor": 35,
-      "kind": "Edited",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "3501",
+          "uid": "u179",
+          "rate": 6939.9997732969,
           "type": "3 Bedroom Pool",
-          "rate": 6939.999773296924,
-          "uid": "u179"
+          "unit_no": "3501"
         },
         {
-          "unit_no": "3502",
-          "type": "4 Bedroom Pool",
+          "uid": "u180",
           "rate": 6458.0,
-          "uid": "u180"
+          "type": "4 Bedroom Pool",
+          "unit_no": "3502"
         }
-      ]
+      ],
+      "levels": 2
     },
     {
+      "kind": "Pool",
       "floor": 36,
-      "kind": "Edited",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "3601",
+          "uid": "u181",
+          "rate": 7287.15614725,
           "type": "3 Bedroom Pool",
-          "rate": 7287.156147249996,
-          "uid": "u181"
+          "unit_no": "3601"
         },
         {
-          "unit_no": "3602",
-          "type": "4 Bedroom Pool",
+          "uid": "u182",
           "rate": 6562.0,
-          "uid": "u182"
+          "type": "4 Bedroom Pool",
+          "unit_no": "3602"
         }
-      ]
+      ],
+      "levels": 2
     },
     {
+      "kind": "Pool",
       "floor": 37,
-      "kind": "Edited",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "3701",
+          "uid": "u183",
+          "rate": 7213.4253438862,
           "type": "3 Bedroom Pool",
-          "rate": 7213.425343886234,
-          "uid": "u183"
+          "unit_no": "3701"
         },
         {
-          "unit_no": "3702",
-          "type": "4 Bedroom Pool",
+          "uid": "u184",
           "rate": 6666.0,
-          "uid": "u184"
+          "type": "4 Bedroom Pool",
+          "unit_no": "3702"
         }
-      ]
+      ],
+      "levels": 2
     },
     {
+      "kind": "Pool",
       "floor": 38,
-      "kind": "Edited",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "3801",
+          "uid": "u185",
+          "rate": 7718.3456745233,
           "type": "3 Bedroom Pool",
-          "rate": 7718.34567452328,
-          "uid": "u185"
+          "unit_no": "3801"
         },
         {
-          "unit_no": "3802",
-          "type": "4 Bedroom Pool",
+          "uid": "u186",
           "rate": 6770.0,
-          "uid": "u186"
+          "type": "4 Bedroom Pool",
+          "unit_no": "3802"
         }
-      ]
+      ],
+      "levels": 2
     },
     {
+      "kind": "Pool",
       "floor": 39,
-      "kind": "Edited",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "3901",
+          "uid": "u187",
+          "rate": 7822.7065741743,
           "type": "3 Bedroom Pool",
-          "rate": 7822.706574174283,
-          "uid": "u187"
+          "unit_no": "3901"
         },
         {
-          "unit_no": "3902",
-          "type": "4 Bedroom Pool",
+          "uid": "u188",
           "rate": 6874.0,
-          "uid": "u188"
+          "type": "4 Bedroom Pool",
+          "unit_no": "3902"
         }
-      ]
+      ],
+      "levels": 2
     },
     {
+      "kind": "Pool",
       "floor": 40,
-      "kind": "Edited",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "4001",
+          "uid": "u189",
+          "rate": 7827.067473639,
           "type": "3 Bedroom Pool",
-          "rate": 7827.067473639035,
-          "uid": "u189"
+          "unit_no": "4001"
         },
         {
-          "unit_no": "4002",
-          "type": "4 Bedroom Pool",
+          "uid": "u190",
           "rate": 6978.0,
-          "uid": "u190"
+          "type": "4 Bedroom Pool",
+          "unit_no": "4002"
         }
-      ]
+      ],
+      "levels": 2
     },
     {
+      "kind": "Pool",
       "floor": 41,
-      "kind": "Edited",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "4101",
+          "uid": "u191",
+          "rate": 7931.4282784792,
           "type": "3 Bedroom Pool",
-          "rate": 7931.428278479223,
-          "uid": "u191"
+          "unit_no": "4101"
         },
         {
-          "unit_no": "4102",
-          "type": "4 Bedroom Pool",
+          "uid": "u192",
           "rate": 7082.0,
-          "uid": "u192"
+          "type": "4 Bedroom Pool",
+          "unit_no": "4102"
         }
-      ]
+      ],
+      "levels": 2
     },
     {
+      "kind": "Pool",
       "floor": 42,
-      "kind": "Edited",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "4201",
+          "uid": "u193",
+          "rate": 8035.789261085,
           "type": "3 Bedroom Pool",
-          "rate": 8035.789261085034,
-          "uid": "u193"
+          "unit_no": "4201"
         },
         {
-          "unit_no": "4202",
-          "type": "4 Bedroom Pool",
+          "uid": "u194",
           "rate": 7186.0,
-          "uid": "u194"
+          "type": "4 Bedroom Pool",
+          "unit_no": "4202"
         }
-      ]
+      ],
+      "levels": 2
     },
     {
+      "kind": "Pool",
       "floor": 43,
-      "kind": "Edited",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "4301",
+          "uid": "u195",
+          "rate": 8240.1501727783,
           "type": "3 Bedroom Pool",
-          "rate": 8240.150172778294,
-          "uid": "u195"
+          "unit_no": "4301"
         },
         {
-          "unit_no": "4302",
-          "type": "4 Bedroom Pool",
+          "uid": "u196",
           "rate": 7290.0,
-          "uid": "u196"
+          "type": "4 Bedroom Pool",
+          "unit_no": "4302"
         }
-      ]
+      ],
+      "levels": 2
     },
     {
+      "kind": "Pool",
       "floor": 44,
-      "kind": "Edited",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "4401",
+          "uid": "u197",
+          "rate": 8344.5110724293,
           "type": "3 Bedroom Pool",
-          "rate": 8344.511072429297,
-          "uid": "u197"
+          "unit_no": "4401"
         },
         {
-          "unit_no": "4402",
-          "type": "4 Bedroom Pool",
+          "uid": "u198",
           "rate": 7394.0,
-          "uid": "u198"
+          "type": "4 Bedroom Pool",
+          "unit_no": "4402"
         }
-      ]
+      ],
+      "levels": 2
     },
     {
+      "kind": "Pool",
       "floor": 45,
-      "kind": "Edited",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "4501",
-          "type": "3 Bedroom Pool",
+          "uid": "u199",
           "rate": 8448.8719720803,
-          "uid": "u199"
+          "type": "3 Bedroom Pool",
+          "unit_no": "4501"
         },
         {
-          "unit_no": "4502",
-          "type": "4 Bedroom Pool",
+          "uid": "u200",
           "rate": 7498.0,
-          "uid": "u200"
+          "type": "4 Bedroom Pool",
+          "unit_no": "4502"
         }
-      ]
+      ],
+      "levels": 2
     },
     {
+      "kind": "Pool",
       "floor": 46,
-      "kind": "Edited",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "4601",
+          "uid": "u201",
+          "rate": 8553.2328717313,
           "type": "3 Bedroom Pool",
-          "rate": 8553.232871731303,
-          "uid": "u201"
+          "unit_no": "4601"
         },
         {
-          "unit_no": "4602",
-          "type": "4 Bedroom Pool",
+          "uid": "u202",
           "rate": 7602.0,
-          "uid": "u202"
+          "type": "4 Bedroom Pool",
+          "unit_no": "4602"
         }
-      ]
+      ],
+      "levels": 2
     },
     {
+      "kind": "Pool",
       "floor": 47,
-      "kind": "Edited",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "4701",
+          "uid": "u203",
+          "rate": 8657.5937713823,
           "type": "3 Bedroom Pool",
-          "rate": 8657.593771382306,
-          "uid": "u203"
+          "unit_no": "4701"
         },
         {
-          "unit_no": "4702",
-          "type": "4 Bedroom Pool",
+          "uid": "u204",
           "rate": 7706.0,
-          "uid": "u204"
+          "type": "4 Bedroom Pool",
+          "unit_no": "4702"
         }
-      ]
+      ],
+      "levels": 2
     },
     {
+      "kind": "Pool",
       "floor": 48,
-      "kind": "Edited",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "4801",
+          "uid": "u205",
+          "rate": 8761.9546710333,
           "type": "3 Bedroom Pool",
-          "rate": 8761.954671033309,
-          "uid": "u205"
+          "unit_no": "4801"
         },
         {
-          "unit_no": "4802",
-          "type": "4 Bedroom Pool",
+          "uid": "u206",
           "rate": 7810.0,
-          "uid": "u206"
-        }
-      ]
-    },
-    {
-      "floor": 49,
-      "kind": "Edited",
-      "levels": 1,
-      "units": [
-        {
-          "unit_no": "4901",
-          "type": "3 Bedroom Pool",
-          "rate": 8866.315570684312,
-          "uid": "u207"
-        },
-        {
-          "unit_no": "4902",
           "type": "4 Bedroom Pool",
+          "unit_no": "4802"
+        }
+      ],
+      "levels": 2
+    },
+    {
+      "kind": "Pool",
+      "floor": 49,
+      "units": [
+        {
+          "uid": "u207",
+          "rate": 8866.3155706843,
+          "type": "3 Bedroom Pool",
+          "unit_no": "4901"
+        },
+        {
+          "uid": "u208",
           "rate": 7914.0,
-          "uid": "u208"
+          "type": "4 Bedroom Pool",
+          "unit_no": "4902"
         }
-      ]
+      ],
+      "levels": 2
     },
     {
+      "kind": "XL",
       "floor": 51,
-      "kind": "Edited",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "5101",
-          "type": "4 Bedroom XL",
+          "uid": "u209",
           "rate": 10179.707079649,
-          "uid": "u209"
+          "type": "4 Bedroom XL",
+          "unit_no": "5101"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "XL",
       "floor": 52,
-      "kind": "Edited",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "5201",
+          "uid": "u210",
+          "rate": 10676.278156705,
           "type": "4 Bedroom XL",
-          "rate": 10676.27815670505,
-          "uid": "u210"
+          "unit_no": "5201"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "XL",
       "floor": 53,
-      "kind": "Edited",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "5301",
+          "uid": "u211",
+          "rate": 11172.8492337611,
           "type": "4 Bedroom XL",
-          "rate": 11172.849233761099,
-          "uid": "u211"
+          "unit_no": "5301"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "XL",
       "floor": 54,
-      "kind": "Edited",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "5401",
+          "uid": "u212",
+          "rate": 11669.4203108171,
           "type": "4 Bedroom XL",
-          "rate": 11669.420310817148,
-          "uid": "u212"
+          "unit_no": "5401"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "XL",
       "floor": 55,
-      "kind": "Edited",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "5501",
+          "uid": "u213",
+          "rate": 12165.9913878732,
           "type": "4 Bedroom XL",
-          "rate": 12165.991387873197,
-          "uid": "u213"
+          "unit_no": "5501"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "XL",
       "floor": 56,
-      "kind": "Edited",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "5601",
+          "uid": "u214",
+          "rate": 12662.5624649292,
           "type": "4 Bedroom XL",
-          "rate": 12662.562464929246,
-          "uid": "u214"
+          "unit_no": "5601"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "XL",
       "floor": 57,
-      "kind": "Edited",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "5701",
+          "uid": "u215",
+          "rate": 13159.1335419853,
           "type": "4 Bedroom XL",
-          "rate": 13159.133541985295,
-          "uid": "u215"
+          "unit_no": "5701"
         }
-      ]
+      ],
+      "levels": 1
     },
     {
+      "kind": "Duplex",
       "floor": 59,
-      "kind": "Edited",
-      "levels": 1,
       "units": [
         {
-          "unit_no": "5901",
-          "type": "3 Bedroom Duplex",
+          "uid": "u216",
           "rate": 10073.41548895,
-          "uid": "u216"
+          "type": "3 Bedroom Duplex",
+          "unit_no": "5901"
         },
         {
-          "unit_no": "5902",
-          "type": "4 Bedroom Duplex",
+          "uid": "u217",
           "rate": 10500.0,
-          "uid": "u217"
+          "type": "4 Bedroom Duplex",
+          "unit_no": "5902"
         }
-      ]
+      ],
+      "levels": 2
     },
     {
+      "kind": "Duplex",
       "floor": 61,
-      "kind": "Pool",
-      "levels": 2,
       "units": [
         {
-          "unit_no": "6101",
+          "uid": "u218",
+          "rate": 10381.7853508566,
           "type": "3 Bedroom Duplex",
-          "rate": 10381.785350856633,
-          "uid": "u218"
+          "unit_no": "6101"
         },
         {
-          "unit_no": "6102",
+          "uid": "u221",
+          "rate": 10805.4829908744,
           "type": "4 Bedroom Duplex",
-          "rate": 10805.48299087436,
-          "uid": "u221"
+          "unit_no": "6102"
         }
-      ]
+      ],
+      "levels": 2
     },
     {
+      "kind": "Duplex",
       "floor": 63,
-      "kind": "Pool",
-      "levels": 2,
       "units": [
         {
-          "unit_no": "6301",
+          "uid": "u171",
+          "rate": 10690.1552127633,
           "type": "3 Bedroom Duplex",
-          "rate": 10690.155212763266,
-          "uid": "u171"
+          "unit_no": "6301"
         },
         {
-          "unit_no": "6302",
+          "uid": "u172",
+          "rate": 11110.9659817487,
           "type": "4 Bedroom Duplex",
-          "rate": 11110.965981748719,
-          "uid": "u172"
+          "unit_no": "6302"
         }
-      ]
+      ],
+      "levels": 2
     },
     {
+      "kind": "Duplex",
       "floor": 65,
-      "kind": "Pool",
-      "levels": 2,
       "units": [
         {
-          "unit_no": "6501",
+          "uid": "u219",
+          "rate": 10998.5250746699,
           "type": "3 Bedroom Duplex",
-          "rate": 10998.525074669898,
-          "uid": "u219"
+          "unit_no": "6501"
         },
         {
-          "unit_no": "6502",
+          "uid": "u220",
+          "rate": 11416.4489726231,
           "type": "4 Bedroom Duplex",
-          "rate": 11416.448972623079,
-          "uid": "u220"
+          "unit_no": "6502"
         }
-      ]
+      ],
+      "levels": 2
     },
     {
-      "floor": 68,
-      "kind": "Pool",
-      "levels": 2,
+      "kind": "Duplex",
+      "floor": 69,
       "units": [
         {
-          "unit_no": "6802",
+          "uid": "u222",
+          "rate": 16194.6360894481,
           "type": "5 Bedroom Duplex",
-          "rate": 16194.63608944809,
-          "uid": "u222"
+          "unit_no": "6901"
         }
-      ]
+      ],
+      "levels": 2
     }
   ],
   "params": {
-    "escalation": {
-      "2 Bedroom": 150.0,
-      "3 Bedroom - New": 150.0,
-      "3 Bedroom": 150.0,
-      "3 Bedroom Pool": 104.36089965100291,
-      "4 Bedroom Pool": 104.0,
-      "4 Bedroom XL": 496.57107705604903,
-      "3 Bedroom Duplex": 308.36986190663265,
-      "4 Bedroom Duplex": 305.48299087435953,
-      "5 Bedroom Duplex": 0.0
-    },
-    "terrace": {
-      "standard": 0.3,
-      "3 Bedroom Pool": 0.65,
-      "4 Bedroom Pool": 0.55,
-      "duplex": 0.75,
-      "simplex": 0.65
-    },
-    "duplex_premium": 0.0,
     "area": {
       "2 Bedroom": {
-        "internal": 2218.764851,
-        "external": 1619.322681
-      },
-      "3 Bedroom - New": {
-        "internal": 2218.764851,
-        "external": 1619.322681
+        "external": 1619.322681,
+        "internal": 2218.764851
       },
       "3 Bedroom": {
-        "internal": 2880.530062,
-        "external": 2058.920781
-      },
-      "3 Bedroom Pool": {
-        "internal": 2880.530062,
-        "external": 2059.243699
-      },
-      "4 Bedroom Pool": {
-        "internal": 4643.550947,
-        "external": 5258.816065
+        "external": 2058.920781,
+        "internal": 2880.530062
       },
       "4 Bedroom XL": {
-        "internal": 7474.889938,
-        "external": 7857.654592
+        "external": 7857.654592,
+        "internal": 7474.889938
+      },
+      "3 Bedroom Pool": {
+        "external": 2059.243699,
+        "internal": 2880.530062
+      },
+      "4 Bedroom Pool": {
+        "external": 5258.816065,
+        "internal": 4643.550947
+      },
+      "3 Bedroom - New": {
+        "external": 1619.322681,
+        "internal": 2218.764851
       },
       "3 Bedroom Duplex": {
-        "internal": 4733.537238,
-        "external": 3334.228886
+        "external": 3334.228886,
+        "internal": 4733.537238
       },
       "4 Bedroom Duplex": {
-        "internal": 7485.653849,
-        "external": 7260.042287
+        "external": 7260.042287,
+        "internal": 7485.653849
       },
       "5 Bedroom Duplex": {
-        "internal": 11648.17,
-        "external": 15018.56
+        "external": 15018.56,
+        "internal": 11648.17
       }
+    },
+    "base": {
+      "2 Bedroom": 5000.0,
+      "3 Bedroom": 6650.0,
+      "4 Bedroom XL": 10179.707079649,
+      "3 Bedroom Pool": 7718.34567452328,
+      "4 Bedroom Pool": 6354.0,
+      "3 Bedroom Duplex": 10073.41548895,
+      "4 Bedroom Duplex": 10500.0
     },
     "parking": {
       "2 Bedroom": 2,
-      "3 Bedroom - New": 2,
       "3 Bedroom": 2,
+      "4 Bedroom XL": 4,
       "3 Bedroom Pool": 2,
       "4 Bedroom Pool": 3,
-      "4 Bedroom XL": 4,
+      "3 Bedroom - New": 2,
       "3 Bedroom Duplex": 3,
       "4 Bedroom Duplex": 4,
       "5 Bedroom Duplex": 6
     },
-    "base": {
-      "3 Bedroom Pool": 7718.34567452328,
-      "4 Bedroom Pool": 6354.0,
-      "4 Bedroom XL": 10179.707079649,
-      "3 Bedroom Duplex": 10073.41548895,
-      "2 Bedroom": 5000.0,
-      "3 Bedroom": 6650.0,
-      "4 Bedroom Duplex": 10500.0
-    }
+    "terrace": {
+      "duplex": 0.75,
+      "simplex": 0.65,
+      "standard": 0.3,
+      "3 Bedroom Pool": 0.65,
+      "4 Bedroom Pool": 0.55
+    },
+    "escalation": {
+      "2 Bedroom": 150.0,
+      "3 Bedroom": 150.0,
+      "4 Bedroom XL": 496.57107705604903,
+      "3 Bedroom Pool": 104.36089965100291,
+      "4 Bedroom Pool": 104.0,
+      "3 Bedroom - New": 150.0,
+      "3 Bedroom Duplex": 308.36986190663265,
+      "4 Bedroom Duplex": 305.48299087435953,
+      "5 Bedroom Duplex": 0.0
+    },
+    "duplex_premium": 0.0
+  },
+  "blocked": {
+    "1": "MEP-1",
+    "10": "MEP-2",
+    "31": "MAJILIS -MEETING ROOMS",
+    "32": "MEP-3",
+    "50": "MEP-4",
+    "58": "MEP-5",
+    "67": "MEP-6"
   },
   "uid_counter": 222
 }
