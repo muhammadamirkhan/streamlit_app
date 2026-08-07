@@ -1574,8 +1574,12 @@ g4.metric("Variance: Total − Allowable (sqft)", f"{_variance:,.0f}",
           delta=f"{_variance:,.0f}", delta_color="inverse")
 g5.metric("Total Price/sqft", aed(df["Price"].sum()/_tot_area) if _tot_area else "—")
 # Portfolio Value on its own line below the rest (wider column so the full AED value fits)
+_sold_df = df[df["Status"] == "Sold"]
+_sold_area = float(_sold_df["Total_sqft"].sum())                    # total area of Sold units
+_sold_psf = (_sold_df["Price"].sum() / _sold_area) if _sold_area else 0.0
 gp = st.columns([2, 1, 1, 1])
 gp[0].metric("Portfolio Value", aed(df["Price"].sum()))
+gp[1].metric("Sold Price/sqft", aed(_sold_psf) if _sold_area else "—")
 
 st.divider()
 
