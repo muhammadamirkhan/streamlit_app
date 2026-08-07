@@ -2513,6 +2513,8 @@ def render_building_view_brochure():
     SOLDVAL = VAL - AVAL
     sv_pct = (SOLDVAL / VAL * 100) if VAL else 0.0
     avv_pct = (AVAL / VAL * 100) if VAL else 0.0
+    _sold_area = float(df[df["Status"] == "Sold"]["Total_sqft"].sum())   # total area of Sold units
+    SOLD_PSF = SOLDVAL / _sold_area if _sold_area else 0.0               # blended sold price / total sqft
     ALLOW = ALLOWABLE_SELLABLE                        # fixed design cap (818,187), same as the top header
     BASE_N = base_unit_count()                        # units in the saved Base Version (for the delta card)
 
@@ -2546,6 +2548,7 @@ def render_building_view_brochure():
         _kpi("Available Stock Value", aed(AVAL)),
         _kpi("Total Sold Value", aed(SOLDVAL)),
         _kpi("Avg Price/sqft", aed(PSF), "on total area"),
+        _kpi("Sold Price/sqft", aed(SOLD_PSF), f"{SO} sold units · on total area"),
         _kpi("Total Area (sqft)", f"{TA:,.0f}"),
         _kpi("Total Allowable Sellable (sqft)", f"{ALLOW:,.0f}"),
         add_card,
