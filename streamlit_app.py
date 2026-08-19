@@ -14,27 +14,8 @@ st.set_page_config(page_title="Muraba Veil – Unit Manager", layout="wide", pag
 st.markdown('<style>[data-testid="InputInstructions"]{display:none!important;}</style>',
             unsafe_allow_html=True)
 
-# ── Password gate ──────────────────────────────────────────────────────────────
-def _check_password() -> bool:
-    expected = st.secrets.get("password", os.environ.get("APP_PASSWORD", "muraba2026"))
-
-    def _entered():
-        st.session_state["auth_ok"] = st.session_state.get("pw_input", "") == expected
-        st.session_state.pop("pw_input", None)
-
-    if st.session_state.get("auth_ok"):
-        return True
-
-    st.markdown("## 🔒 Muraba Veil — Unit Manager")
-    st.text_input("Enter password to continue", type="password",
-                  on_change=_entered, key="pw_input")
-    if st.session_state.get("auth_ok") is False:
-        st.error("Incorrect password — try again.")
-    st.caption("Access is restricted. Contact the administrator for the password.")
-    return False
-
-if not _check_password():
-    st.stop()
+# Entry password removed: access is controlled by the Muraba Veil Apps
+# landing page. The per-version Base Version passwords below are kept.
 
 # ── Data file (lives next to this script, so it works locally and on the cloud) ─
 EXCEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Muraba Veil Unit list.xlsx")

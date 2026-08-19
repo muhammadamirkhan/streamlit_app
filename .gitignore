@@ -25,3 +25,18 @@ MV-Pricing.pbix
 MV-Pricing.pbix.zip
 muraba_app.py
 Launch Muraba App.bat
+
+# Credentials — this repo is PUBLIC. Never commit these.
+muraba_bc_api_credentials.txt
+*credentials*.txt
+cloud_secrets.toml
+
+# Nested repo (Supplier Outstanding has its own remote)
+App Suppliers Dashboard/
+
+# Local working material, not part of the app
+PBIX Files/
+Sales Offer/
+Building App/
+Building App.zip
+*.docx
