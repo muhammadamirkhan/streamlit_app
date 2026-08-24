@@ -70,7 +70,28 @@ def _parse_state(state):
     units["Comment"] = units["Comment"].fillna("").astype(str)
     blk = state.get("blocked")
     blk = {int(k): v for k, v in blk.items()} if blk else None
-    return units, state["floors"], state["params"], int(state.get("uid_counter", len(units))), blk
+    prm = _migrate_params(state["params"])
+    return units, state["floors"], prm, int(state.get("uid_counter", len(units))), blk
+
+def _migrate_params(params):
+    """Bring an older saved params dict up to date.
+
+    2 Bedroom and 3 Bedroom used to share one "standard" terrace key; they are now independent.
+    Versions saved before the split only carry "standard", so seed both keys from it — every
+    typology then has its own entry and no lookup can KeyError. Also drops the retired
+    "3 Bedroom - New" typology from the escalation / area / parking / base maps."""
+    if not isinstance(params, dict):
+        return params
+    p = dict(params)
+    tr = dict(p.get("terrace", {}))
+    _std = tr.get("standard", 0.30)
+    for k in ("2 Bedroom", "3 Bedroom"):
+        tr.setdefault(k, _std)
+    p["terrace"] = tr
+    for key in ("escalation", "area", "parking", "base"):
+        if isinstance(p.get(key), dict) and "3 Bedroom - New" in p[key]:
+            p[key] = {k: v for k, v in p[key].items() if k != "3 Bedroom - New"}
+    return p
 
 def load_state_from(path):
     """Return (units_df, floors, params, uid_counter, blocked) from a state file, or None on failure.
@@ -229,17 +250,17 @@ def sb_delete_version(name):
     r.raise_for_status()
 
 UNIT_TYPES = [
-    "2 Bedroom", "3 Bedroom - New", "3 Bedroom", "3 Bedroom Pool", "4 Bedroom Pool",
+    "2 Bedroom", "3 Bedroom", "3 Bedroom Pool", "4 Bedroom Pool",
     "4 Bedroom XL", "3 Bedroom Duplex", "4 Bedroom Duplex", "5 Bedroom Duplex",
 ]
 STATUS_OPTIONS = ["Available", "Sold"]
 
-# "3 Bedroom - New" is a 2-Bedroom-sized unit under a new name; it shares the
-# 2 Bedroom price ladder, area, terrace and escalation (same stats).
-PRICE_FAMILY = {"3 Bedroom - New": "2 Bedroom"}
+# Typologies that share a price ladder. Empty: every typology is priced independently
+# (2 Bedroom and 3 Bedroom are fully separate — escalation, terrace, area and base price).
+PRICE_FAMILY = {}
 
 def family_types(t):
-    """All types that share a price ladder with t (e.g. 3 Bedroom - New ↔ 2 Bedroom)."""
+    """All types that share a price ladder with t (currently each typology stands alone)."""
     base = PRICE_FAMILY.get(t, t)
     fam = {t, base}
     fam.update(k for k, v in PRICE_FAMILY.items() if v == base)
@@ -247,7 +268,6 @@ def family_types(t):
 
 TYPE_DEFAULTS = {
     "2 Bedroom":         {"internal": 2218.764851, "external": 1619.322681, "parking": 2, "terrace_rate": 0.30, "levels": 1},
-    "3 Bedroom - New":   {"internal": 2218.764851, "external": 1619.322681, "parking": 2, "terrace_rate": 0.30, "levels": 1},
     "3 Bedroom":         {"internal": 2880.530062, "external": 2058.920781, "parking": 2, "terrace_rate": 0.30, "levels": 1},
     "3 Bedroom Pool":    {"internal": 2880.530062, "external": 2059.243699, "parking": 2, "terrace_rate": 0.65, "levels": 2},
     "4 Bedroom Pool":    {"internal": 4643.550947, "external": 5258.816065, "parking": 3, "terrace_rate": 0.55, "levels": 2},
@@ -260,21 +280,23 @@ TYPE_DEFAULTS = {
 LEVEL_CAPACITY = {"2 Bedroom": 2, "3 Bedroom": 1}   # standard residential floor
 
 TYPE_ABBR = {
-    "2 Bedroom": "2BR", "3 Bedroom - New": "3BR New", "3 Bedroom": "3BR",
+    "2 Bedroom": "2BR", "3 Bedroom": "3BR",
     "3 Bedroom Pool": "3BR Pool", "4 Bedroom Pool": "4BR Pool", "4 Bedroom XL": "4BR XL",
     "3 Bedroom Duplex": "3BR DX", "4 Bedroom Duplex": "4BR DX", "5 Bedroom Duplex": "5BR DX",
 }
 
 # Fallback escalation defaults (overridden by what we read from the sheets)
 ESC_DEFAULTS = {
-    "2 Bedroom": 150.0, "3 Bedroom - New": 150.0, "3 Bedroom": 150.0,
+    "2 Bedroom": 150.0, "3 Bedroom": 150.0,
     "3 Bedroom Pool": 104.0, "4 Bedroom Pool": 104.0,
     "4 Bedroom XL": 497.0, "3 Bedroom Duplex": 308.0,
     "4 Bedroom Duplex": 305.0, "5 Bedroom Duplex": 0.0,
 }
 # Terrace-rate groups (% of internal), variable; from Launches XL SX DX
 TERRACE_DEFAULTS = {
-    "standard": 0.30,        # 2BR & 3BR
+    "2 Bedroom": 0.30,       # 2BR terrace — independent of 3BR
+    "3 Bedroom": 0.30,       # 3BR terrace — independent of 2BR
+    "standard": 0.30,        # legacy shared key (older saved versions) — read-only fallback
     "3 Bedroom Pool": 0.65,  # 3 Pool Terrace
     "4 Bedroom Pool": 0.55,  # 4 Pool Terrace Rate
     "duplex": 0.75,          # DX Terrace Rate (3/4/5 BR Duplex)
@@ -608,7 +630,8 @@ def load_params() -> dict:
         lr = pd.read_excel(EXCEL_PATH, sheet_name="Launches Residences", header=None)
         esc["2 Bedroom"]     = float(lr.iloc[3][20])
         esc["3 Bedroom"]     = float(lr.iloc[4][20])
-        terrace["standard"]  = float(lr.iloc[6][20])
+        _std = float(lr.iloc[6][20])                # sheet has one shared 2BR/3BR terrace
+        terrace["2 Bedroom"] = terrace["3 Bedroom"] = terrace["standard"] = _std
     except Exception:
         pass
     try:
@@ -626,7 +649,6 @@ def load_params() -> dict:
         duplex_premium = float(dp) if pd.notna(dp) else 0.0
     except Exception:
         pass
-    esc["3 Bedroom - New"] = esc["2 Bedroom"]   # new type mirrors 2 Bedroom escalation
     area = {t: {"internal": TYPE_DEFAULTS[t]["internal"], "external": TYPE_DEFAULTS[t]["external"]}
             for t in UNIT_TYPES}
     parking = {t: TYPE_DEFAULTS[t]["parking"] for t in UNIT_TYPES}
@@ -657,9 +679,20 @@ def load_blocked_floors() -> dict:
 
 # ── Calculations ───────────────────────────────────────────────────────────────
 
+def _terrace_of(tr, key, default=0.30):
+    """Terrace rate for a group key, falling back to the legacy shared "standard" key so base
+    versions saved before 2 Bedroom / 3 Bedroom were split still load with the right value."""
+    if key in tr:
+        return float(tr[key])
+    if "standard" in tr:
+        return float(tr["standard"])
+    return default
+
 def terrace_for(t, params):
     tr = params["terrace"]
-    if t in ("2 Bedroom", "3 Bedroom - New", "3 Bedroom"): return tr["standard"]
+    # 2BR and 3BR each carry their OWN terrace % — changing one must never affect the other
+    if t == "2 Bedroom":                                return _terrace_of(tr, "2 Bedroom")
+    if t == "3 Bedroom":                                return _terrace_of(tr, "3 Bedroom")
     if t == "3 Bedroom Pool":                           return tr["3 Bedroom Pool"]
     if t == "4 Bedroom Pool":                           return tr["4 Bedroom Pool"]
     if t == "4 Bedroom XL":                        return tr["simplex"]
@@ -672,7 +705,7 @@ def escalation_for(t, params):
 
 def last_available_price(t, units_df):
     """Return the Price_sqft of the highest-floor Available unit for type t (floor-sequence aware).
-    Pools price-family types together (3 Bedroom - New rides the 2 Bedroom ladder)."""
+    Pools any price-family types together."""
     fam = family_types(t)
     sub = units_df[(units_df["Type"].isin(fam)) & (units_df["Status"] == "Available")].copy()
     if sub.empty:
@@ -835,7 +868,7 @@ def recompute_from_base(t, base_psf, params):
 
 def reladder_typology(t, params):
     """Re-price every **Available** unit of the price-family up the ladder using the current
-    escalation (3 Bedroom - New is re-laddered together with 2 Bedroom). If a Base Price is set
+    escalation for that typology. If a Base Price is set
     for the family, the ladder is anchored at that base; otherwise anchors are the existing
     entry-price units. Sold units are never touched. Mutates st.session_state.units.
     Returns the number of units whose price changed."""
@@ -897,15 +930,20 @@ def floor_total(fl, params):
 
 def recalc(df, params):
     df = df.copy()
+    # SOLD IS FROZEN: a Sold unit's area, terrace, price/sqft and every derived value must never
+    # change — not when a typology's terrace %, area, parking, escalation or base price is edited.
+    # So typology-driven overwrites apply to Available units only; Sold units keep their stored
+    # per-unit values (their derived Sellable / Total / Price then recompute to the same numbers).
+    sold = df["Status"].astype(str) == "Sold"
     pk = params.get("parking", {})
     for t in df["Type"].unique():
         internal, external = area_for(t, params)
-        m = df["Type"] == t
+        m = (df["Type"] == t) & ~sold
         df.loc[m, "Internal_sqft"] = internal
         df.loc[m, "External_sqft"] = external
         df.loc[m, "Terrace_Rate"]  = terrace_for(t, params)
         if t in pk:
-            df.loc[m, "Parking"] = int(pk[t])     # configurable parking per typology (cascades)
+            df.loc[m, "Parking"] = int(pk[t])     # configurable parking per typology (Available only)
     # per-unit terrace overrides win over the type default (set by the floor-range tool)
     if "Terrace_Override" in df.columns:
         ov = df["Terrace_Override"].notna()
@@ -1558,9 +1596,12 @@ g5.metric("Total Price/sqft", aed(df["Price"].sum()/_tot_area) if _tot_area else
 _sold_df = df[df["Status"] == "Sold"]
 _sold_area = float(_sold_df["Total_sqft"].sum())                    # total area of Sold units
 _sold_psf = (_sold_df["Price"].sum() / _sold_area) if _sold_area else 0.0
-gp = st.columns([2, 1, 1, 1])
+_sold_value = float(_sold_df["Price"].sum())                        # total value of Sold units
+gp = st.columns([2, 1.4, 1, 1])
 gp[0].metric("Portfolio Value", aed(df["Price"].sum()))
-gp[1].metric("Sold Price/sqft", aed(_sold_psf) if _sold_area else "—")
+gp[1].metric("Total Sold Value", aed(_sold_value),
+             f"{len(_sold_df)} sold units", delta_color="off")
+gp[2].metric("Sold Price/sqft", aed(_sold_psf) if _sold_area else "—")
 
 st.divider()
 
@@ -1959,7 +2000,7 @@ with tab5:
 # ── Tab 6: Building View (full floor-by-floor tower elevation) ─────────────────
 
 BUILDING_COLORS = {
-    "2 Bedroom": "#5AA9E6", "3 Bedroom - New": "#7FC8F8", "3 Bedroom": "#3C78D8",
+    "2 Bedroom": "#5AA9E6", "3 Bedroom": "#3C78D8",
     "3 Bedroom Pool": "#22C1C3", "4 Bedroom Pool": "#0E8C8C", "4 Bedroom XL": "#F2A65A",
     "3 Bedroom Duplex": "#8BC34A", "4 Bedroom Duplex": "#4E8C2F", "5 Bedroom Duplex": "#E6B450",
 }
@@ -2315,7 +2356,7 @@ def render_building_view(enhanced=False):
 
 
 BROCHURE_COLORS = {
-    "2 Bedroom": "#6E7E6A", "3 Bedroom - New": "#7E8C77", "3 Bedroom": "#566A54",
+    "2 Bedroom": "#6E7E6A", "3 Bedroom": "#566A54",
     "3 Bedroom Pool": "#5C7A7C", "4 Bedroom Pool": "#46625F", "4 Bedroom XL": "#A8743C",
     "3 Bedroom Duplex": "#7A7A3C", "4 Bedroom Duplex": "#5C5E2E", "5 Bedroom Duplex": "#9C7A3A",
 }
@@ -2693,7 +2734,8 @@ with tab3:
 
     # Parameters
     def terrace_group_key(t):
-        if t in ("2 Bedroom", "3 Bedroom - New", "3 Bedroom"): return "standard"
+        if t == "2 Bedroom":                               return "2 Bedroom"
+        if t == "3 Bedroom":                               return "3 Bedroom"
         if t == "3 Bedroom Pool":                          return "3 Bedroom Pool"
         if t == "4 Bedroom Pool":                          return "4 Bedroom Pool"
         if t == "4 Bedroom XL":                            return "simplex"
@@ -2713,7 +2755,7 @@ with tab3:
 
         gkey = terrace_group_key(s_type)
         if gkey is not None:
-            cur_tr = float(params["terrace"][gkey]) * 100
+            cur_tr = _terrace_of(params["terrace"], gkey) * 100
             new_t = sc2.number_input("Terrace %", min_value=0.0, max_value=100.0, step=1.0,
                                      value=cur_tr, key=f"set_tr_{s_type}")
         else:
@@ -2802,7 +2844,7 @@ with tab3:
         ref_rows = []
         for t in UNIT_TYPES:
             gk = terrace_group_key(t)
-            trv = params["terrace"][gk] * 100 if gk else 100.0
+            trv = _terrace_of(params["terrace"], gk) * 100 if gk else 100.0
             bpsf = get_base(t, params)
             base_txt = f"AED {bpsf:,.0f}" if bpsf is not None else "—"
             ref_rows.append({"Typology": t,
