@@ -1614,13 +1614,14 @@ except Exception:
 _bv_flag = str(_bv_secret or os.environ.get("SHOW_BUILDING_VIEW", "")).strip().lower()
 SHOW_BV = _bv_flag not in ("0", "false", "no", "off")
 
-_labels = ["Unit Register", "Summary by Type", "Typology View"]
+_labels = ["Unit Register", "Summary by Type", "Typology View", "Terrace Scenarios"]
 if SHOW_BV:
     _labels += ["Muraba Veil - Building View"]
 _labels += ["Floor Manager", "Edit / Remove Units"]
 _tmap = dict(zip(_labels, st.tabs(_labels)))
 tab1 = _tmap["Unit Register"]; tab2 = _tmap["Summary by Type"]; tab5 = _tmap["Typology View"]
 tab3 = _tmap["Floor Manager"]; tab4 = _tmap["Edit / Remove Units"]
+tab7 = _tmap["Terrace Scenarios"]
 tab6 = None                          # legacy dark Building View — hidden
 tab6b = None                         # legacy enhanced (✦) Building View — hidden
 tab6c = _tmap.get("Muraba Veil - Building View")
@@ -1995,6 +1996,169 @@ with tab5:
         topo_show = column_picker(list(tvd.columns), key="topo_cols", locked=["Type"])
         table_with_export(tvd[topo_show], "Typology_View.xlsx", "exp_topo",
                           title="Muraba Veil Typology Summary")
+
+
+# ── Tab 7: Terrace Scenarios (read-only what-if analysis) ─────────────────────
+
+with tab7:
+    st.subheader("Terrace Scenarios")
+    st.caption("What-if analysis. Each **Available** unit of the chosen typology is priced at the "
+               "**current** terrace % and at two **scenario** terrace percentages. The unit's "
+               "price/sqft never changes — only the terrace does, which moves the Sellable area and "
+               "therefore the price. **Nothing here alters the app's data**: the Unit Register, "
+               "Building View and portfolio totals are untouched.")
+
+    _sc_types = [t for t in UNIT_TYPES if t in set(df["Type"])]
+    if not _sc_types:
+        st.info("No units to analyse.")
+    else:
+        _sc_i = _sc_types.index("2 Bedroom") if "2 Bedroom" in _sc_types else 0
+        _q1, _q2, _q3 = st.columns([2, 1, 1])
+        sc_type = _q1.selectbox("Typology", _sc_types, index=_sc_i, key="scn_type")
+        _cur_pct = terrace_for(sc_type, params) * 100.0
+        _tb = _q2.number_input("Scenario B — terrace %", min_value=0.0, max_value=100.0, step=1.0,
+                               value=40.0, key="scn_b") / 100.0
+        _tc = _q3.number_input("Scenario C — terrace %", min_value=0.0, max_value=100.0, step=1.0,
+                               value=50.0, key="scn_c") / 100.0
+
+        sub = df[(df["Type"] == sc_type) & (df["Status"] == "Available")].copy()
+        if sub.empty:
+            st.info(f"No Available {sc_type} units to analyse.")
+        else:
+            sub["_fn"] = pd.to_numeric(sub["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True),
+                                       errors="coerce")
+            sub["_un"] = pd.to_numeric(sub["Unit"].astype(str).str.replace(r"[^0-9]", "", regex=True),
+                                       errors="coerce")
+            sub = sub.sort_values(["_fn", "_un"]).reset_index(drop=True)
+
+            # any appreciation / discount rides along every column, so the variance stays pure terrace
+            _mult = (1 + pd.to_numeric(sub["Adj_Pct"], errors="coerce").fillna(0.0) / 100.0
+                     if "Adj_Pct" in sub.columns else 1.0)
+            _int, _ext, _psf = sub["Internal_sqft"], sub["External_sqft"], sub["Price_sqft"]
+
+            _sell_a = _int + sub["Terrace_Rate"] * _ext           # each unit's ACTUAL terrace
+            _pa = _psf * _sell_a * _mult                          # (a) current
+            _pb = _psf * (_int + _tb * _ext) * _mult              # (b) scenario B
+            _pc = _psf * (_int + _tc * _ext) * _mult              # (c) scenario C
+            _vb, _vc = _pb - _pa, _pc - _pa
+
+            _hA = f"Price — {_cur_pct:,.0f}% (a)"
+            _hB = f"Price — {_tb * 100:,.0f}% (b)"
+            _hC = f"Price — {_tc * 100:,.0f}% (c)"
+            _hVB, _hVC = "Variance (b−a)", "Variance (c−a)"
+
+            def _n2(v): return f"{v:,.2f}"
+            def _n0(v): return f"{v:,.0f}"
+
+            _rows = pd.DataFrame({
+                "S.no": range(1, len(sub) + 1),
+                "Type": sub["Type"].values, "Status": sub["Status"].values,
+                "Unit": sub["Unit"].astype(str).values, "Floor": sub["Floor"].astype(str).values,
+                "Parking": sub["Parking"].astype(int).values,
+                "Internal (sqft)": _int.values, "External (sqft)": _ext.values,
+                "Total Area (sqft)": (_int + _ext).values, "Sellable (sqft)": _sell_a.values,
+                _hA: _pa.values, _hB: _pb.values, _hC: _pc.values,
+                _hVB: _vb.values, _hVC: _vc.values,
+            })
+
+            _money = [_hA, _hB, _hC, _hVB, _hVC]
+            _area = ["Internal (sqft)", "External (sqft)", "Total Area (sqft)", "Sellable (sqft)"]
+            _disp = _rows.copy()
+            for _c in _area:
+                _disp[_c] = _disp[_c].map(_n2)
+            for _c in _money:
+                _disp[_c] = _disp[_c].map(_n0)
+            _disp["S.no"] = _disp["S.no"].astype(str)
+            _disp["Parking"] = _disp["Parking"].astype(str)
+            _tot = {c: "" for c in _disp.columns}                 # grand-total row
+            _tot["Type"] = "TOTAL"
+            for _c in _area:
+                _tot[_c] = _n2(_rows[_c].sum())
+            for _c in _money:
+                _tot[_c] = _n0(_rows[_c].sum())
+            _disp = pd.concat([_disp, pd.DataFrame([_tot])], ignore_index=True)
+
+            _e1 = st.columns([0.74, 0.26])
+            with _e1[1]:
+                export_button(_rows, f"Terrace_Scenarios_{sc_type.replace(' ', '_')}.xlsx",
+                              key="exp_scn", title=f"{sc_type} — Terrace Scenarios",
+                              aed_cols=_money)
+
+            def _c_var(v):
+                try:
+                    f = float(str(v).replace(",", "").strip())
+                except ValueError:
+                    return ""
+                if f > 0:
+                    return "color:#1a7f37;font-weight:600"
+                if f < 0:
+                    return "color:#d1242f;font-weight:600"
+                return ""
+
+            def _bold_total(row):
+                hit = str(row.get("Type", "")) == "TOTAL"
+                return ["font-weight:700;background-color:#EAF1F8" if hit else "" for _ in row]
+
+            st.dataframe(_disp.style.apply(_bold_total, axis=1).map(_c_var, subset=[_hVB, _hVC]),
+                         use_container_width=True, hide_index=True, height=460)
+            st.caption(f"{len(sub)} Available {sc_type} unit(s) · Sellable = Internal + terrace % × "
+                       f"External · each unit's price/sqft is held constant")
+
+            # ── summary ───────────────────────────────────────────────────────
+            st.markdown("##### Summary")
+            # Price/sq.ft is BUILDING-WIDE: portfolio value / total area, with the scenario terrace
+            # applied to EVERY unit of this typology (Sold included) — that is how the client's
+            # sheet computes it, since it asks "what if this typology's terrace were redefined".
+            # It is a read-only what-if: no Sold unit's real price is ever changed.
+            _area_all = float(df["Total_sqft"].sum())      # terrace never changes total area
+            _allt = df[df["Type"] == sc_type]
+            _ai, _ae, _ap = _allt["Internal_sqft"], _allt["External_sqft"], _allt["Price_sqft"]
+            _am = (1 + pd.to_numeric(_allt["Adj_Pct"], errors="coerce").fillna(0.0) / 100.0
+                   if "Adj_Pct" in _allt.columns else 1.0)
+            _rest = float(df["Price"].sum()) - float((_ap * (_ai + _allt["Terrace_Rate"] * _ae) * _am).sum())
+
+            def _psf_b(T):
+                _v = (_ap * (_ai + T * _ae) * _am).sum() if T is not None else \
+                     (_ap * (_ai + _allt["Terrace_Rate"] * _ae) * _am).sum()
+                return (_rest + float(_v)) / _area_all if _area_all else 0.0
+
+            _stats = [
+                ("Average",     _pa.mean(),   _pb.mean(),   _pc.mean()),
+                ("Min",         _pa.min(),    _pb.min(),    _pc.min()),
+                ("Median",      _pa.median(), _pb.median(), _pc.median()),
+                ("Max",         _pa.max(),    _pb.max(),    _pc.max()),
+                ("Price/sq.ft", _psf_b(None), _psf_b(_tb),  _psf_b(_tc)),
+            ]
+            _cB = f"Terrace {_tb * 100:,.0f}% (b)"
+            _cC = f"Terrace {_tc * 100:,.0f}% (c)"
+            _sum = pd.DataFrame({
+                "Particulars": [r[0] for r in _stats],
+                "Actual (a)":  [_n0(r[1]) for r in _stats],
+                _cB:           [_n0(r[2]) for r in _stats],
+                _cC:           [_n0(r[3]) for r in _stats],
+                _hVB:          [_n0(r[2] - r[1]) for r in _stats],
+                _hVC:          [_n0(r[3] - r[1]) for r in _stats],
+            })
+            _s2 = st.columns([0.74, 0.26])
+            with _s2[1]:
+                _sum_raw = pd.DataFrame({
+                    "Particulars":    [r[0] for r in _stats],
+                    "Actual (a)":     [r[1] for r in _stats],
+                    "Scenario B (b)": [r[2] for r in _stats],
+                    "Scenario C (c)": [r[3] for r in _stats],
+                    "Variance (b-a)": [r[2] - r[1] for r in _stats],
+                    "Variance (c-a)": [r[3] - r[1] for r in _stats],
+                })
+                export_button(_sum_raw,
+                              f"Terrace_Scenarios_Summary_{sc_type.replace(' ', '_')}.xlsx",
+                              key="exp_scn_sum", title=f"{sc_type} — Scenario Summary")
+            st.dataframe(_sum.style.map(_c_var, subset=[_hVB, _hVC]),
+                         use_container_width=True, hide_index=True)
+            st.caption("**Price/sq.ft** is building-wide — total portfolio value ÷ total area — "
+                       f"recomputed with the scenario terrace applied to **every {sc_type} unit "
+                       "(Sold included)**, matching the client's sheet. It is a what-if only — no "
+                       "Sold unit's real price is ever changed. The rows above it cover the listed "
+                       "Available units only.")
 
 
 # ── Tab 6: Building View (full floor-by-floor tower elevation) ─────────────────
