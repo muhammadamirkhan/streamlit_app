@@ -2003,6 +2003,133 @@ with tab5:
         table_with_export(tvd[topo_show], "Typology_View.xlsx", "exp_topo",
                           title="Muraba Veil Typology Summary")
 
+    # ── Typology Price Progression Analysis ───────────────────────────────────
+    # Read-only. Walks the typology ladder from cheapest to most expensive and checks
+    # that each rung starts above where the previous one ended; a negative gap means
+    # the ladder crosses over (price inversion). Available units only.
+    st.divider()
+    st.subheader("Typology Price Progression Analysis")
+    st.caption("Walks the typology ladder in order. For each typology it shows the **lowest-** and "
+               "**highest-floor Available** unit, then the **gap to the next typology** — the next "
+               "typology's lowest price minus this one's highest. A **negative** gap means the two "
+               "typologies overlap in price, which is flagged as a **price inversion**. "
+               "Price/sq.ft here is price ÷ **total** area.")
+
+    _pg = df[df["Status"] == "Available"].copy()
+    if _pg.empty:
+        st.info("No Available units to analyse.")
+    else:
+        _pg["_fn"] = pd.to_numeric(_pg["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True),
+                                   errors="coerce")
+        _pg["_un"] = pd.to_numeric(_pg["Unit"].astype(str).str.replace(r"[^0-9]", "", regex=True),
+                                   errors="coerce")
+        _pg["_psf_t"] = _pg["Price"] / _pg["Total_sqft"].replace(0, pd.NA)
+
+        _prog = []
+        for _t in [t for t in UNIT_TYPES if t in set(_pg["Type"])]:
+            _g = _pg[_pg["Type"] == _t].sort_values(["_fn", "_un"])
+            if _g.empty:
+                continue
+            _lo, _hi = _g.iloc[0], _g.iloc[-1]
+            _prog.append({
+                "Type": f"{_t} Residence",
+                "lo_u": f"{_lo['Unit']} (F{int(_lo['_fn'])})" if pd.notna(_lo["_fn"]) else str(_lo["Unit"]),
+                "hi_u": f"{_hi['Unit']} (F{int(_hi['_fn'])})" if pd.notna(_hi["_fn"]) else str(_hi["Unit"]),
+                "lo_p": float(_lo["Price"]), "lo_psf": float(_lo["_psf_t"]),
+                "hi_p": float(_hi["Price"]), "hi_psf": float(_hi["_psf_t"]),
+                "n": len(_g),
+            })
+
+        for _i, _r in enumerate(_prog):
+            if _i + 1 < len(_prog):
+                _nlo = _prog[_i + 1]["lo_p"]
+                _r["gap"] = _nlo - _r["hi_p"]
+                _r["gap_pct"] = (_r["gap"] / _nlo * 100.0) if _nlo else 0.0
+                _r["flag"] = "⚠ Price Inversion" if _r["gap"] < 0 else "OK"
+            else:
+                _r["gap"] = _r["gap_pct"] = None
+                _r["flag"] = ""
+
+        def _m0(v):
+            return "" if v is None or pd.isna(v) else f"{v:,.0f}"
+
+        def _sg(v):
+            if v is None or pd.isna(v):
+                return ""
+            return ("+" if v > 0 else "−") + f"{abs(v):,.0f}" if v else "0"
+
+        def _sgp(v):
+            if v is None or pd.isna(v):
+                return ""
+            return ("+" if v > 0 else "−") + f"{abs(v):.0f}%" if v else "0%"
+
+        _pt = pd.DataFrame({
+            "Sr. No": [str(i + 1) for i in range(len(_prog))],
+            "Type": [r["Type"] for r in _prog],
+            "Pricing Inversion Flag": [r["flag"] for r in _prog],
+            "Lowest Floor Unit": [r["lo_u"] for r in _prog],
+            "Highest Floor Unit": [r["hi_u"] for r in _prog],
+            "Lowest Unit Price": [_m0(r["lo_p"]) for r in _prog],
+            "Lowest Unit P./Sq. Ft": [_m0(r["lo_psf"]) for r in _prog],
+            "Highest Unit Price": [_m0(r["hi_p"]) for r in _prog],
+            "Highest Unit P./Sq. Ft": [_m0(r["hi_psf"]) for r in _prog],
+            "Gap to Next Typology (AED)": [_sg(r["gap"]) for r in _prog],
+            "Gap to Next Typology (%)": [_sgp(r["gap_pct"]) for r in _prog],
+        })
+
+        _inv = sum(1 for r in _prog if r["gap"] is not None and r["gap"] < 0)
+        if _inv:
+            st.warning(f"⚠ **{_inv} price inversion(s)** — a typology's highest price sits above the "
+                       "next typology's lowest, so the two overlap.")
+        else:
+            st.success("✅ No price inversions — every typology starts above the previous one's top price.")
+
+        _px = st.columns([0.74, 0.26])
+        with _px[1]:
+            _praw = pd.DataFrame({
+                "Sr. No": range(1, len(_prog) + 1),
+                "Type": [r["Type"] for r in _prog],
+                "Pricing Inversion Flag": [r["flag"] or "n/a" for r in _prog],
+                "Lowest Floor Unit": [r["lo_u"] for r in _prog],
+                "Highest Floor Unit": [r["hi_u"] for r in _prog],
+                "Available Units": [r["n"] for r in _prog],
+                "Lowest Unit Price": [r["lo_p"] for r in _prog],
+                "Lowest Unit P./Sq. Ft": [r["lo_psf"] for r in _prog],
+                "Highest Unit Price": [r["hi_p"] for r in _prog],
+                "Highest Unit P./Sq. Ft": [r["hi_psf"] for r in _prog],
+                "Gap to Next Typology (AED)": [r["gap"] for r in _prog],
+                "Gap to Next Typology (%)": [r["gap_pct"] for r in _prog],
+            })
+            export_button(_praw, "Typology_Price_Progression.xlsx", key="exp_prog",
+                          title="Typology Price Progression Analysis",
+                          aed_cols=["Lowest Unit Price", "Highest Unit Price",
+                                    "Gap to Next Typology (AED)"])
+
+        def _c_flag(v):
+            if str(v).startswith("⚠"):
+                return "background-color:#FDECEA;color:#B3261E;font-weight:600"
+            if str(v) == "OK":
+                return "background-color:#E8F3EC;color:#1a7f37;font-weight:600"
+            return ""
+
+        def _c_gap(v):
+            s = str(v)
+            if s.startswith("+"):
+                return "color:#1a7f37;font-weight:600"
+            if s.startswith("−") or s.startswith("-"):
+                return "color:#d1242f;font-weight:600"
+            return ""
+
+        st.dataframe(
+            _pt.style.map(_c_flag, subset=["Pricing Inversion Flag"])
+                     .map(_c_gap, subset=["Gap to Next Typology (AED)",
+                                          "Gap to Next Typology (%)"]),
+            use_container_width=True, hide_index=True)
+        st.caption("Available units only · **Gap** = next typology's lowest price − this typology's "
+                   "highest price · **Gap %** = gap ÷ next typology's lowest price · the last "
+                   "typology has no next rung, so its gap is blank.")
+
+
 
 # ── Tab 7: Terrace Scenarios (read-only what-if analysis) ─────────────────────
 # SELF-CONTAINED: reads the register only. No writes to units / fm_params / floors /
