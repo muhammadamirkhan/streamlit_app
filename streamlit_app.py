@@ -35,6 +35,10 @@ def _state_dict():
         "uid_counter": int(st.session_state.get("uid_counter", len(st.session_state.units))),
         # MEP / Majlis floors can be renumbered (MEP-moves), so persist them with the state
         "blocked": {str(k): v for k, v in st.session_state.get("blocked", {}).items()},
+        # Price-Analysis scenarios travel with the version, but only when the user has
+        # switched "Retain this analysis" on (otherwise they stay session-only).
+        "price_scenarios": (st.session_state.get("price_scenarios", [])
+                            if st.session_state.get("pa_retain") else []),
     }
 
 def _write_state(path):
@@ -70,6 +74,7 @@ def _parse_state(state):
     units["Comment"] = units["Comment"].fillna("").astype(str)
     blk = state.get("blocked")
     blk = {int(k): v for k, v in blk.items()} if blk else None
+    st.session_state["price_scenarios"] = list(state.get("price_scenarios") or [])
     prm = _migrate_params(state["params"])
     return units, state["floors"], prm, int(state.get("uid_counter", len(units))), blk
 
@@ -1614,7 +1619,7 @@ except Exception:
 _bv_flag = str(_bv_secret or os.environ.get("SHOW_BUILDING_VIEW", "")).strip().lower()
 SHOW_BV = _bv_flag not in ("0", "false", "no", "off")
 
-_labels = ["Unit Register", "Summary by Type", "Typology View", "Terrace Scenarios"]
+_labels = ["Unit Register", "Summary by Type", "Typology View", "Terrace Scenarios", "Price Analysis"]
 if SHOW_BV:
     _labels += ["Muraba Veil - Building View"]
 _labels += ["Floor Manager", "Edit / Remove Units"]
@@ -1622,6 +1627,7 @@ _tmap = dict(zip(_labels, st.tabs(_labels)))
 tab1 = _tmap["Unit Register"]; tab2 = _tmap["Summary by Type"]; tab5 = _tmap["Typology View"]
 tab3 = _tmap["Floor Manager"]; tab4 = _tmap["Edit / Remove Units"]
 tab7 = _tmap["Terrace Scenarios"]
+tab8 = _tmap["Price Analysis"]
 tab6 = None                          # legacy dark Building View — hidden
 tab6b = None                         # legacy enhanced (✦) Building View — hidden
 tab6c = _tmap.get("Muraba Veil - Building View")
@@ -1999,31 +2005,67 @@ with tab5:
 
 
 # ── Tab 7: Terrace Scenarios (read-only what-if analysis) ─────────────────────
+# SELF-CONTAINED: reads the register only. No writes to units / fm_params / floors /
+# blocked, no st.rerun() (which would bounce the user to the first tab), no global
+# "flash" banner. Its only state is st.session_state["terrace_scenarios"].
 
 with tab7:
     st.subheader("Terrace Scenarios")
     st.caption("What-if analysis. Each **Available** unit of the chosen typology is priced at the "
-               "**current** terrace % and at two **scenario** terrace percentages. The unit's "
-               "price/sqft never changes — only the terrace does, which moves the Sellable area and "
-               "therefore the price. **Nothing here alters the app's data**: the Unit Register, "
-               "Building View and portfolio totals are untouched.")
+               "**current** terrace % and at any number of **scenario** terrace percentages. The "
+               "unit's price/sqft never changes — only the terrace does, which moves the Sellable "
+               "area and therefore the price. **Nothing here alters the app's data.**")
+
+    if "terrace_scenarios" not in st.session_state:
+        st.session_state["terrace_scenarios"] = [{"id": "t1", "pct": 40.0},
+                                                 {"id": "t2", "pct": 50.0}]
+    _tscn = st.session_state["terrace_scenarios"]
 
     _sc_types = [t for t in UNIT_TYPES if t in set(df["Type"])]
     if not _sc_types:
         st.info("No units to analyse.")
     else:
         _sc_i = _sc_types.index("2 Bedroom") if "2 Bedroom" in _sc_types else 0
-        _q1, _q2, _q3 = st.columns([2, 1, 1])
-        sc_type = _q1.selectbox("Typology", _sc_types, index=_sc_i, key="scn_type")
+        sc_type = st.selectbox("Typology", _sc_types, index=_sc_i, key="scn_type")
         _cur_pct = terrace_for(sc_type, params) * 100.0
-        _tb = _q2.number_input("Scenario B — terrace %", min_value=0.0, max_value=100.0, step=1.0,
-                               value=40.0, key="scn_b") / 100.0
-        _tc = _q3.number_input("Scenario C — terrace %", min_value=0.0, max_value=100.0, step=1.0,
-                               value=50.0, key="scn_c") / 100.0
+
+        # ── scenario manager (handled BEFORE the inputs render, so the page updates
+        #    in place — no st.rerun(), so you stay on this tab) ──
+        _a1, _a2, _a3 = st.columns([1.4, 2.3, 1.1])
+        if _a1.button("➕  Add terrace scenario", key="ts_add", use_container_width=True):
+            st.session_state["ts_seq"] = st.session_state.get("ts_seq", len(_tscn)) + 1
+            _nxt = round(max([s["pct"] for s in _tscn] + [_cur_pct]) + 10.0, 2)
+            _tscn.append({"id": f"t{st.session_state['ts_seq']}", "pct": min(_nxt, 100.0)})
+        if len(_tscn) > 1:
+            _ri = _a2.selectbox("Remove", list(range(len(_tscn))),
+                                format_func=lambda i: f"Scenario {chr(98 + i).upper()} — "
+                                                      f"{_tscn[i]['pct']:,.0f}%",
+                                key="ts_rmsel", label_visibility="collapsed")
+            if _a3.button("🗑️  Remove", key="ts_rmbtn", use_container_width=True):
+                if 0 <= _ri < len(_tscn):
+                    _g = _tscn.pop(_ri)
+                    st.success(f"Removed the {_g['pct']:,.0f}% scenario.")
+                    st.session_state.pop("ts_rmsel", None)
+        elif _tscn:
+            _a2.caption("Keep at least one scenario.")
+
+        st.markdown(f"**Current terrace for {sc_type}: {_cur_pct:,.0f}%** — set each scenario's "
+                    "terrace % below.")
+        _per_row = 4
+        for _r0 in range(0, len(_tscn), _per_row):
+            _chunk = _tscn[_r0:_r0 + _per_row]
+            _cc = st.columns(_per_row)
+            for _k, _sc in enumerate(_chunk):
+                _idx = _r0 + _k
+                _sc["pct"] = _cc[_k].number_input(
+                    f"Scenario {chr(98 + _idx).upper()} — terrace %", min_value=0.0,
+                    max_value=100.0, step=1.0, value=float(_sc["pct"]), key=f"ts_pct_{_sc['id']}")
 
         sub = df[(df["Type"] == sc_type) & (df["Status"] == "Available")].copy()
         if sub.empty:
             st.info(f"No Available {sc_type} units to analyse.")
+        elif not _tscn:
+            st.info("Add at least one terrace scenario to see the comparison.")
         else:
             sub["_fn"] = pd.to_numeric(sub["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True),
                                        errors="coerce")
@@ -2031,21 +2073,19 @@ with tab7:
                                        errors="coerce")
             sub = sub.sort_values(["_fn", "_un"]).reset_index(drop=True)
 
-            # any appreciation / discount rides along every column, so the variance stays pure terrace
+            # any appreciation / discount rides along every column, so variance stays pure terrace
             _mult = (1 + pd.to_numeric(sub["Adj_Pct"], errors="coerce").fillna(0.0) / 100.0
                      if "Adj_Pct" in sub.columns else 1.0)
             _int, _ext, _psf = sub["Internal_sqft"], sub["External_sqft"], sub["Price_sqft"]
 
             _sell_a = _int + sub["Terrace_Rate"] * _ext           # each unit's ACTUAL terrace
             _pa = _psf * _sell_a * _mult                          # (a) current
-            _pb = _psf * (_int + _tb * _ext) * _mult              # (b) scenario B
-            _pc = _psf * (_int + _tc * _ext) * _mult              # (c) scenario C
-            _vb, _vc = _pb - _pa, _pc - _pa
-
             _hA = f"Price — {_cur_pct:,.0f}% (a)"
-            _hB = f"Price — {_tb * 100:,.0f}% (b)"
-            _hC = f"Price — {_tc * 100:,.0f}% (c)"
-            _hVB, _hVC = "Variance (b−a)", "Variance (c−a)"
+
+            _scn_cols = []                                        # [(letter, pct, price series)]
+            for _idx, _sc in enumerate(_tscn):
+                _T = float(_sc["pct"]) / 100.0
+                _scn_cols.append((chr(98 + _idx), float(_sc["pct"]), _psf * (_int + _T * _ext) * _mult))
 
             def _n2(v): return f"{v:,.2f}"
             def _n0(v): return f"{v:,.0f}"
@@ -2057,14 +2097,20 @@ with tab7:
                 "Parking": sub["Parking"].astype(int).values,
                 "Internal (sqft)": _int.values, "External (sqft)": _ext.values,
                 "Total Area (sqft)": (_int + _ext).values, "Sellable (sqft)": _sell_a.values,
-                _hA: _pa.values, _hB: _pb.values, _hC: _pc.values,
-                _hVB: _vb.values, _hVC: _vc.values,
+                _hA: _pa.values,
             })
+            _money, _varc = [_hA], []
+            for _lt, _pc, _pr in _scn_cols:
+                _hp = f"Price — {_pc:,.0f}% ({_lt})"
+                _hv = f"Variance ({_lt}−a)"
+                _rows[_hp] = _pr.values
+                _rows[_hv] = (_pr - _pa).values
+                _money += [_hp, _hv]
+                _varc.append(_hv)
 
-            _money = [_hA, _hB, _hC, _hVB, _hVC]
-            _area = ["Internal (sqft)", "External (sqft)", "Total Area (sqft)", "Sellable (sqft)"]
+            _area_cols = ["Internal (sqft)", "External (sqft)", "Total Area (sqft)", "Sellable (sqft)"]
             _disp = _rows.copy()
-            for _c in _area:
+            for _c in _area_cols:
                 _disp[_c] = _disp[_c].map(_n2)
             for _c in _money:
                 _disp[_c] = _disp[_c].map(_n0)
@@ -2072,7 +2118,7 @@ with tab7:
             _disp["Parking"] = _disp["Parking"].astype(str)
             _tot = {c: "" for c in _disp.columns}                 # grand-total row
             _tot["Type"] = "TOTAL"
-            for _c in _area:
+            for _c in _area_cols:
                 _tot[_c] = _n2(_rows[_c].sum())
             for _c in _money:
                 _tot[_c] = _n0(_rows[_c].sum())
@@ -2099,17 +2145,16 @@ with tab7:
                 hit = str(row.get("Type", "")) == "TOTAL"
                 return ["font-weight:700;background-color:#EAF1F8" if hit else "" for _ in row]
 
-            st.dataframe(_disp.style.apply(_bold_total, axis=1).map(_c_var, subset=[_hVB, _hVC]),
+            st.dataframe(_disp.style.apply(_bold_total, axis=1).map(_c_var, subset=_varc),
                          use_container_width=True, hide_index=True, height=460)
-            st.caption(f"{len(sub)} Available {sc_type} unit(s) · Sellable = Internal + terrace % × "
-                       f"External · each unit's price/sqft is held constant")
+            st.caption(f"{len(sub)} Available {sc_type} unit(s) · {len(_scn_cols)} scenario(s) · "
+                       f"Sellable = Internal + terrace % × External · price/sqft held constant")
 
             # ── summary ───────────────────────────────────────────────────────
             st.markdown("##### Summary")
             # Price/sq.ft is BUILDING-WIDE: portfolio value / total area, with the scenario terrace
-            # applied to EVERY unit of this typology (Sold included) — that is how the client's
-            # sheet computes it, since it asks "what if this typology's terrace were redefined".
-            # It is a read-only what-if: no Sold unit's real price is ever changed.
+            # applied to EVERY unit of this typology (Sold included) — how the client's sheet does
+            # it. Read-only: no Sold unit's real price is ever changed.
             _area_all = float(df["Total_sqft"].sum())      # terrace never changes total area
             _allt = df[df["Type"] == sc_type]
             _ai, _ae, _ap = _allt["Internal_sqft"], _allt["External_sqft"], _allt["Price_sqft"]
@@ -2122,43 +2167,387 @@ with tab7:
                      (_ap * (_ai + _allt["Terrace_Rate"] * _ae) * _am).sum()
                 return (_rest + float(_v)) / _area_all if _area_all else 0.0
 
-            _stats = [
-                ("Average",     _pa.mean(),   _pb.mean(),   _pc.mean()),
-                ("Min",         _pa.min(),    _pb.min(),    _pc.min()),
-                ("Median",      _pa.median(), _pb.median(), _pc.median()),
-                ("Max",         _pa.max(),    _pb.max(),    _pc.max()),
-                ("Price/sq.ft", _psf_b(None), _psf_b(_tb),  _psf_b(_tc)),
-            ]
-            _cB = f"Terrace {_tb * 100:,.0f}% (b)"
-            _cC = f"Terrace {_tc * 100:,.0f}% (c)"
-            _sum = pd.DataFrame({
-                "Particulars": [r[0] for r in _stats],
-                "Actual (a)":  [_n0(r[1]) for r in _stats],
-                _cB:           [_n0(r[2]) for r in _stats],
-                _cC:           [_n0(r[3]) for r in _stats],
-                _hVB:          [_n0(r[2] - r[1]) for r in _stats],
-                _hVC:          [_n0(r[3] - r[1]) for r in _stats],
-            })
+            def _mv(series, psf):
+                return [series.mean(), series.min(), series.median(), series.max(), psf]
+
+            _labels = ["Average", "Min", "Median", "Max", "Price/sq.ft"]
+            _bvals = _mv(_pa, _psf_b(None))
+            _sumd = {"Particulars": _labels, "Actual (a)": [_n0(x) for x in _bvals]}
+            _sraw = {"Particulars": _labels, "Actual (a)": _bvals}
+            _svar = []
+            for _lt, _pc, _pr in _scn_cols:
+                _vv = _mv(_pr, _psf_b(_pc / 100.0))
+                _cn = f"Terrace {_pc:,.0f}% ({_lt})"
+                _vn = f"Variance ({_lt}−a)"
+                _sumd[_cn] = [_n0(x) for x in _vv]
+                _sumd[_vn] = [_n0(a - b) for a, b in zip(_vv, _bvals)]
+                _sraw[_cn] = _vv
+                _sraw[f"Variance ({_lt}-a)"] = [a - b for a, b in zip(_vv, _bvals)]
+                _svar.append(_vn)
+            _sum = pd.DataFrame(_sumd)
             _s2 = st.columns([0.74, 0.26])
             with _s2[1]:
-                _sum_raw = pd.DataFrame({
-                    "Particulars":    [r[0] for r in _stats],
-                    "Actual (a)":     [r[1] for r in _stats],
-                    "Scenario B (b)": [r[2] for r in _stats],
-                    "Scenario C (c)": [r[3] for r in _stats],
-                    "Variance (b-a)": [r[2] - r[1] for r in _stats],
-                    "Variance (c-a)": [r[3] - r[1] for r in _stats],
-                })
-                export_button(_sum_raw,
+                export_button(pd.DataFrame(_sraw),
                               f"Terrace_Scenarios_Summary_{sc_type.replace(' ', '_')}.xlsx",
                               key="exp_scn_sum", title=f"{sc_type} — Scenario Summary")
-            st.dataframe(_sum.style.map(_c_var, subset=[_hVB, _hVC]),
+            st.dataframe(_sum.style.map(_c_var, subset=_svar),
                          use_container_width=True, hide_index=True)
             st.caption("**Price/sq.ft** is building-wide — total portfolio value ÷ total area — "
                        f"recomputed with the scenario terrace applied to **every {sc_type} unit "
                        "(Sold included)**, matching the client's sheet. It is a what-if only — no "
                        "Sold unit's real price is ever changed. The rows above it cover the listed "
                        "Available units only.")
+
+
+# ── Price Analysis: scenario engine (read-only; Sold units can never change) ──
+
+PRICE_MODES = ["No change", "% change", "AED/sqft delta", "Flat price/sqft", "Base + escalation"]
+
+
+def _scn_new(n):
+    return {"id": f"s{n}", "name": f"Scenario {n}", "rules": {}, "overrides": {}}
+
+
+def _scn_ladder(t, base_psf, dfx, params):
+    """Read-only twin of recompute_from_base: {uid: price/sqft} for the Available units of t's
+    price family, anchoring the lowest Available floor at base_psf and escalating upward."""
+    fam = family_types(t)
+    sub = dfx[dfx["Type"].isin(fam)].copy()
+    if sub.empty:
+        return {}
+    sub["_fn"] = pd.to_numeric(sub["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True),
+                               errors="coerce")
+    sub = sub.dropna(subset=["_fn"])
+    avail = sub[sub["Status"] == "Available"]
+    if sub.empty or avail.empty:
+        return {}
+    floors_sorted = sorted(sub["_fn"].unique())
+    pos = {f: i for i, f in enumerate(floors_sorted)}
+    anchor = pos[avail["_fn"].min()]
+    esc = escalation_for(t, params)
+    dpx = params.get("duplex_premium", 0.0) if "Duplex" in t else 0.0
+    out = {}
+    for _, r in avail.iterrows():
+        out[r["uid"]] = max(base_psf + esc * (pos[float(r["_fn"])] - anchor) + dpx, 0.0)
+    return out
+
+
+def scenario_psf(scn, dfx, params):
+    """Each unit's price/sqft under one scenario.
+
+    HARD RULE: Sold units are never touched — every rule and override is masked to Available
+    units, so a Sold unit's scenario price always equals its real price and its variance is 0."""
+    psf = pd.to_numeric(dfx["Price_sqft"], errors="coerce").astype(float).copy()
+    sold = dfx["Status"].astype(str) == "Sold"
+    for t, rule in (scn.get("rules") or {}).items():
+        mode = rule.get("mode", "No change")
+        try:
+            val = float(rule.get("value") or 0.0)
+        except (TypeError, ValueError):
+            continue
+        m = (dfx["Type"] == t) & (~sold)
+        if mode == "No change" or not m.any():
+            continue
+        if mode == "% change":
+            psf.loc[m] = psf.loc[m] * (1.0 + val / 100.0)
+        elif mode == "AED/sqft delta":
+            psf.loc[m] = psf.loc[m] + val
+        elif mode == "Flat price/sqft":
+            psf.loc[m] = val
+        elif mode == "Base + escalation":
+            for uid, v in _scn_ladder(t, val, dfx, params).items():
+                psf.loc[(dfx["uid"] == uid) & (~sold)] = v
+    for uid, v in (scn.get("overrides") or {}).items():      # per-unit fine-tuning wins
+        try:
+            psf.loc[(dfx["uid"] == uid) & (~sold)] = float(v)
+        except (TypeError, ValueError):
+            continue
+    return psf.clip(lower=0.0)
+
+
+def _pa_label(uid, frame):
+    """Readable unit label. Local to Price Analysis because uid_label() is defined further
+    down the file (inside the Edit / Remove Units tab) and is not available this early."""
+    r = frame[frame["uid"] == uid]
+    if r.empty:
+        return str(uid)
+    r = r.iloc[0]
+    return f"Unit {r['Unit']} - {r['Type']} (Floor {r['Floor']}) - {r['Status']}"
+
+
+# ── Tab 8: Price Analysis ─────────────────────────────────────────────────────
+# SELF-CONTAINED: this tab only ever READS the register. It never writes to
+# st.session_state.units / fm_params / floors / blocked, never calls st.rerun()
+# (which would bounce the user back to the first tab), and never sets the global
+# "flash" banner. Its only state is st.session_state["price_scenarios"], used
+# here and — when "Retain" is on — written into a saved Base Version.
+
+with tab8:
+    st.subheader("Price Analysis")
+    st.caption("Compare today's prices against any number of **pricing scenarios**. Set a rule per "
+               "typology, fine-tune individual units, and read the variance for each scenario. "
+               "**Sold units never change** — identical price in every column, variance “—”. "
+               "Nothing you do here affects any other tab.")
+
+    if "price_scenarios" not in st.session_state:
+        st.session_state["price_scenarios"] = []
+    _scns = st.session_state["price_scenarios"]
+
+    pdf = df.copy().reset_index(drop=True)
+    _sold_mask = pdf["Status"].astype(str) == "Sold"
+    _adjm = (1 + pd.to_numeric(pdf["Adj_Pct"], errors="coerce").fillna(0.0) / 100.0
+             if "Adj_Pct" in pdf.columns else 1.0)
+    _base_price = pdf["Price"].astype(float)
+    _pa_types = [t for t in UNIT_TYPES if t in set(pdf["Type"])]
+
+    def _pa_price(scn):
+        """(price/sqft, price) for every unit under one scenario — read-only."""
+        _p = scenario_psf(scn, pdf, params)
+        return _p, _p * pdf["Sellable_sqft"].astype(float) * _adjm
+
+    # ── scenario manager (add / remove handled BEFORE the editors render, so the
+    #    page updates in place — no st.rerun(), so you stay on this tab) ──
+    _c1, _c2, _c3 = st.columns([1.3, 2.4, 1.1])
+    if _c1.button("➕  Add scenario", key="pa_add", use_container_width=True):
+        st.session_state["pa_seq"] = st.session_state.get("pa_seq", 0) + 1
+        _scns.append(_scn_new(st.session_state["pa_seq"]))
+    if _scns:
+        _opts = list(range(len(_scns)))
+        _rmi = _c2.selectbox("Remove", _opts, format_func=lambda i: _scns[i]["name"],
+                             key="pa_rmsel", label_visibility="collapsed")
+        if _c3.button("🗑️  Remove", key="pa_rmbtn", use_container_width=True):
+            if 0 <= _rmi < len(_scns):
+                _gone = _scns.pop(_rmi)
+                st.success(f"Removed “{_gone['name']}”.")
+                st.session_state.pop("pa_rmsel", None)
+    else:
+        _c2.info("No scenarios yet — click **Add scenario** to begin.")
+
+    # ── per-scenario editors ──
+    for _i, _s in enumerate(list(_scns)):
+        if _s not in _scns:
+            continue
+        with st.expander(f"⚙️  {_s.get('name', 'Scenario')}", expanded=(len(_scns) <= 2)):
+            _s["name"] = st.text_input("Scenario name", value=_s.get("name", "Scenario"),
+                                       key=f"pa_nm_{_s['id']}")
+
+            with st.form(f"pa_form_{_s['id']}"):
+                st.markdown("**Typology rules** — *No change* leaves that typology at today's "
+                            "price. Sold units are excluded from every rule.")
+                _hd = st.columns([2.2, 1.6, 1.2])
+                _hd[0].markdown("**Typology**")
+                _hd[1].markdown("**Mode**")
+                _hd[2].markdown("**Value**")
+                _pend = {}
+                for _t in _pa_types:
+                    _cur = (_s.get("rules") or {}).get(_t, {})
+                    _md = _cur.get("mode", "No change")
+                    _mi = PRICE_MODES.index(_md) if _md in PRICE_MODES else 0
+                    _tm = (pdf["Type"] == _t) & (~_sold_mask)
+                    _lo = pdf.loc[_tm, "Price_sqft"].min() if _tm.any() else 0
+                    _hi = pdf.loc[_tm, "Price_sqft"].max() if _tm.any() else 0
+                    _rw = st.columns([2.2, 1.6, 1.2])
+                    _rw[0].markdown(
+                        f"{_t}  \n<span style='color:#8a8a8a;font-size:0.78em'>"
+                        f"{int(_tm.sum())} available · now {_lo:,.0f}–{_hi:,.0f}/sqft</span>",
+                        unsafe_allow_html=True)
+                    _mo = _rw[1].selectbox("Mode", PRICE_MODES, index=_mi,
+                                           key=f"pa_md_{_s['id']}_{_t}",
+                                           label_visibility="collapsed")
+                    _vl = _rw[2].number_input("Value", value=float(_cur.get("value", 0.0)),
+                                              step=1.0, key=f"pa_vl_{_s['id']}_{_t}",
+                                              label_visibility="collapsed")
+                    _pend[_t] = {"mode": _mo, "value": _vl}
+                st.caption("**% change** ±% · **AED/sqft delta** ± per sqft · "
+                           "**Flat price/sqft** exact rate for the whole typology · "
+                           "**Base + escalation** anchor the lowest available unit and let the "
+                           "floor ladder climb.")
+                if st.form_submit_button("✅  Apply rules", type="primary",
+                                         use_container_width=True):
+                    _s["rules"] = {t: r for t, r in _pend.items() if r["mode"] != "No change"}
+                    st.success(f"Applied {len(_s['rules'])} rule(s) — the table below is updated.")
+
+            # per-unit overrides
+            st.markdown("**Per-unit overrides** — an exact price/sqft for specific units; "
+                        "beats the typology rule. Available units only.")
+            _av_uids = pdf.loc[~_sold_mask, "uid"].tolist()
+            _o1, _o2, _o3 = st.columns([3, 1.2, 1.2])
+            _ou = _o1.multiselect("Units", _av_uids, format_func=lambda u: _pa_label(u, pdf),
+                                  key=f"pa_ou_{_s['id']}", label_visibility="collapsed",
+                                  placeholder="Select unit(s)…")
+            _op = _o2.number_input("Price/sqft", min_value=0.0, step=10.0, value=0.0,
+                                   key=f"pa_op_{_s['id']}", label_visibility="collapsed")
+            if _o3.button("Set override", key=f"pa_os_{_s['id']}", use_container_width=True,
+                          disabled=(not _ou or _op <= 0)):
+                _s.setdefault("overrides", {})
+                for _u in _ou:
+                    _s["overrides"][_u] = float(_op)
+                st.success(f"Override set on {len(_ou)} unit(s) @ {_op:,.0f}/sqft.")
+            _ovs = _s.get("overrides") or {}
+            if _ovs:
+                _lst = ", ".join(f"{_pa_label(u, pdf).split(' - ')[0]} @ {v:,.0f}"
+                                 for u, v in list(_ovs.items())[:6])
+                _oc1, _oc2 = st.columns([3, 1])
+                _oc1.caption(f"{len(_ovs)} override(s): {_lst}{' …' if len(_ovs) > 6 else ''}")
+                if _oc2.button("Clear overrides", key=f"pa_oc_{_s['id']}",
+                               use_container_width=True):
+                    _s["overrides"] = {}
+                    _oc1.caption("Overrides cleared.")
+
+            # live impact of this scenario (computed after the edits above)
+            _ip, _ipr = _pa_price(_s)
+            _n_hit = int(((_ip != pdf["Price_sqft"]) & (~_sold_mask)).sum())
+            _d_tot = float((_ipr - _base_price).sum())
+            _sgn = "+" if _d_tot > 0 else "−" if _d_tot < 0 else ""
+            _col = "#1a7f37" if _d_tot > 0 else "#d1242f" if _d_tot < 0 else "#6B7683"
+            st.markdown(
+                f"<div style='padding:6px 0'>Impact: <b>{_n_hit}</b> unit(s) repriced · "
+                f"portfolio Δ <b style='color:{_col}'>{_sgn}AED {abs(_d_tot):,.0f}</b> · "
+                f"<span style='color:#8a8a8a'>0 Sold units affected</span></div>",
+                unsafe_allow_html=True)
+
+    # ── retain ──
+    st.divider()
+    _r1, _r2 = st.columns([1.4, 3])
+    _retain = _r1.toggle("📌 Retain this analysis", key="pa_retain",
+                         help="Keeps these scenarios with the working state so they are stored "
+                              "when you save a Base Version.")
+    if _retain:
+        _r2.info("Retained — now **save a Base Version** to store it in the database. "
+                 "Loading that version brings these scenarios back.")
+    elif _scns:
+        _r2.caption("Scenarios are live for this session only. Switch **Retain** on to have them "
+                    "saved with the next Base Version.")
+
+    # ── table ──
+    if _scns:
+        st.divider()
+        _f1, _f2, _f3 = st.columns([2, 2, 1.3])
+        _ty = _f1.multiselect("Type", _pa_types, default=_pa_types, key="pa_ftype")
+        _stt = _f2.multiselect("Status", STATUS_OPTIONS, default=STATUS_OPTIONS, key="pa_fstat")
+        _show_psf = _f3.toggle("Show price/sqft", value=False, key="pa_showpsf")
+
+        _cols = {}
+        for _s in _scns:
+            _p, _pr = _pa_price(_s)
+            _cols[_s["id"]] = {"name": _s["name"], "psf": _p, "price": _pr}
+
+        _v = pdf["Type"].isin(_ty) & pdf["Status"].isin(_stt)
+        _view = pdf[_v].copy()
+        if _view.empty:
+            st.info("No units match the current filters.")
+        else:
+            def _n0(x):
+                return "" if pd.isna(x) else f"{x:,.0f}"
+
+            def _n2(x):
+                return "" if pd.isna(x) else f"{x:,.2f}"
+
+            def _sd(x):
+                if pd.isna(x) or round(float(x), 2) == 0:
+                    return "—"
+                return ("+" if x > 0 else "−") + f"{abs(x):,.0f}"
+
+            def _sp(x):
+                if pd.isna(x) or round(float(x), 2) == 0:
+                    return "—"
+                return ("+" if x > 0 else "−") + f"{abs(x):.1f}%"
+
+            _tbl = pd.DataFrame({
+                "Type": _view["Type"].values, "Status": _view["Status"].values,
+                "Unit": _view["Unit"].astype(str).values,
+                "Floor": _view["Floor"].astype(str).values,
+                "Sellable (sqft)": _view["Sellable_sqft"].map(_n2).values,
+            })
+            if _show_psf:
+                _tbl["Price/sqft"] = _view["Price_sqft"].map(_n0).values
+            _tbl["Base Price (AED)"] = _base_price[_v].map(_n0).values
+            _var_cols = []
+            for _s in _scns:
+                _c = _cols[_s["id"]]
+                _spx, _bpx = _c["price"][_v], _base_price[_v]
+                _vr = _spx - _bpx
+                _vp = (_vr / _bpx.replace(0, pd.NA)) * 100.0
+                if _show_psf:
+                    _tbl[f"{_c['name']} /sqft"] = _c["psf"][_v].map(_n0).values
+                _tbl[f"{_c['name']} (AED)"] = _spx.map(_n0).values
+                _cv, _cp = f"{_c['name']} Δ", f"{_c['name']} Δ%"
+                _tbl[_cv] = _vr.map(_sd).values
+                _tbl[_cp] = _vp.map(_sp).values
+                _var_cols += [_cv, _cp]
+
+            _ex1 = st.columns([0.74, 0.26])
+            with _ex1[1]:
+                _raw = pd.DataFrame({
+                    "Type": _view["Type"].values, "Status": _view["Status"].values,
+                    "Unit": _view["Unit"].astype(str).values,
+                    "Floor": _view["Floor"].astype(str).values,
+                    "Sellable (sqft)": _view["Sellable_sqft"].values,
+                    "Price/sqft (base)": _view["Price_sqft"].values,
+                    "Base Price (AED)": _base_price[_v].values,
+                })
+                _aedc = ["Base Price (AED)"]
+                for _s in _scns:
+                    _c = _cols[_s["id"]]
+                    _raw[f"{_c['name']} /sqft"] = _c["psf"][_v].values
+                    _raw[f"{_c['name']} (AED)"] = _c["price"][_v].values
+                    _raw[f"{_c['name']} Var (AED)"] = (_c["price"][_v] - _base_price[_v]).values
+                    _aedc += [f"{_c['name']} (AED)", f"{_c['name']} Var (AED)"]
+                export_button(_raw, "Price_Analysis.xlsx", key="pa_exp",
+                              title="Muraba Veil — Price Analysis", aed_cols=_aedc)
+
+            def _c_var(v):
+                s = str(v)
+                if s.startswith("+"):
+                    return "color:#1a7f37;font-weight:600"
+                if s.startswith("−") or s.startswith("-"):
+                    return "color:#d1242f;font-weight:600"
+                return ""
+
+            _sold_rows = (_view["Status"].astype(str) == "Sold").values
+
+            def _hl_sold(row):
+                hit = _sold_rows[row.name] if row.name < len(_sold_rows) else False
+                return ["background-color:#9DC3E6" if hit else "" for _ in row]
+
+            _sty = _tbl.style.apply(_hl_sold, axis=1)
+            if _var_cols:
+                _sty = _sty.map(_c_var, subset=_var_cols)
+            st.dataframe(_sty, use_container_width=True, hide_index=True, height=460)
+            st.caption(f"Showing {len(_view)} of {len(pdf)} units · Sold units highlighted in blue "
+                       f"and locked (Δ always “—”) · Δ = scenario − base")
+
+            # ── summary ──
+            st.markdown("##### Summary")
+            _area = float(_view["Total_sqft"].sum())
+            _mrows = ["Total Value", "Average", "Min", "Median", "Max", "Price/sq.ft"]
+
+            def _mvals(series):
+                return [series.sum(), series.mean(), series.min(), series.median(), series.max(),
+                        (series.sum() / _area if _area else 0.0)]
+
+            _bs = _mvals(_base_price[_v])
+            _sumd = {"Particulars": _mrows, "Base": [_n0(x) for x in _bs]}
+            _sum_raw = {"Particulars": _mrows, "Base": _bs}
+            _svar = []
+            for _s in _scns:
+                _c = _cols[_s["id"]]
+                _vs = _mvals(_c["price"][_v])
+                _sumd[_c["name"]] = [_n0(x) for x in _vs]
+                _dc = f"{_c['name']} Δ"
+                _sumd[_dc] = [_sd(a - b) for a, b in zip(_vs, _bs)]
+                _sum_raw[_c["name"]] = _vs
+                _sum_raw[f"{_c['name']} Var"] = [a - b for a, b in zip(_vs, _bs)]
+                _svar.append(_dc)
+            _sm = pd.DataFrame(_sumd)
+            _ex2 = st.columns([0.74, 0.26])
+            with _ex2[1]:
+                export_button(pd.DataFrame(_sum_raw), "Price_Analysis_Summary.xlsx",
+                              key="pa_exp_sum", title="Price Analysis — Summary")
+            st.dataframe(_sm.style.map(_c_var, subset=_svar) if _svar else _sm,
+                         use_container_width=True, hide_index=True)
+            st.caption("Covers the filtered units above (Sold included, locked at their real "
+                       "price). **Price/sq.ft** = total value ÷ total area of those units.")
 
 
 # ── Tab 6: Building View (full floor-by-floor tower elevation) ─────────────────
