@@ -4031,13 +4031,24 @@ with tab4:
         })
         rngkey   = f"{range_uids[0]}_{range_uids[-1]}"
         work_key = f"ed_work_{rngkey}"          # live preview copy (not yet persisted)
-        ekey     = f"ed_editor_{rngkey}"
+        # The editor's key carries a version number. Streamlit exposes a widget's
+        # own state as READ-ONLY, so the pending edit can no longer be cleared in
+        # place -- st.session_state[ekey]["edited_rows"] = {} raises TypeError.
+        # Bumping the version remounts the editor with an empty delta, which is
+        # what the clear was for: otherwise the stored edit is re-applied on top
+        # of the recomputed frame and overwrites the recomputation.
+        vkey = f"ed_ver_{rngkey}"
         if work_key not in st.session_state:
             st.session_state[work_key] = base.copy()
+        if vkey not in st.session_state:
+            st.session_state[vkey] = 0
+        ekey = f"ed_editor_{rngkey}_{st.session_state[vkey]}"
 
-        def _recompute_edit():
-            wdf = st.session_state[work_key]
-            delta = st.session_state[ekey].get("edited_rows", {})
+        # Bind the keys as defaults: the callback runs on a later rerun, by which
+        # time the enclosing names may point at a different range.
+        def _recompute_edit(_ekey=ekey, _vkey=vkey, _work_key=work_key):
+            wdf = st.session_state[_work_key]
+            delta = (st.session_state.get(_ekey) or {}).get("edited_rows", {}) or {}
             for ridx, chg in delta.items():
                 ridx = int(ridx)
                 for col, val in chg.items():
@@ -4049,8 +4060,8 @@ with tab4:
                     wdf.at[ridx, "Price/sellable sqft"] = (float(wdf.at[ridx, "Total Value"]) / sell) if sell else 0.0
                 elif "Sellable sqft" in chg or "Price/sellable sqft" in chg:   # either → recompute Total
                     wdf.at[ridx, "Total Value"] = float(wdf.at[ridx, "Price/sellable sqft"]) * sell
-            st.session_state[work_key] = wdf.copy()            # new identity → editor re-reads recomputed values
-            st.session_state[ekey]["edited_rows"] = {}         # consume delta so the table shows recomputed values
+            st.session_state[_work_key] = wdf.copy()           # new identity → editor re-reads recomputed values
+            st.session_state[_vkey] += 1                       # remount with an empty delta (see note above)
 
         st.data_editor(
             st.session_state[work_key], hide_index=True, use_container_width=True,
@@ -4093,6 +4104,8 @@ with tab4:
                 u.at[i, "Price_sqft"] = float(wdf.at[idx, "Price/sellable sqft"])
                 done += 1
             st.session_state.pop(work_key, None)            # refresh preview from saved values next render
+            st.session_state[vkey] += 1                     # and remount the editor, or its pending edit
+                                                            # would be re-applied over the saved values
             # No st.rerun() — stay on this page; the user navigates when ready.
             st.success(f"✅ Saved per-unit changes to {done} unit(s). "
                        "Use the tabs above to navigate when ready.")
