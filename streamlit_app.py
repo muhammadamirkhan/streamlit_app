@@ -2646,20 +2646,31 @@ with tab8:
 
             # ── summary ──
             st.markdown("##### Summary")
-            _area = float(_view["Total_sqft"].sum())
+            _basis = st.radio(
+                "Summary basis", ["All units in view", "Available units only"],
+                horizontal=True, key="pa_sum_basis", label_visibility="collapsed",
+                help="All units in view: every row of the table above, Sold included (Sold rows are "
+                     "locked at their real price, so they dilute the averages). Available units "
+                     "only: excludes Sold, so the figures reflect sellable stock.")
+            _sv = (_v & (pdf["Status"].astype(str) == "Available")
+                   if _basis == "Available units only" else _v)
+            _n_basis = int(_sv.sum())
+            if _n_basis == 0:
+                st.info("No units match this basis.")
+            _area = float(pdf.loc[_sv, "Total_sqft"].sum())
             _mrows = ["Total Value", "Average", "Min", "Median", "Max", "Price/sq.ft"]
 
             def _mvals(series):
                 return [series.sum(), series.mean(), series.min(), series.median(), series.max(),
                         (series.sum() / _area if _area else 0.0)]
 
-            _bs = _mvals(_base_price[_v])
+            _bs = _mvals(_base_price[_sv])
             _sumd = {"Particulars": _mrows, "Base": [_n0(x) for x in _bs]}
             _sum_raw = {"Particulars": _mrows, "Base": _bs}
             _svar = []
             for _s in _scns:
                 _c = _cols[_s["id"]]
-                _vs = _mvals(_c["price"][_v])
+                _vs = _mvals(_c["price"][_sv])
                 _sumd[_c["name"]] = [_n0(x) for x in _vs]
                 _dc = f"{_c['name']} Δ"
                 _sumd[_dc] = [_sd(a - b) for a, b in zip(_vs, _bs)]
@@ -2673,8 +2684,9 @@ with tab8:
                               key="pa_exp_sum", title="Price Analysis — Summary")
             st.dataframe(_sm.style.map(_c_var, subset=_svar) if _svar else _sm,
                          use_container_width=True, hide_index=True)
-            st.caption("Covers the filtered units above (Sold included, locked at their real "
-                       "price). **Price/sq.ft** = total value ÷ total area of those units.")
+            st.caption(f"Basis: **{_basis.lower()}** — {_n_basis} of {len(_view)} unit(s) in the "
+                       f"table above. **Price/sq.ft** = total value ÷ total area of those units. "
+                       "Sold units are always locked at their real price.")
 
 
 # ── Tab 6: Building View (full floor-by-floor tower elevation) ─────────────────
