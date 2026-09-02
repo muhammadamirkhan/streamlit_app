@@ -996,14 +996,15 @@ def _init():
     if "units" not in st.session_state:
         # newest saved Base Version in the database (what everyone should see) → last live session
         # state (ephemeral) → committed Base Version (permanent) → original Excel
-        loaded = None
+        loaded, _from_version = None, False
         _latest = sb_latest_version()
         if _latest is not None:
             try:
                 loaded = _parse_state(_latest[1])
                 st.session_state["_loaded_from"] = (_latest[0], _latest[2])
+                _from_version = True
             except Exception:
-                loaded = None                        # malformed row → fall through to the baseline
+                loaded, _from_version = None, False   # malformed row → fall through to the baseline
         if loaded is None and has_saved_state():
             loaded = load_state()
         if loaded is None and has_base():
@@ -1017,13 +1018,17 @@ def _init():
         else:                                        # fresh from the original Excel
             st.session_state.units = load_unit_data()
             st.session_state.uid_counter = len(st.session_state.units)
-        # overlay the committed comments (muraba_comments.json) so saved comments show on EVERY load
-        # path (base version / saved state / Excel) — the repo copy is the persistent source of truth
-        _cm = load_comments_file()
-        if _cm:
-            uu = st.session_state.units
-            uu["Comment"] = [_cm.get(comment_key(un, ty, fl), cur if isinstance(cur, str) else "")
-                             for un, ty, fl, cur in zip(uu["Unit"], uu["Type"], uu["Floor"], uu["Comment"])]
+        # Seed comments from muraba_comments.json ONLY when the state did not come from a saved
+        # version. A saved version carries its own comments, and this file used to override them —
+        # which meant an edited comment silently reverted on the next load, and a deleted one came
+        # back. Comments are now owned by the version, so they can be managed in the app.
+        if not _from_version:
+            _cm = load_comments_file()
+            if _cm:
+                uu = st.session_state.units
+                uu["Comment"] = [_cm.get(comment_key(un, ty, fl), cur if isinstance(cur, str) else "")
+                                 for un, ty, fl, cur in zip(uu["Unit"], uu["Type"], uu["Floor"],
+                                                            uu["Comment"])]
     if "fm_params" not in st.session_state: st.session_state.fm_params = load_params()
     if "floors"    not in st.session_state: st.session_state.floors    = build_floor_list(st.session_state.units)
     if "blocked"   not in st.session_state:
