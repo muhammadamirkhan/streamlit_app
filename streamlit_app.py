@@ -235,6 +235,27 @@ def sb_password_of(name):
         return None
     return data[0].get("password") or ""
 
+@st.cache_data(ttl=60, show_spinner=False)
+def sb_latest_version(_nonce=0):
+    """(name, state, created_at) of the version with the newest created_at, or None.
+
+    This is what the app boots from, so whatever was saved last is what everyone sees.
+    Cached briefly so a rerun does not re-fetch; the app only reads it once per session
+    anyway (see _init). Any failure returns None and the caller falls back."""
+    u, k = _sb_cfg()
+    if not (u and k):
+        return None
+    try:
+        r = requests.get(_sb_endpoint(), headers=_sb_headers(k),
+                         params={"select": "name,state,created_at",
+                                 "order": "created_at.desc", "limit": "1"}, timeout=15)
+        r.raise_for_status()
+        d = r.json()
+        return (d[0]["name"], d[0]["state"], d[0].get("created_at")) if d else None
+    except Exception:
+        return None
+
+
 def sb_load_version(name):
     """The stored state dict for `name`, or None."""
     u, k = _sb_cfg()
@@ -973,8 +994,18 @@ def recalc(df, params):
 def _init():
     _loaded_blocked = None
     if "units" not in st.session_state:
-        # last live session state (ephemeral) → committed Base Version (permanent) → original Excel
-        loaded = load_state() if has_saved_state() else None
+        # newest saved Base Version in the database (what everyone should see) → last live session
+        # state (ephemeral) → committed Base Version (permanent) → original Excel
+        loaded = None
+        _latest = sb_latest_version()
+        if _latest is not None:
+            try:
+                loaded = _parse_state(_latest[1])
+                st.session_state["_loaded_from"] = (_latest[0], _latest[2])
+            except Exception:
+                loaded = None                        # malformed row → fall through to the baseline
+        if loaded is None and has_saved_state():
+            loaded = load_state()
         if loaded is None and has_base():
             loaded = load_base()                     # survives Cloud redeploys/reboots (it's in the repo)
         if loaded is not None:
@@ -1412,6 +1443,17 @@ with st.sidebar:
 
     st.caption("✅ Every edit applies **instantly** across all tabs. To keep a version, use "
                "**Save Base Version** below — it's stored in the cloud and persists across restarts.")
+
+    _lf = st.session_state.get("_loaded_from")
+    if _lf:
+        try:
+            _d = _dtm.datetime.fromisoformat(str(_lf[1]).replace("Z", "+00:00"))
+            _when = f"{_d:%d %b %Y, %H:%M}"
+        except Exception:
+            _when = str(_lf[1])[:16]
+        st.caption(f"📦 Loaded the newest saved version: **{_lf[0]}** · saved {_when}")
+    elif sb_enabled():
+        st.caption("📄 Loaded the built-in baseline — no saved version was reachable.")
 
     if st.button("↩️  Reset to original Excel", use_container_width=True):
         clear_saved_state()
