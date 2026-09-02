@@ -4236,9 +4236,14 @@ with tab4:
             st.session_state.pop(work_key, None)            # refresh preview from saved values next render
             st.session_state[vkey] += 1                     # and remount the editor, or its pending edit
                                                             # would be re-applied over the saved values
-            # No st.rerun() — stay on this page; the user navigates when ready.
-            st.success(f"✅ Saved per-unit changes to {done} unit(s). "
-                       "Use the tabs above to navigate when ready.")
+            # A rerun is REQUIRED here. df is built once near the top of the script, long before
+            # this tab runs, so the edit lands after every table has already rendered from the old
+            # frame. Switching tabs is client-side and does not re-execute the script, so without
+            # this the app keeps showing the pre-save status and price until some unrelated widget
+            # forces a rerun — e.g. a unit marked Sold still reads Available everywhere.
+            st.session_state["flash"] = ("success",
+                                         f"✅ Saved per-unit changes to {done} unit(s).")
+            st.rerun()
 
     st.divider()
     st.subheader("Appreciation / Discount")
