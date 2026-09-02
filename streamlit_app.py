@@ -1633,6 +1633,145 @@ tab6b = None                         # legacy enhanced (✦) Building View — h
 tab6c = _tmap.get("Muraba Veil - Building View")
 
 
+# ── Scenario engine (read-only; Sold units can never change) ──────────────────
+# Defined ABOVE the tabs because both Typology View and Price Analysis use it.
+# A scenario can move price AND terrace, per typology and per unit. Terrace matters
+# because Sellable = Internal + terrace x External, so it feeds straight into price.
+
+PRICE_MODES = ["No change", "% change", "AED/sqft delta", "Flat price/sqft", "Base + escalation"]
+TERRACE_MODES = ["No change", "Set terrace %", "Adjust ± points"]
+
+
+def _scn_new(n):
+    return {"id": f"s{n}", "name": f"Scenario {n}", "rules": {}, "overrides": {},
+            "trules": {}, "toverrides": {}}
+
+
+def _scn_ladder(t, base_psf, dfx, params):
+    """Read-only twin of recompute_from_base: {uid: price/sqft} for the Available units of t's
+    price family, anchoring the lowest Available floor at base_psf and escalating upward."""
+    fam = family_types(t)
+    sub = dfx[dfx["Type"].isin(fam)].copy()
+    if sub.empty:
+        return {}
+    sub["_fn"] = pd.to_numeric(sub["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True),
+                               errors="coerce")
+    sub = sub.dropna(subset=["_fn"])
+    avail = sub[sub["Status"] == "Available"]
+    if sub.empty or avail.empty:
+        return {}
+    floors_sorted = sorted(sub["_fn"].unique())
+    pos = {f: i for i, f in enumerate(floors_sorted)}
+    anchor = pos[avail["_fn"].min()]
+    esc = escalation_for(t, params)
+    dpx = params.get("duplex_premium", 0.0) if "Duplex" in t else 0.0
+    out = {}
+    for _, r in avail.iterrows():
+        out[r["uid"]] = max(base_psf + esc * (pos[float(r["_fn"])] - anchor) + dpx, 0.0)
+    return out
+
+
+def scenario_psf(scn, dfx, params):
+    """Each unit's price/sqft under one scenario.
+
+    HARD RULE: Sold units are never touched — every rule and override is masked to Available
+    units, so a Sold unit's scenario price always equals its real price and its variance is 0."""
+    psf = pd.to_numeric(dfx["Price_sqft"], errors="coerce").astype(float).copy()
+    sold = dfx["Status"].astype(str) == "Sold"
+    for t, rule in (scn.get("rules") or {}).items():
+        mode = rule.get("mode", "No change")
+        try:
+            val = float(rule.get("value") or 0.0)
+        except (TypeError, ValueError):
+            continue
+        m = (dfx["Type"] == t) & (~sold)
+        if mode == "No change" or not m.any():
+            continue
+        if mode == "% change":
+            psf.loc[m] = psf.loc[m] * (1.0 + val / 100.0)
+        elif mode == "AED/sqft delta":
+            psf.loc[m] = psf.loc[m] + val
+        elif mode == "Flat price/sqft":
+            psf.loc[m] = val
+        elif mode == "Base + escalation":
+            for uid, v in _scn_ladder(t, val, dfx, params).items():
+                psf.loc[(dfx["uid"] == uid) & (~sold)] = v
+    for uid, v in (scn.get("overrides") or {}).items():      # per-unit fine-tuning wins
+        try:
+            psf.loc[(dfx["uid"] == uid) & (~sold)] = float(v)
+        except (TypeError, ValueError):
+            continue
+    return psf.clip(lower=0.0)
+
+
+def scenario_terrace(scn, dfx):
+    """Each unit's terrace RATE (0-1) under one scenario. Sold units are never touched."""
+    tr = pd.to_numeric(dfx["Terrace_Rate"], errors="coerce").astype(float).copy()
+    sold = dfx["Status"].astype(str) == "Sold"
+    for t, rule in (scn.get("trules") or {}).items():
+        mode = rule.get("mode", "No change")
+        try:
+            val = float(rule.get("value") or 0.0)
+        except (TypeError, ValueError):
+            continue
+        m = (dfx["Type"] == t) & (~sold)
+        if mode == "No change" or not m.any():
+            continue
+        if mode == "Set terrace %":
+            tr.loc[m] = val / 100.0
+        elif mode == "Adjust ± points":
+            tr.loc[m] = tr.loc[m] + val / 100.0
+    for uid, v in (scn.get("toverrides") or {}).items():     # per-unit terrace wins
+        try:
+            tr.loc[(dfx["uid"] == uid) & (~sold)] = float(v) / 100.0
+        except (TypeError, ValueError):
+            continue
+    return tr.clip(lower=0.0)
+
+
+def scenario_sellable(scn, dfx):
+    """Sellable sqft under one scenario.
+
+    Only recomputed where the scenario actually moves the terrace rate; everywhere else the
+    unit's existing Sellable_sqft stands, which preserves any per-unit Sellable_Override."""
+    base = pd.to_numeric(dfx["Sellable_sqft"], errors="coerce").astype(float).copy()
+    tr_new = scenario_terrace(scn, dfx)
+    tr_cur = pd.to_numeric(dfx["Terrace_Rate"], errors="coerce").astype(float)
+    moved = (tr_new - tr_cur).abs() > 1e-12
+    if moved.any():
+        _i = pd.to_numeric(dfx["Internal_sqft"], errors="coerce").astype(float)
+        _e = pd.to_numeric(dfx["External_sqft"], errors="coerce").astype(float)
+        base.loc[moved] = (_i + tr_new * _e).loc[moved]
+    return base
+
+
+def scenario_price(scn, dfx, params):
+    """A unit's full price under one scenario: price/sqft x sellable x (1 + appreciation/discount).
+
+    Sold rows are pinned to their real Price, so no scenario can ever move sold stock."""
+    price = (scenario_psf(scn, dfx, params) * scenario_sellable(scn, dfx)
+             * ((1 + pd.to_numeric(dfx["Adj_Pct"], errors="coerce").fillna(0.0) / 100.0)
+                if "Adj_Pct" in dfx.columns else 1.0))
+    sold = dfx["Status"].astype(str) == "Sold"
+    if sold.any():
+        price.loc[sold] = pd.to_numeric(dfx["Price"], errors="coerce").astype(float).loc[sold]
+    return price
+
+
+def _pa_label(uid, frame):
+    """Readable unit label. uid_label() is defined further down the file (inside the
+    Edit / Remove Units tab) and is not available this early."""
+    r = frame[frame["uid"] == uid]
+    if r.empty:
+        return str(uid)
+    r = r.iloc[0]
+    return f"Unit {r['Unit']} - {r['Type']} (Floor {r['Floor']}) - {r['Status']}"
+
+
+if "price_scenarios" not in st.session_state:     # both tabs read this
+    st.session_state["price_scenarios"] = []
+
+
 # ── Tab 1: Unit Register ───────────────────────────────────────────────────────
 
 with tab1:
@@ -2015,7 +2154,28 @@ with tab5:
                "typologies overlap in price, which is flagged as a **price inversion**. "
                "Price/sq.ft here is price ÷ **total** area.")
 
-    _pg = df[df["Status"] == "Available"].copy()
+    # Scenario picker — "Base scenario" is the app's current values; the rest are whatever
+    # has been defined in Price Analysis. Selecting one recomputes every column below.
+    _pg_scns = st.session_state.get("price_scenarios") or []
+    _pg_opts = ["Base scenario"] + [s.get("name", "Scenario") for s in _pg_scns]
+    _pg_sel = st.selectbox("Scenario", _pg_opts, key="pg_scn",
+                           help="Base scenario = the prices the app is showing now. Any scenario "
+                                "you have built in the Price Analysis tab appears here, and the "
+                                "whole table is recalculated on it.")
+    _pg_scn = None if _pg_sel == "Base scenario" else _pg_scns[_pg_opts.index(_pg_sel) - 1]
+    if _pg_scn is not None:
+        _npr = len(_pg_scn.get("rules") or {})
+        _ntr = len(_pg_scn.get("trules") or {})
+        _nov = len(_pg_scn.get("overrides") or {}) + len(_pg_scn.get("toverrides") or {})
+        st.caption(f"Showing **{_pg_sel}** — {_npr} price rule(s), {_ntr} terrace rule(s), "
+                   f"{_nov} per-unit override(s). Sold units are unaffected in every scenario.")
+    elif _pg_scns:
+        st.caption(f"Showing the **base** values. {len(_pg_scns)} scenario(s) available.")
+
+    _pg = df.copy()
+    if _pg_scn is not None:                      # price the whole register under the scenario
+        _pg["Price"] = scenario_price(_pg_scn, _pg, params)
+    _pg = _pg[_pg["Status"] == "Available"].copy()
     if _pg.empty:
         st.info("No Available units to analyse.")
     else:
@@ -2100,8 +2260,10 @@ with tab5:
                 "Gap to Next Typology (AED)": [r["gap"] for r in _prog],
                 "Gap to Next Typology (%)": [r["gap_pct"] for r in _prog],
             })
-            export_button(_praw, "Typology_Price_Progression.xlsx", key="exp_prog",
-                          title="Typology Price Progression Analysis",
+            export_button(_praw,
+                          f"Typology_Price_Progression_{_pg_sel.replace(' ', '_')}.xlsx",
+                          key="exp_prog",
+                          title=f"Typology Price Progression Analysis — {_pg_sel}",
                           aed_cols=["Lowest Unit Price", "Highest Unit Price",
                                     "Gap to Next Typology (AED)"])
 
@@ -2326,82 +2488,6 @@ with tab7:
                        "Available units only.")
 
 
-# ── Price Analysis: scenario engine (read-only; Sold units can never change) ──
-
-PRICE_MODES = ["No change", "% change", "AED/sqft delta", "Flat price/sqft", "Base + escalation"]
-
-
-def _scn_new(n):
-    return {"id": f"s{n}", "name": f"Scenario {n}", "rules": {}, "overrides": {}}
-
-
-def _scn_ladder(t, base_psf, dfx, params):
-    """Read-only twin of recompute_from_base: {uid: price/sqft} for the Available units of t's
-    price family, anchoring the lowest Available floor at base_psf and escalating upward."""
-    fam = family_types(t)
-    sub = dfx[dfx["Type"].isin(fam)].copy()
-    if sub.empty:
-        return {}
-    sub["_fn"] = pd.to_numeric(sub["Floor"].astype(str).str.replace(r"[^0-9]", "", regex=True),
-                               errors="coerce")
-    sub = sub.dropna(subset=["_fn"])
-    avail = sub[sub["Status"] == "Available"]
-    if sub.empty or avail.empty:
-        return {}
-    floors_sorted = sorted(sub["_fn"].unique())
-    pos = {f: i for i, f in enumerate(floors_sorted)}
-    anchor = pos[avail["_fn"].min()]
-    esc = escalation_for(t, params)
-    dpx = params.get("duplex_premium", 0.0) if "Duplex" in t else 0.0
-    out = {}
-    for _, r in avail.iterrows():
-        out[r["uid"]] = max(base_psf + esc * (pos[float(r["_fn"])] - anchor) + dpx, 0.0)
-    return out
-
-
-def scenario_psf(scn, dfx, params):
-    """Each unit's price/sqft under one scenario.
-
-    HARD RULE: Sold units are never touched — every rule and override is masked to Available
-    units, so a Sold unit's scenario price always equals its real price and its variance is 0."""
-    psf = pd.to_numeric(dfx["Price_sqft"], errors="coerce").astype(float).copy()
-    sold = dfx["Status"].astype(str) == "Sold"
-    for t, rule in (scn.get("rules") or {}).items():
-        mode = rule.get("mode", "No change")
-        try:
-            val = float(rule.get("value") or 0.0)
-        except (TypeError, ValueError):
-            continue
-        m = (dfx["Type"] == t) & (~sold)
-        if mode == "No change" or not m.any():
-            continue
-        if mode == "% change":
-            psf.loc[m] = psf.loc[m] * (1.0 + val / 100.0)
-        elif mode == "AED/sqft delta":
-            psf.loc[m] = psf.loc[m] + val
-        elif mode == "Flat price/sqft":
-            psf.loc[m] = val
-        elif mode == "Base + escalation":
-            for uid, v in _scn_ladder(t, val, dfx, params).items():
-                psf.loc[(dfx["uid"] == uid) & (~sold)] = v
-    for uid, v in (scn.get("overrides") or {}).items():      # per-unit fine-tuning wins
-        try:
-            psf.loc[(dfx["uid"] == uid) & (~sold)] = float(v)
-        except (TypeError, ValueError):
-            continue
-    return psf.clip(lower=0.0)
-
-
-def _pa_label(uid, frame):
-    """Readable unit label. Local to Price Analysis because uid_label() is defined further
-    down the file (inside the Edit / Remove Units tab) and is not available this early."""
-    r = frame[frame["uid"] == uid]
-    if r.empty:
-        return str(uid)
-    r = r.iloc[0]
-    return f"Unit {r['Unit']} - {r['Type']} (Floor {r['Floor']}) - {r['Status']}"
-
-
 # ── Tab 8: Price Analysis ─────────────────────────────────────────────────────
 # SELF-CONTAINED: this tab only ever READS the register. It never writes to
 # st.session_state.units / fm_params / floors / blocked, never calls st.rerun()
@@ -2428,9 +2514,9 @@ with tab8:
     _pa_types = [t for t in UNIT_TYPES if t in set(pdf["Type"])]
 
     def _pa_price(scn):
-        """(price/sqft, price) for every unit under one scenario — read-only."""
-        _p = scenario_psf(scn, pdf, params)
-        return _p, _p * pdf["Sellable_sqft"].astype(float) * _adjm
+        """(price/sqft, price) under one scenario — price uses the scenario's own sellable
+        area, so a terrace rule feeds through to the price. Read-only."""
+        return scenario_psf(scn, pdf, params), scenario_price(scn, pdf, params)
 
     # ── scenario manager (add / remove handled BEFORE the editors render, so the
     #    page updates in place — no st.rerun(), so you stay on this tab) ──
@@ -2459,71 +2545,103 @@ with tab8:
                                        key=f"pa_nm_{_s['id']}")
 
             with st.form(f"pa_form_{_s['id']}"):
-                st.markdown("**Typology rules** — *No change* leaves that typology at today's "
-                            "price. Sold units are excluded from every rule.")
-                _hd = st.columns([2.2, 1.6, 1.2])
-                _hd[0].markdown("**Typology**")
-                _hd[1].markdown("**Mode**")
-                _hd[2].markdown("**Value**")
-                _pend = {}
+                st.markdown("**Typology rules** — set a **price** rule, a **terrace** rule, or "
+                            "both. *No change* leaves that typology as it is. Sold units are "
+                            "excluded from every rule.")
+                _hd = st.columns([2.1, 1.5, 1.0, 1.5, 1.0])
+                for _c, _lbl in zip(_hd, ["**Typology**", "**Price mode**", "**Value**",
+                                          "**Terrace mode**", "**Value**"]):
+                    _c.markdown(_lbl)
+                _pend, _tpend = {}, {}
                 for _t in _pa_types:
                     _cur = (_s.get("rules") or {}).get(_t, {})
+                    _tcur = (_s.get("trules") or {}).get(_t, {})
                     _md = _cur.get("mode", "No change")
                     _mi = PRICE_MODES.index(_md) if _md in PRICE_MODES else 0
+                    _tmd = _tcur.get("mode", "No change")
+                    _tmi = TERRACE_MODES.index(_tmd) if _tmd in TERRACE_MODES else 0
                     _tm = (pdf["Type"] == _t) & (~_sold_mask)
                     _lo = pdf.loc[_tm, "Price_sqft"].min() if _tm.any() else 0
                     _hi = pdf.loc[_tm, "Price_sqft"].max() if _tm.any() else 0
-                    _rw = st.columns([2.2, 1.6, 1.2])
+                    _tnow = pdf.loc[_tm, "Terrace_Rate"].max() * 100 if _tm.any() else 0
+                    _rw = st.columns([2.1, 1.5, 1.0, 1.5, 1.0])
                     _rw[0].markdown(
                         f"{_t}  \n<span style='color:#8a8a8a;font-size:0.78em'>"
-                        f"{int(_tm.sum())} available · now {_lo:,.0f}–{_hi:,.0f}/sqft</span>",
-                        unsafe_allow_html=True)
-                    _mo = _rw[1].selectbox("Mode", PRICE_MODES, index=_mi,
+                        f"{int(_tm.sum())} available · {_lo:,.0f}–{_hi:,.0f}/sqft · "
+                        f"terrace {_tnow:,.0f}%</span>", unsafe_allow_html=True)
+                    _mo = _rw[1].selectbox("Price mode", PRICE_MODES, index=_mi,
                                            key=f"pa_md_{_s['id']}_{_t}",
                                            label_visibility="collapsed")
                     _vl = _rw[2].number_input("Value", value=float(_cur.get("value", 0.0)),
                                               step=1.0, key=f"pa_vl_{_s['id']}_{_t}",
                                               label_visibility="collapsed")
+                    _tmo = _rw[3].selectbox("Terrace mode", TERRACE_MODES, index=_tmi,
+                                            key=f"pa_tmd_{_s['id']}_{_t}",
+                                            label_visibility="collapsed")
+                    _tvl = _rw[4].number_input("Terrace value",
+                                               value=float(_tcur.get("value", 0.0)), step=1.0,
+                                               key=f"pa_tvl_{_s['id']}_{_t}",
+                                               label_visibility="collapsed")
                     _pend[_t] = {"mode": _mo, "value": _vl}
-                st.caption("**% change** ±% · **AED/sqft delta** ± per sqft · "
-                           "**Flat price/sqft** exact rate for the whole typology · "
-                           "**Base + escalation** anchor the lowest available unit and let the "
-                           "floor ladder climb.")
+                    _tpend[_t] = {"mode": _tmo, "value": _tvl}
+                st.caption("**Price** — *% change* ±% · *AED/sqft delta* ± per sqft · *Flat "
+                           "price/sqft* one rate for the typology · *Base + escalation* anchors "
+                           "the lowest available unit and lets the floor ladder climb.  \n"
+                           "**Terrace** — *Set terrace %* an absolute rate (e.g. 50) · *Adjust ± "
+                           "points* moves it (e.g. +10 turns 30% into 40%). Terrace changes the "
+                           "sellable area, so the price moves with it.")
                 if st.form_submit_button("✅  Apply rules", type="primary",
                                          use_container_width=True):
                     _s["rules"] = {t: r for t, r in _pend.items() if r["mode"] != "No change"}
-                    st.success(f"Applied {len(_s['rules'])} rule(s) — the table below is updated.")
+                    _s["trules"] = {t: r for t, r in _tpend.items() if r["mode"] != "No change"}
+                    st.success(f"Applied {len(_s['rules'])} price and {len(_s['trules'])} "
+                               "terrace rule(s) — the table below is updated.")
 
             # per-unit overrides
-            st.markdown("**Per-unit overrides** — an exact price/sqft for specific units; "
-                        "beats the typology rule. Available units only.")
+            st.markdown("**Per-unit overrides** — an exact price/sqft and/or terrace % for "
+                        "specific units; beats the typology rule. Available units only.")
             _av_uids = pdf.loc[~_sold_mask, "uid"].tolist()
-            _o1, _o2, _o3 = st.columns([3, 1.2, 1.2])
-            _ou = _o1.multiselect("Units", _av_uids, format_func=lambda u: _pa_label(u, pdf),
-                                  key=f"pa_ou_{_s['id']}", label_visibility="collapsed",
-                                  placeholder="Select unit(s)…")
-            _op = _o2.number_input("Price/sqft", min_value=0.0, step=10.0, value=0.0,
-                                   key=f"pa_op_{_s['id']}", label_visibility="collapsed")
-            if _o3.button("Set override", key=f"pa_os_{_s['id']}", use_container_width=True,
+            _ou = st.multiselect("Units", _av_uids, format_func=lambda u: _pa_label(u, pdf),
+                                 key=f"pa_ou_{_s['id']}", label_visibility="collapsed",
+                                 placeholder="Select unit(s) to override…")
+            _o1, _o2, _o3, _o4 = st.columns([1.3, 1.2, 1.3, 1.2])
+            _op = _o1.number_input("Price/sqft", min_value=0.0, step=10.0, value=0.0,
+                                   key=f"pa_op_{_s['id']}")
+            if _o2.button("Set price", key=f"pa_os_{_s['id']}", use_container_width=True,
                           disabled=(not _ou or _op <= 0)):
                 _s.setdefault("overrides", {})
                 for _u in _ou:
                     _s["overrides"][_u] = float(_op)
-                st.success(f"Override set on {len(_ou)} unit(s) @ {_op:,.0f}/sqft.")
-            _ovs = _s.get("overrides") or {}
-            if _ovs:
-                _lst = ", ".join(f"{_pa_label(u, pdf).split(' - ')[0]} @ {v:,.0f}"
+                st.success(f"Price override set on {len(_ou)} unit(s) @ {_op:,.0f}/sqft.")
+            _otp = _o3.number_input("Terrace %", min_value=0.0, max_value=100.0, step=1.0,
+                                    value=0.0, key=f"pa_otp_{_s['id']}")
+            if _o4.button("Set terrace", key=f"pa_ots_{_s['id']}", use_container_width=True,
+                          disabled=not _ou):
+                _s.setdefault("toverrides", {})
+                for _u in _ou:
+                    _s["toverrides"][_u] = float(_otp)
+                st.success(f"Terrace override set on {len(_ou)} unit(s) @ {_otp:,.0f}%.")
+
+            def _show_ovr(key, label, fmt, btn):
+                _ovs = _s.get(key) or {}
+                if not _ovs:
+                    return
+                _lst = ", ".join(f"{_pa_label(u, pdf).split(' - ')[0]} @ {fmt.format(v)}"
                                  for u, v in list(_ovs.items())[:6])
-                _oc1, _oc2 = st.columns([3, 1])
-                _oc1.caption(f"{len(_ovs)} override(s): {_lst}{' …' if len(_ovs) > 6 else ''}")
-                if _oc2.button("Clear overrides", key=f"pa_oc_{_s['id']}",
-                               use_container_width=True):
-                    _s["overrides"] = {}
-                    _oc1.caption("Overrides cleared.")
+                _c1, _c2 = st.columns([3, 1])
+                _c1.caption(f"{len(_ovs)} {label}: {_lst}{' …' if len(_ovs) > 6 else ''}")
+                if _c2.button(btn, key=f"pa_clr_{key}_{_s['id']}", use_container_width=True):
+                    _s[key] = {}
+                    _c1.caption("Cleared.")
+
+            _show_ovr("overrides", "price override(s)", "{:,.0f}/sqft", "Clear prices")
+            _show_ovr("toverrides", "terrace override(s)", "{:,.0f}%", "Clear terraces")
 
             # live impact of this scenario (computed after the edits above)
             _ip, _ipr = _pa_price(_s)
-            _n_hit = int(((_ip != pdf["Price_sqft"]) & (~_sold_mask)).sum())
+            _itr = scenario_terrace(_s, pdf)
+            _n_hit = int((((_ip != pdf["Price_sqft"]) |
+                           ((_itr - pdf["Terrace_Rate"]).abs() > 1e-12)) & (~_sold_mask)).sum())
             _d_tot = float((_ipr - _base_price).sum())
             _sgn = "+" if _d_tot > 0 else "−" if _d_tot < 0 else ""
             _col = "#1a7f37" if _d_tot > 0 else "#d1242f" if _d_tot < 0 else "#6B7683"
